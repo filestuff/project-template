@@ -20,6 +20,7 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
 |---|---|---|
 | Sprint kanban (`backlog/ → in-progress/ → done/`) | ✅ | ✅ |
 | `/sprint`, `/plan`, `/adr` skills | ✅ | ✅ |
+| `/review`, `/explain-changes`, `/code-simplifier` skills + `reviewer` agent | ✅ | ✅ |
 | `DOC_HEALTH.md` staleness gate, `TODOS.md` ledger, ADRs | ✅ | ✅ |
 | Commit gate (`scripts/sprint/gate.sh`, single source of truth) | ✅ | ✅ |
 | Concurrent sprints | one at a time | many, in parallel agents |
@@ -55,6 +56,14 @@ sprint files as-is.
 
 These are baked into the scripts' regexes and the skills; keeping them identical across all
 your projects is the point.
+
+## What the template deliberately does NOT carry
+
+Stack-convention skills (testing patterns, framework workflows, ORM guidance, logging rules,
+UI-component conventions, release/changelog processes). Those encode a *specific stack's*
+norms — each project grows its own in `.claude/skills/` alongside its `AGENTS.md`. The
+`/review` skill's "Project-Specific Checks" section and its Learnings check are the intake
+funnel: conventions that keep coming up in review graduate into per-project skills.
 
 ## What varies per project
 

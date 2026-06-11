@@ -96,7 +96,10 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
 - Seed the tag→doc table in `docs/sprints/PROTOCOL.md` (replace the
   `<!-- BOOTSTRAP: ... -->` starter rows with real mappings; keep tags aligned with
   SPRINT_TEMPLATE's starter tags).
-- Show the user both tables for confirmation.
+- If the repo has established conventions (an `AGENTS.md`, a style doc), seed the
+  "Project-Specific Checks" section of `.claude/skills/review/SKILL.md` with 3–5 concrete,
+  checkable rules; otherwise leave its `_(none yet)_` stub.
+- Show the user the tables for confirmation.
 
 ## Step 8: settings.json merge
 

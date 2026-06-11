@@ -12,7 +12,10 @@
       "Bash(git show*)",
       "Skill(sprint)",
       "Skill(plan)",
-      "Skill(adr)"
+      "Skill(adr)",
+      "Skill(review)",
+      "Skill(explain-changes)",
+      "Skill(code-simplifier)"
     ],
     "deny": []
   }
