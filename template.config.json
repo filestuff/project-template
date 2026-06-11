@@ -1,0 +1,42 @@
+{
+  "$comment": "Manifest read by the /bootstrap-project skill. Placeholders are replaced deterministically (literal find/replace) ONLY in the files listed for each token. After replacement, `grep -rn '{{' <copied files>` must return nothing.",
+  "placeholders": {
+    "{{PROJECT_NAME}}": {
+      "prompt": "Project name (short, kebab-case preferred)",
+      "files": [
+        "CLAUDE.project-block.md",
+        ".claude/skills/sprint/SKILL.md",
+        "docs/DOC_HEALTH.md",
+        "docs/sprints/PROTOCOL.md",
+        "docs/sprints/INDEX.md",
+        "docs/sprints/ROADMAP.md"
+      ]
+    },
+    "{{PROJECT_DESCRIPTION}}": {
+      "prompt": "One-line project description",
+      "files": ["CLAUDE.project-block.md"]
+    },
+    "{{GATE_COMMANDS}}": {
+      "prompt": "Commit-gate commands (&&-chained; all must pass before a deliverable commit)",
+      "files": ["scripts/sprint/gate.sh"]
+    },
+    "{{PACKAGE_MANAGER}}": {
+      "prompt": "Package manager / dependency install command prefix (npm | pnpm | yarn | pip | cargo | ...)",
+      "files": [".claude/settings.json", "docs/sprints/PROTOCOL.md"]
+    }
+  },
+  "tiers": {
+    "lite": { "copy": ["lite/"] },
+    "full": { "copy": ["lite/", "full-overlay/"] }
+  },
+  "specialFiles": {
+    "CLAUDE.project-block.md": "NOT copied verbatim — merged into the target's CLAUDE.md (see bootstrap step 6), then deleted from the copy set."
+  },
+  "postCopy": {
+    "chmod+x": ["scripts/sprint/*.sh"],
+    "writePerProject": [
+      "scripts/sprint/claims-tokens.json (full tier — from stack answers)",
+      ".claude/settings.json env.SPRINT_MAIN_BRANCH (only if default branch != main)"
+    ]
+  }
+}

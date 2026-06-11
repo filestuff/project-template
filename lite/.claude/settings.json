@@ -1,0 +1,19 @@
+{
+  "$comment": "Checked-in team defaults. Machine-specific paths and any tokens stay in .claude/settings.local.json (gitignored). Keep this file secret-free. If the default branch is not 'main', add env.SPRINT_MAIN_BRANCH (the full-tier sprint scripts read it).",
+  "permissions": {
+    "allow": [
+      "Bash({{PACKAGE_MANAGER}} run *)",
+      "Bash({{PACKAGE_MANAGER}} test *)",
+      "Bash({{PACKAGE_MANAGER}} lint *)",
+      "Bash(scripts/sprint/*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Skill(sprint)",
+      "Skill(plan)",
+      "Skill(adr)"
+    ],
+    "deny": []
+  }
+}

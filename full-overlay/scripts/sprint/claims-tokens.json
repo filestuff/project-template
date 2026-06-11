@@ -1,0 +1,7 @@
+{
+  "$comment": "Claim-token definitions for claims.mjs — written per project at bootstrap. Each token expands to one or more claims (exact path or `dir/**` prefix). Always define a `deps` token covering the dependency manifest + lockfile (the classic hidden conflict), and a `schema` token if the project has a database schema (two parallel migrations conflict structurally even in different files).",
+  "tokens": {
+    "schema": ["REPLACE/path/to/schema", "REPLACE/path/to/migrations/**"],
+    "deps": ["package.json", "REPLACE-lockfile"]
+  }
+}
