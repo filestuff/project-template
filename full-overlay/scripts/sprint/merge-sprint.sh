@@ -151,9 +151,12 @@ finish)
   "$SELF_DIR/lock.sh" continue "$LABEL" || { echo "lock not held for $LABEL — was land run?" >&2; exit 75; }
 
   shopt -s nullglob
-  files=("$ROOT/docs/sprints/done/$SPRINT-"*.md)
-  [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one done/ file for $SPRINT" >&2; exit 1; }
+  # A low-numbered sprint can be archived by the land-step rotation immediately (keeps the 10
+  # highest-numbered in done/), so look in done/ AND done/archive/.
+  files=("$ROOT/docs/sprints/done/$SPRINT-"*.md "$ROOT/docs/sprints/done/archive/$SPRINT-"*.md)
+  [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one done/ file for $SPRINT (checked done/ + done/archive/)" >&2; exit 1; }
   BASENAME=$(basename "${files[0]}")
+  REL_FILE="${files[0]#"$ROOT"/}"
   TITLE=$(sprint_title "${files[0]}")
   grep -q '^status: done' "${files[0]}" || { echo "${files[0]} is not status: done" >&2; exit 1; }
 
@@ -164,7 +167,9 @@ finish)
   fi
   git -C "$ROOT" commit --no-verify -q -m "sprint: complete $SPRINT — $TITLE"
 
-  git -C "$ROOT" show "HEAD:docs/sprints/done/$BASENAME" | grep -q '^status: done' ||
+  # grep without -q: -q exits on first match and SIGPIPEs git-show, which trips pipefail
+  # into a false FATAL. REL_FILE (not a hardcoded done/ path) so an archived file resolves.
+  git -C "$ROOT" show "HEAD:$REL_FILE" | grep '^status: done' >/dev/null ||
     { echo "FATAL: committed sprint file is not status: done — inspect HEAD" >&2; exit 1; }
 
   if [[ $NO_PUSH -eq 0 ]]; then

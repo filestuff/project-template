@@ -33,8 +33,9 @@ Detect before asking:
 
 Then ask (grouped): project name; one-line description; tier (lite = one sprint at a time,
 no extra machinery; full = parallel agents, file claims, lock, worktrees); confirm gate
-commands; full tier only — where the schema/migrations live (for `claims-tokens.json`;
-"none" is valid).
+commands; the cheap **pre-push** checks (the fast subset of CI to run on every push — propose
+the project's quickest structural/lint checks; "none" → a gitleaks-only pre-push gate); full
+tier only — where the schema/migrations live (for `claims-tokens.json`; "none" is valid).
 
 ## Step 2: Preflight
 
@@ -69,6 +70,15 @@ placeholder is a bootstrap bug, not a cosmetic issue.
 
 - `scripts/sprint/gate.sh` already received `{{GATE_COMMANDS}}` in step 4 — verify it runs
   (`bash -n scripts/sprint/gate.sh`).
+- `scripts/sprint/pre-push-gate.sh` already received `{{PREPUSH_GATE_COMMANDS}}` in step 4 (if
+  the user said "none", replace the placeholder with `:` so the gate stays valid and runs
+  gitleaks only). Then **wire it up as an actual pre-push hook**, by stack:
+  - Node + husky (`.husky/` present): add/append a `.husky/pre-push` that runs
+    `scripts/sprint/pre-push-gate.sh "$@"`.
+  - Otherwise: `git config core.hooksPath` to a hooks dir containing a `pre-push` that calls
+    it, or drop a thin executable `.git/hooks/pre-push` wrapper
+    (`exec "$(git rev-parse --show-toplevel)/scripts/sprint/pre-push-gate.sh" "$@"`).
+  Offer to do the wiring based on the detected stack; otherwise print the one-liner for the user.
 - Full tier: write `scripts/sprint/claims-tokens.json` from the schema answer — always a
   `deps` token (manifest + lockfile); a `schema` token if applicable; drop the REPLACE
   placeholders entirely if a token doesn't apply.
@@ -109,7 +119,8 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
 
 ## Step 9: Validate
 
-- Lite: `bash -n scripts/sprint/gate.sh`; the four sprint dirs + `.gitkeep`s exist.
+- Lite: `bash -n scripts/sprint/gate.sh` and `bash -n scripts/sprint/pre-push-gate.sh`; the
+  four sprint dirs + `.gitkeep`s exist.
 - Full, additionally:
   - `scripts/sprint/lock.sh status` prints `FREE`
   - `node scripts/sprint/regen.mjs --check` exits 0 (empty skeleton is current)

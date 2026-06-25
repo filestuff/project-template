@@ -20,6 +20,10 @@
       "prompt": "Commit-gate commands (&&-chained; all must pass before a deliverable commit)",
       "files": ["scripts/sprint/gate.sh"]
     },
+    "{{PREPUSH_GATE_COMMANDS}}": {
+      "prompt": "Cheap pre-push checks — the fast subset of CI to run on every push (skips doc-only pushes); blank/`:` = gitleaks-only",
+      "files": ["scripts/sprint/pre-push-gate.sh"]
+    },
     "{{PACKAGE_MANAGER}}": {
       "prompt": "Package manager / dependency install command prefix (npm | pnpm | yarn | pip | cargo | ...)",
       "files": [".claude/settings.json", "docs/sprints/PROTOCOL.md"]

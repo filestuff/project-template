@@ -287,12 +287,19 @@ the sprint branch.
 If anything goes wrong mid-land: `merge-sprint.sh abort S-NNN-kebab-name` rolls `main` back
 to the recorded pre-land SHA and releases the lock.
 
-### Step 6: Worktree Cleanup
+### Step 6: Post-Push CI Check + Worktree Cleanup
 
-1. `ExitWorktree {action: "keep"}` — returns the session to the primary checkout
+1. **If the project has CI**, verify the completion push's runs are green before declaring the
+   sprint closed — pushed-but-red is a silent failure mode: the push step always ran, but
+   nobody read the result. Poll the runs for the completion push until they finish
+   (e.g. `gh run list --branch <main> --limit 5`, or `gh run watch <id>`). A red run
+   **reopens the sprint's close**: fix on a follow-up commit (small fixes can go straight to
+   `main` under the lock; anything larger reopens the worktree), then re-verify. Cite the
+   green run IDs in the close summary. (No CI? skip this step.)
+2. `ExitWorktree {action: "keep"}` — returns the session to the primary checkout
    (path-entered worktrees are not auto-removed, so "keep" is correct here).
-2. `git worktree remove .claude/worktrees/S-NNN-kebab-name`
-3. `git branch -d S-NNN-kebab-name` (safe: the branch is merged).
+3. `git worktree remove .claude/worktrees/S-NNN-kebab-name`
+4. `git branch -d S-NNN-kebab-name` (safe: the branch is merged).
 
 ---
 
