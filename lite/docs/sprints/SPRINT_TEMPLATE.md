@@ -88,12 +88,40 @@ touches: []
 - External services, API keys, or infrastructure needed
 - Sprint dependencies captured in frontmatter `depends_on` / `blocks`
 
+## Interface Contract
+
+<!-- The contracts that cross sprint boundaries. Filling these lets a dependent
+     sprint be built IN PARALLEL against an agreed signature instead of waiting
+     for this sprint to land (full tier surfaces the resulting waves in
+     ROADMAP.md). Leave a section "— none" if this sprint neither exposes nor
+     consumes a cross-sprint contract. -->
+
+### Produces
+
+<!-- Signatures / types / endpoints / schemas this sprint creates that other
+     sprints (its `blocks:`) may code against. Name each with file:symbol. -->
+
+- `ExportedThing` — `path/to/module`: the shape/signature dependents may rely on
+
+### Consumes
+
+<!-- Contracts this sprint depends on, from its `depends_on:` sprints. Code
+     against these agreed signatures; the blocker need not be merged yet. -->
+
+- `UpstreamThing` from S-NNN — `path/to/module`: signature relied on
+
 ## Testing
 
-<!-- Reference an existing test file to follow for style/patterns -->
+<!-- Test-first (RED → GREEN → REFACTOR): write the failing test BEFORE the
+     implementation and watch it fail for the right reason. Reference an existing
+     test file for style/patterns. Avoid the traps in
+     docs/sprints/testing-anti-patterns.md. When test-first doesn't fit
+     (exploratory spike, pure config, visual/UI), say so here and state how the
+     deliverable is verified instead. -->
 
 - Test pattern: follow `path/to/existing_test` for mocking approach and assertions
-- [ ] Unit tests for X
+- [ ] RED: failing test written for X, observed to fail for the right reason
+- [ ] GREEN: simplest code makes it pass (YAGNI — see `docs/ENGINEERING_PRINCIPLES.md`)
 - [ ] Integration test for Y
 - [ ] Manual verification of Z
 

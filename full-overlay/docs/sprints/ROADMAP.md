@@ -22,6 +22,19 @@ graph TD
 **Critical path (0 pts — the longest dependency chain):** `` (0 pts done; 0 remaining).
 <!-- END GENERATED: critical-path -->
 
+## Parallel Waves
+
+Each wave is a set of sprints that can run **concurrently**: every dependency is met by an
+earlier wave, and the members claim disjoint files (`touches:`). A `depends_on` edge always
+forces ordering — to build a dependent in parallel before its blocker lands, use the blocker's
+**Interface Contract** (sprint body). A sprint with no `touches:` can't be proven safe, so it
+gets its own wave. Derived by `scripts/sprint/claims.mjs` (`computeWaves`); regenerated with the
+rest of this file.
+
+<!-- BEGIN GENERATED: waves -->
+_(no pending sprints)_
+<!-- END GENERATED: waves -->
+
 ## Status
 
 <!-- LLM-maintained narrative: what's in flight, what just unblocked, current

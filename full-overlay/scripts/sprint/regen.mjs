@@ -12,6 +12,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot, allSprints, shortLabel } from "./frontmatter.mjs";
+import { computeWaves } from "./claims.mjs";
 
 const root = repoRoot();
 const check = process.argv.includes("--check");
@@ -138,11 +139,29 @@ function genCriticalPath() {
   ];
 }
 
+function genWaves() {
+  // Derived parallel schedule: each wave is dependency-ready AND claim-disjoint.
+  const { waves, unscheduled } = computeWaves(sprints);
+  if (waves.length === 0) return ["_(no pending sprints)_"];
+  const label = (s) =>
+    `${s.sprint}${s.dir === "in-progress" ? " (in flight)" : ""}` +
+    ((s.touches ?? []).length === 0 ? " ⚠️ no claims" : "");
+  const lines = waves.map((wave, i) => {
+    const tag = i === 0 ? "startable now in parallel" : `after wave ${i}`;
+    return `- **Wave ${i + 1}** (${tag}): ${wave.map(label).join(", ")}`;
+  });
+  if (unscheduled.length > 0)
+    lines.push(
+      `- **Unscheduled** (dependency cycle?): ${unscheduled.map((s) => s.sprint).join(", ")}`,
+    );
+  return lines;
+}
+
 // --- marker splicing -------------------------------------------------------
 
 const FILES = {
   "docs/sprints/INDEX.md": { totals: genTotals, "in-progress": genInProgress, backlog: genBacklog },
-  "docs/sprints/ROADMAP.md": { graph: genGraph, "critical-path": genCriticalPath },
+  "docs/sprints/ROADMAP.md": { graph: genGraph, "critical-path": genCriticalPath, waves: genWaves },
 };
 
 let drift = [];

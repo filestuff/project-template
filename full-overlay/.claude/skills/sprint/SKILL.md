@@ -5,9 +5,9 @@ description: >
   with dependency checking, file claims, doc validation, and lock-serialized
   lifecycle commits on main. Use when asked to "start a sprint", "complete a
   sprint", "show the board", "create a sprint", "plan a sprint", "what's next",
-  or "sprint roadmap".
+  "sprint roadmap", or "run/fan out a parallel wave".
 argument-hint: "[command] [sprint-id]"
-allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion EnterWorktree ExitWorktree"
+allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion EnterWorktree ExitWorktree Task"
 ---
 
 # Sprint Management Skill
@@ -56,6 +56,9 @@ Print the current kanban state:
      starting overlapping work.
 5. Show lock state: `scripts/sprint/lock.sh status`.
 6. Show total backlog points and critical path from `docs/sprints/ROADMAP.md`.
+7. **Parallel waves**: run `node scripts/sprint/claims.mjs waves` and show the current
+   startable-in-parallel set (Wave 1 backlog members — skip any tagged "in flight"). This is
+   what `/sprint wave` would fan out.
 
 Format as a concise board view. (Ignore `.gitkeep` files when counting.)
 
@@ -120,6 +123,19 @@ one and show its goal, points, tags, notes.
 Run `node scripts/sprint/regen.mjs` (regenerates the graph + critical-path blocks in
 `docs/sprints/ROADMAP.md` from sprint frontmatter). Update the narrative outside the markers
 if stale. Commit on main under the lock: `docs: regenerate sprint roadmap`.
+
+### `/sprint wave [N]`
+
+Fan the current parallel-safe wave out to subagents. **Defer to
+`docs/sprints/ORCHESTRATION.md`** — it is the source of truth for this command (as `PROTOCOL.md`
+is for the rest). In short: compute the wave (`claims.mjs waves`), confirm the startable backlog
+members with the user, run **Phase 1 + `start.sh` + worktree creation per sprint yourself**
+(serialized, on `main`, under the lock — you stay parked on `main` and never EnterWorktree),
+**dispatch one execution subagent per sprint** (single message = parallel) to run **Phase 2 only**
+in its worktree via `git -C`, then **complete finished sprints one at a time** (Phase 3 is
+lock-serialized and cannot be fanned out). Keep the durable ledger in
+`.claude/sprint-orchestration/`. Optional `N` caps the wave size. After the wave lands, run a
+broad `/review` and recompute the next wave.
 
 ## No Arguments
 

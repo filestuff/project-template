@@ -9,7 +9,8 @@
         "docs/DOC_HEALTH.md",
         "docs/sprints/PROTOCOL.md",
         "docs/sprints/INDEX.md",
-        "docs/sprints/ROADMAP.md"
+        "docs/sprints/ROADMAP.md",
+        "docs/sprints/ORCHESTRATION.md"
       ]
     },
     "{{PROJECT_DESCRIPTION}}": {
@@ -26,7 +27,7 @@
     },
     "{{PACKAGE_MANAGER}}": {
       "prompt": "Package manager / dependency install command prefix (npm | pnpm | yarn | pip | cargo | ...)",
-      "files": [".claude/settings.json", "docs/sprints/PROTOCOL.md"]
+      "files": [".claude/settings.json", "docs/sprints/PROTOCOL.md", "docs/sprints/ORCHESTRATION.md"]
     }
   },
   "tiers": {

@@ -51,7 +51,8 @@ tier only — where the schema/migrations live (for `claims-tokens.json`; "none"
    (handled in step 6).
 2. Full tier: copy `TEMPLATE/full-overlay/` contents on top (it overwrites
    `docs/sprints/PROTOCOL.md`, `docs/sprints/INDEX.md`, `.claude/skills/sprint/SKILL.md`
-   and adds the scripts + `ROADMAP.md`).
+   and adds the scripts, `ROADMAP.md` (with its Parallel Waves block), and
+   `docs/sprints/ORCHESTRATION.md`).
 3. `chmod +x scripts/sprint/*.sh`.
 
 ## Step 4: Replace placeholders (deterministic)
@@ -123,7 +124,10 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
   four sprint dirs + `.gitkeep`s exist.
 - Full, additionally:
   - `scripts/sprint/lock.sh status` prints `FREE`
-  - `node scripts/sprint/regen.mjs --check` exits 0 (empty skeleton is current)
+  - `node scripts/sprint/regen.mjs --check` exits 0 (empty skeleton is current — this also
+    covers the ROADMAP Parallel Waves block)
+  - `node scripts/sprint/claims.mjs waves` runs clean (prints `no pending sprints` on the empty
+    skeleton)
   - `node scripts/sprint/frontmatter.mjs get docs/sprints/SPRINT_TEMPLATE.md sprint`
     prints `"S-NNN"`
 
@@ -133,8 +137,10 @@ Any failure: fix before offering the commit.
 
 `chore: install project-template (<tier>) — sprint workflow, ADRs, doc health`
 
-Then suggest next steps: `/plan` to seed the backlog from a plan document, or
-`/sprint create` for the first sprint.
+Then suggest next steps: `/plan` to seed the backlog from a plan document (it now splits work
+for parallel agents), or `/sprint create` for the first sprint. Mention `/debug` (root-cause a
+failure before fixing) and — full tier — `/sprint wave` to fan a parallel wave of independent
+sprints out to subagents.
 
 ---
 
@@ -143,8 +149,8 @@ Then suggest next steps: `/plan` to seed the backlog from a plan document, or
 1. **Require `docs/sprints/in-progress/` empty** — a lite sprint in flight must close first
    (or the user explicitly accepts registering it by hand afterward).
 2. Copy `TEMPLATE/full-overlay/` contents over the repo; `chmod +x scripts/sprint/*.sh`;
-   re-apply the `{{PROJECT_NAME}}` / `{{PACKAGE_MANAGER}}` placeholders to the three
-   overwritten/added markdown files (PROTOCOL.md, INDEX.md, ROADMAP.md, sprint SKILL.md) and
+   re-apply the `{{PROJECT_NAME}}` / `{{PACKAGE_MANAGER}}` placeholders to the overwritten/added
+   markdown files (PROTOCOL.md, INDEX.md, ROADMAP.md, ORCHESTRATION.md, sprint SKILL.md) and
    re-run the step-4 grep check.
 3. Migrate INDEX content: the lite INDEX's hand-maintained Done/Backlog rows move into the
    marker skeleton — Done rows into the LLM-maintained Done table; Backlog/In-Progress rows

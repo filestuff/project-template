@@ -186,16 +186,21 @@ details; "should I proceed" (the user already said start).
   to build.
 - For each deliverable:
   1. Read all referenced files before changing anything.
-  2. Implement the described changes.
-  3. **Gate before commit** — run `scripts/sprint/gate.sh`; all commands must pass, plus any
+  2. **Test-first (RED).** Write the failing test for the behavior and run it — watch it fail
+     for the right reason. (Skip only when test-first genuinely doesn't fit — exploratory spike,
+     pure config, visual/UI — and say so + state how you'll verify instead. Traps:
+     `docs/sprints/testing-anti-patterns.md`.)
+  3. **Implement (GREEN), then refactor** — the simplest change that passes (YAGNI/KISS,
+     `docs/ENGINEERING_PRINCIPLES.md`); clean up only once the test is green.
+  4. **Gate before commit** — run `scripts/sprint/gate.sh`; all commands must pass, plus any
      deliverable-relevant tests not covered by the gate. Fix failures before committing — do
      NOT commit broken code and defer.
-  4. Check off acceptance criteria only when you can point to the file/test/output that
+  5. Check off acceptance criteria only when you can point to the file/test/output that
      proves each.
-  5. Commit atomically per deliverable (not per file): `S-NNN: [deliverable description]`.
+  6. Commit atomically per deliverable (not per file): `S-NNN: [deliverable description]`.
 - **Blockers/ambiguity:** do NOT guess or skip — ask via AskUserQuestion with concrete
   alternatives. If a deliverable turns out unnecessary, ask whether to skip and update the
-  sprint file.
+  sprint file. Hit an unexpected bug or failing test? Use `/debug` — root-cause before fixing.
 - **Deferred work:** anything descoped or discovered-but-not-done goes to `docs/TODOS.md`
   with a backlink to this sprint — not into a comment, not into thin air. (`docs/TODOS.md`
   edits are doc-sync targets; claim the file if editing it mid-sprint.)
@@ -207,6 +212,12 @@ details; "should I proceed" (the user already said start).
     cleanly at land).
   - Claimed by another in-flight sprint → **stop and ask** — do not edit the file.
 
+**Red flags — don't rationalize past these:**
+- "I'll write the test after." Then it's shaped to the code you wrote and you never watched it
+  fail — write RED first.
+- "I'll commit this broken and fix it next." The gate must pass before every commit.
+- "A try/catch makes the error go away." That hides the bug — `/debug` it.
+
 ---
 
 ## Phase 3: Post-Sprint
@@ -217,7 +228,9 @@ details; "should I proceed" (the user already said start).
 
 For each criterion, cite one of: a test name that asserts it, a file path + line range that
 implements it, or command output that demonstrates it. A checked box without evidence does
-not count. For any unevidenced criterion, ask via AskUserQuestion:
+not count. **Verify the observable difference** the criterion describes — the value in the
+response, the row actually written, the model that answered — not merely that the operation
+returned without error. For any unevidenced criterion, ask via AskUserQuestion:
 - A: "Implement the missing piece now"
 - B: "Descope — remove it and note why in the Completion Log (and `docs/TODOS.md`)"
 - C: "Spin out into a follow-up sprint"

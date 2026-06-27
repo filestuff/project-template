@@ -34,10 +34,28 @@ It does NOT run plan reviews — those run separately first if used.
 1. **Identify natural sprint boundaries.** Foundation/infra first; independent features
    parallelizable; DB/schema before features; integration/eval last. Each sprint completable
    in ≤ ~2 weeks. Respect any build order the source plan locks in.
-2. **Confirm boundaries via AskUserQuestion** — present the proposed split as a numbered list
-   with goals + the dependency chain; ask whether to merge/split/reorder.
-3. **Assign story points** (Fibonacci 1/2/3/5/8/13; 13 → consider splitting).
-4. **Determine dependencies** between new sprints and against existing backlog items.
+2. **Cut for parallelism.** The aim is sprints that *parallel agents* can run at the same time:
+   - Prefer **vertical slices that own disjoint file regions** so two sprints never edit the
+     same files — disjoint `touches:` is exactly what makes concurrent execution safe (full
+     tier). If a file is shared by several features, extract it into its own foundation sprint.
+   - **Minimize `depends_on` edges.** Where a dependency is unavoidable, plan to define the
+     blocker's **Produces** contract (Phase 3) so the dependent can be built in parallel
+     *against the agreed signature* instead of waiting for the blocker to land.
+   - Keep each sprint cohesive — don't over-split into chatter, and don't collapse independent
+     features into one mega-sprint.
+3. **Confirm boundaries via AskUserQuestion** — present the proposed split as a numbered list
+   with goals + the dependency chain, calling out which sprints are meant to run in parallel;
+   ask whether to merge/split/reorder.
+4. **Assign story points** (Fibonacci 1/2/3/5/8/13; 13 → consider splitting).
+5. **Determine dependencies** between new sprints and against existing backlog items.
+
+**Red flags — don't rationalize past these:**
+- "I'll just put it all in one sprint." A mega-sprint can't be parallelized and hides
+  dependencies. Split along file/feature seams.
+- "Both touch the same core file, oh well." Overlapping `touches:` forces those sprints
+  sequential. Re-cut the seam, or extract the shared file into a foundation sprint.
+- "The dependent can just wait." That is the exact choice that serializes the plan. Write the
+  Interface Contract so it can proceed in parallel.
 
 ### Phase 3: Sprint File Generation
 
@@ -47,11 +65,21 @@ For each sprint, starting at S-{highest+1}, create a file from
   `depends_on`, `blocks`, `tags`, `story_points`.
 - **Deliverables** (execution order): Files (new|modified), Reference implementation,
   Interface contract (file:line where code exists), Setup, Changes, Acceptance criteria.
-- **Technical Details**, **Dependencies**, **Testing** (pattern reference), **Risks**,
-  **Open Questions** (the non-obvious decisions `/sprint start` will ask).
+  Apply YAGNI — only the deliverables the plan actually needs (`docs/ENGINEERING_PRINCIPLES.md`).
+- **Interface Contract** (Produces / Consumes): the cross-sprint signatures. For every
+  `depends_on` edge, fill the dependent's **Consumes** and the blocker's **Produces** with the
+  same agreed signature — this is what lets the two sprints run in parallel.
+- **Technical Details**, **Dependencies**, **Testing** (test-first pattern reference),
+  **Risks**, **Open Questions** (the non-obvious decisions `/sprint start` will ask).
 - **Full tier only** (if `scripts/sprint/claims.mjs` exists): populate `touches:` from the
   Files lists you just wrote, plus tokens from `scripts/sprint/claims-tokens.json` and likely
   doc-sync targets — `/sprint start` verifies rather than re-derives it.
+
+**Full tier only — verify the parallel schedule** (only if `scripts/sprint/claims.mjs` exists):
+after writing every sprint's `touches:`, run `node scripts/sprint/claims.mjs waves` and read the
+wave assignment. If two sprints you intended to run in parallel land in different waves because
+their claims overlap, re-cut the seam (or extract the shared file into a foundation sprint) and
+re-run. The waves output is the ground truth for what can actually run concurrently.
 
 If the source plan numbers its tasks, tie each generated sprint back to its originating task
 IDs in the sprint body so traceability is preserved.
@@ -59,12 +87,21 @@ IDs in the sprint body so traceability is preserved.
 If a breakdown surfaces a standalone architectural decision, offer to record it via
 `/adr create`.
 
-### Phase 4: Index Update
+### Phase 4: Index Update + Parallelization Summary
 
-Update `docs/sprints/INDEX.md` (full tier: run `node scripts/sprint/regen.mjs`; lite: edit
-the Backlog table by hand). Commit all new sprints + index:
+Update `docs/sprints/INDEX.md` (full tier: run `node scripts/sprint/regen.mjs`, which also
+regenerates the ROADMAP graph, critical path, and **Parallel Waves** block; lite: edit the
+Backlog table by hand). Commit all new sprints + index:
 `sprint: create S-{first}..S-{last} — [feature] (from /plan)`.
 Full tier: make this commit on `main` under the lock (`scripts/sprint/lock.sh`).
+
+Then **report a Parallelization Summary** to the user:
+- **Full tier**: the waves from `node scripts/sprint/claims.mjs waves` (what is startable now in
+  parallel, what each later wave unblocks) plus the critical path from `docs/sprints/ROADMAP.md`.
+  Mention `/sprint wave` can fan the first wave out to parallel agents.
+- **Lite tier**: derive waves from `depends_on` only — group sprints with no unmet dependency,
+  then the next layer, and so on. Label it "(dependency-only; file conflicts not checked in lite
+  — upgrade to the full tier for claim-verified parallel safety)."
 
 ## Arguments
 

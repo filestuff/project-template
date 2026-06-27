@@ -14,7 +14,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { repoRoot, readSprintFile, setField } from "./frontmatter.mjs";
+import { repoRoot, readSprintFile, setField, allSprints } from "./frontmatter.mjs";
 
 // Claim tokens are project-specific — defined in the sibling claims-tokens.json
 // ({ "tokens": { "name": ["path", "dir/**", …] } }), seeded at bootstrap.
@@ -42,10 +42,55 @@ function patternsOverlap(a, b) {
   return exact.value.startsWith(prefix.value);
 }
 
-function claimsOverlap(claimA, claimB) {
+export function claimsOverlap(claimA, claimB) {
   for (const pa of expand(claimA))
     for (const pb of expand(claimB)) if (patternsOverlap(pa, pb)) return true;
   return false;
+}
+
+// Two sprints can share a parallel wave only if their `touches:` are disjoint.
+// A sprint with NO claims can't be proven safe → treated as conflicting with all,
+// so it lands in its own wave (flagged by the renderer).
+function sprintsClaimOverlap(a, b) {
+  const at = a.touches ?? [];
+  const bt = b.touches ?? [];
+  if (at.length === 0 || bt.length === 0) return true;
+  for (const ca of at) for (const cb of bt) if (claimsOverlap(ca, cb)) return true;
+  return false;
+}
+
+// Derive parallel "waves" from the backlog + in-progress work set.
+// A wave is a set of sprints that can run concurrently: every dependency is
+// satisfied by an earlier wave (or already done / outside the set), AND the
+// members are pairwise `touches:`-disjoint. NOT a topological level — file
+// conflicts split a level across waves. `depends_on` edges always force ordering;
+// the Interface Contract (sprint body) is the deliberate way to start a dependent
+// early, which this conservative view intentionally does not auto-schedule.
+export function computeWaves(sprints) {
+  const WORK = new Set(["backlog", "in-progress"]);
+  const work = sprints.filter((s) => WORK.has(s.dir));
+  const ids = new Set(work.map((s) => s.sprint));
+  const num = (s) => parseInt(String(s.sprint).replace(/\D/g, ""), 10) || 0;
+  const placed = new Map(); // sprint id -> wave index
+  const waves = [];
+  let pool = [...work].sort((a, b) => num(a) - num(b));
+  while (pool.length) {
+    const w = waves.length;
+    // Ready = every dep satisfied: done/external (not in work set) OR placed in an earlier wave.
+    const ready = pool.filter((s) =>
+      (s.depends_on ?? []).every((d) => !ids.has(d) || (placed.has(d) && placed.get(d) < w)),
+    );
+    const wave = [];
+    for (const s of ready) {
+      if (wave.some((t) => sprintsClaimOverlap(s, t))) continue; // file conflict → a later wave
+      wave.push(s);
+    }
+    if (wave.length === 0) break; // cycle / over-constrained — remaining go to `unscheduled`
+    for (const s of wave) placed.set(s.sprint, w);
+    waves.push(wave);
+    pool = pool.filter((s) => !placed.has(s.sprint));
+  }
+  return { waves, unscheduled: pool };
 }
 
 function inFlightSprints(root) {
@@ -77,6 +122,8 @@ function parseArgs(argv) {
   return args;
 }
 
+// --- CLI (only when run directly, not when imported by regen.mjs) ----------
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
 const root = repoRoot();
 const [, , cmd, ...rest] = process.argv;
 const args = parseArgs(rest);
@@ -159,7 +206,26 @@ if (cmd === "check") {
   } finally {
     execFileSync(lockSh, ["release", token]);
   }
+} else if (cmd === "waves") {
+  // Derived parallel schedule over backlog + in-progress (deps + claim-disjointness).
+  const { waves, unscheduled } = computeWaves(allSprints(root));
+  if (waves.length === 0) {
+    console.log("no pending sprints (backlog + in-progress empty)");
+  } else {
+    waves.forEach((wave, i) => {
+      const label = (s) =>
+        `${s.sprint}${s.dir === "in-progress" ? " (in flight)" : ""}` +
+        ((s.touches ?? []).length === 0 ? " ⚠ no claims" : "");
+      const tag = i === 0 ? "startable now in parallel" : `after wave ${i}`;
+      console.log(`Wave ${i + 1} (${tag}): ${wave.map(label).join(", ")}`);
+    });
+  }
+  if (unscheduled.length > 0)
+    console.log(
+      `Unscheduled (dependency cycle?): ${unscheduled.map((s) => s.sprint).join(", ")}`,
+    );
 } else {
-  console.error("usage: claims.mjs check|add ...");
+  console.error("usage: claims.mjs check|add|waves ...");
   process.exit(1);
+}
 }

@@ -28,6 +28,13 @@ patterns as review criteria.
 | **[AUTO]** | Unused imports, dead code, debug prints, typos | Fix immediately |
 | **[CONSIDER]** | Refactors, style opinions, nice-to-have | Mention only |
 
+**Severity tiers** (align with `.claude/agents/reviewer.md`): `[BUG]` = **Critical** (blocks
+merge), `[FIX]` = **Important** (fix before proceeding), `[CONSIDER]` = **Minor** (note only).
+`[AUTO]` is fixed on sight. Calibrate honestly — don't inflate, don't bury a Critical under Minors.
+
+**Distrust author claims.** Commit messages and "this is safe because…" rationales are
+unverified — confirm against the diff yourself. "Tests pass" ≠ correct; read what they assert.
+
 ### AUTO Criteria (all must be true)
 
 - Zero risk of breaking behavior
@@ -49,22 +56,30 @@ patterns as review criteria.
 
 ## Core Checks
 
-**Always ask these questions during review:**
+**Always ask these questions during review.** They operationalize
+`docs/ENGINEERING_PRINCIPLES.md` (YAGNI / KISS / DRY / SOLID) — invoke a principle by name when
+flagging, so the tradeoff is reviewable.
 
-### Can this be simpler?
+### Can this be simpler? (KISS)
 - Is there unnecessary abstraction? Could this be done with less code?
 - Are there helpers/utils being created for one-time operations?
 - Over-engineered error handling, feature flags, or backwards-compat shims?
 
-### Can we remove any code?
+### Can we remove any code? (YAGNI)
 - Dead code, unused exports, commented-out blocks?
 - Backwards-compatibility hacks like renamed `_vars` or `// removed` comments?
 - Types/interfaces exported but only used in the same file?
+- Speculative flags/params/extension points, or an abstraction with a single caller?
 
 ### Is it DRY without premature abstraction?
 - Obvious copy-paste of entire functions or large blocks → refactor
 - But 2-3 similar lines are fine — don't abstract too early
 - The wrong abstraction is worse than duplication
+
+### Are the boundaries sound? (SOLID)
+- One reason to change per module (no "and" in its description)?
+- Leaky or premature abstractions; fat interfaces forcing callers to depend on unused methods?
+- Concrete coupling at a seam that should be an injected dependency (and makes it hard to test)?
 
 ### Does it follow project patterns?
 - Whatever `AGENTS.md` / `CLAUDE.md` and the surrounding code establish: file
