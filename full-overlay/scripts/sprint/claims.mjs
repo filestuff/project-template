@@ -93,6 +93,21 @@ export function computeWaves(sprints) {
   return { waves, unscheduled: pool };
 }
 
+// Plan-readiness status for the wave renderers (labels only — computeWaves
+// scheduling is deliberately untouched). "unplanned" = never certified by
+// /sprint plan (no plan_date). "stale" = a dependency landed after the plan was
+// written (end_date > plan_date; string compare is safe for YYYY-MM-DD), so the
+// plan's file:line premises may cite moved code — re-verify before dispatch.
+export function planStatus(s, byId) {
+  if (!s.plan_date) return "unplanned";
+  for (const d of s.depends_on ?? []) {
+    const dep = byId.get(d);
+    if (!dep || !["done", "done/archive"].includes(dep.dir)) continue;
+    if (dep.end_date && String(dep.end_date) > String(s.plan_date)) return "stale";
+  }
+  return "fresh";
+}
+
 function inFlightSprints(root) {
   const dir = join(root, "docs/sprints/in-progress");
   if (!existsSync(dir)) return [];
@@ -208,14 +223,21 @@ if (cmd === "check") {
   }
 } else if (cmd === "waves") {
   // Derived parallel schedule over backlog + in-progress (deps + claim-disjointness).
-  const { waves, unscheduled } = computeWaves(allSprints(root));
+  const sprints = allSprints(root);
+  const byId = new Map(sprints.map((s) => [s.sprint, s]));
+  const { waves, unscheduled } = computeWaves(sprints);
   if (waves.length === 0) {
     console.log("no pending sprints (backlog + in-progress empty)");
   } else {
     waves.forEach((wave, i) => {
-      const label = (s) =>
-        `${s.sprint}${s.dir === "in-progress" ? " (in flight)" : ""}` +
-        ((s.touches ?? []).length === 0 ? " ⚠ no claims" : "");
+      const label = (s) => {
+        const plan = s.dir === "backlog" ? planStatus(s, byId) : "fresh";
+        return (
+          `${s.sprint}${s.dir === "in-progress" ? " (in flight)" : ""}` +
+          ((s.touches ?? []).length === 0 ? " ⚠ no claims" : "") +
+          (plan === "unplanned" ? " ⚠ unplanned" : plan === "stale" ? " ⚠ stale plan" : "")
+        );
+      };
       const tag = i === 0 ? "startable now in parallel" : `after wave ${i}`;
       console.log(`Wave ${i + 1} (${tag}): ${wave.map(label).join(", ")}`);
     });

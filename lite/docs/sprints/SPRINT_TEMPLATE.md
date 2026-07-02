@@ -8,6 +8,7 @@ depends_on: []
 blocks: []
 tags: []
 story_points: 0
+plan_date: null
 start_date: null
 end_date: null
 touches: []
@@ -24,6 +25,13 @@ touches: []
      `dir/**` prefixes, or tokens from scripts/sprint/claims-tokens.json.
      /sprint start re-derives or verifies it and checks overlap with in-flight
      sprints. -->
+
+<!-- plan_date: is set ONLY by /sprint plan (or the wave planning pass) after its
+     readiness checklist passes — never by hand and never at creation. null =
+     unplanned: /sprint start warns, and /sprint wave runs a planning subagent
+     over the sprint before dispatching it. A plan_date older than a
+     dependency's end_date renders as "stale plan" in the waves output — the
+     plan's file:line premises predate landed work and need re-verification. -->
 
 <!-- Deliverables are numbered in execution order. Claude executes 1, then 2, etc.
      If two deliverables are independent, say so in their description. -->
@@ -133,10 +141,27 @@ touches: []
 
 ## Open Questions
 
-<!-- Non-obvious decisions to resolve during the pre-sprint AskUserQuestion phase. -->
+<!-- Non-obvious decisions, written DECISION-READY: each question carries 2–4
+     concrete options with their plan/touches implications. Resolved during
+     /sprint plan (preferred — the planner has the most context) or the
+     pre-sprint AskUserQuestion phase; every answer moves to Pre-Sprint
+     Decisions below and the item is checked off. An unresolved question
+     without concrete options blocks plan_date — the sprint is not
+     implementation-ready while an open decision has no shaped choices. -->
 
-- [ ] Question about an architectural tradeoff
-- [ ] Question about a data-model choice
+- [ ] Question about an architectural tradeoff — options: A …, B …
+- [ ] Question about a data-model choice — options: A …, B …
+
+## Pre-Sprint Decisions
+
+<!-- Binding decisions carried into execution — the sprint file is the entire
+     brief for an execution agent, so an answer that lives only in a
+     conversation is invisible to it. Appended by /sprint plan, the wave
+     planning pass, or the Phase 1 tradeoff round. Format:
+     - YYYY-MM-DD (plan|start|wave): [decision] — [one-line rationale]
+     Execution treats these as settled: do not re-litigate them mid-sprint. -->
+
+_(none yet)_
 
 ---
 

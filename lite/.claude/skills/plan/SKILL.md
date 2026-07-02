@@ -70,7 +70,16 @@ For each sprint, starting at S-{highest+1}, create a file from
   `depends_on` edge, fill the dependent's **Consumes** and the blocker's **Produces** with the
   same agreed signature — this is what lets the two sprints run in parallel.
 - **Technical Details**, **Dependencies**, **Testing** (test-first pattern reference),
-  **Risks**, **Open Questions** (the non-obvious decisions `/sprint start` will ask).
+  **Risks**, **Open Questions** — written **decision-ready**: each question carries 2–4
+  concrete options with their implications, so a later planning pass or pre-sprint round
+  can resolve it in one AskUserQuestion call.
+- **Leave `plan_date: null`.** Batch breakdown is not per-sprint certification: it plans
+  from the source document, not from a fresh read of every referenced `file:line`, so the
+  sprints it creates stay "unplanned" until a per-sprint `/sprint plan` pass (or the wave
+  planning pass) verifies them against the actual code. Exception: if you genuinely
+  performed the full `/sprint plan` readiness checklist for a given sprint — verified
+  every citation, resolved its Open Questions into Pre-Sprint Decisions — you may set its
+  `plan_date`.
 - **Full tier only** (if `scripts/sprint/claims.mjs` exists): populate `touches:` from the
   Files lists you just wrote, plus tokens from `scripts/sprint/claims-tokens.json` and likely
   doc-sync targets — `/sprint start` verifies rather than re-derives it.
@@ -98,7 +107,12 @@ Full tier: make this commit on `main` under the lock (`scripts/sprint/lock.sh`).
 Then **report a Parallelization Summary** to the user:
 - **Full tier**: the waves from `node scripts/sprint/claims.mjs waves` (what is startable now in
   parallel, what each later wave unblocks) plus the critical path from `docs/sprints/ROADMAP.md`.
-  Mention `/sprint wave` can fan the first wave out to parallel agents.
+  Call out which Wave-1 members are tagged `⚠ unplanned` — `/sprint wave` will run a planning
+  subagent over each before dispatching (or run `/sprint plan S-NNN` yourself first). Recommend
+  **just-in-time planning**: certify a wave's members right before dispatching that wave, not all
+  waves up front — freshly-verified references also avoid the cross-wave staleness that
+  invalidates early-planned sprints. Mention `/sprint wave` can fan the first wave out to
+  parallel agents.
 - **Lite tier**: derive waves from `depends_on` only — group sprints with no unmet dependency,
   then the next layer, and so on. Label it "(dependency-only; file conflicts not checked in lite
   — upgrade to the full tier for claim-verified parallel safety)."

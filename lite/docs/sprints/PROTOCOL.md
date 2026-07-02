@@ -18,7 +18,11 @@ upgrade via `/bootstrap-project --upgrade`.)
 ### Step 1: Parse Sprint Frontmatter
 
 Read the sprint file and extract: `sprint`, `status`, `goal`, `depends_on`, `blocks`, `tags`,
-`story_points`.
+`story_points`, `plan_date`.
+
+If `plan_date` is null the sprint was never certified implementation-ready by `/sprint plan` —
+warn and offer via AskUserQuestion: run `/sprint plan S-NNN` first (recommended), or proceed
+with the thin plan.
 
 ### Step 2: Dependency Check
 
@@ -62,18 +66,32 @@ List drift found. Fix obvious issues; ask for ambiguous cases. Commit doc fixes 
 
 ### Step 5: Architectural Tradeoff Questions
 
-Read the sprint's Scope and Technical Details. Cross-reference the codebase. Surface
-**non-obvious** decisions via AskUserQuestion (2–4 max, grouped in one call).
+Read the sprint's **Pre-Sprint Decisions section first** — those decisions are already made;
+do not re-ask them. Then read Scope and Technical Details, cross-reference the codebase, and
+surface only the **non-obvious** decisions still open via AskUserQuestion (2–4 max, grouped in
+one call) — starting with any Open Questions items explicitly deferred to start.
 
 **Qualifies:** architectural tradeoffs with real alternatives; rate limits / quotas / resource
 constraints; module boundary decisions; data-model choices hard to reverse.
 **Does not:** anything answerable by reading the sprint file; single-reasonable-approach
 details; "should I proceed" (the user already said start).
 
+**Record every answer** as a dated entry in the sprint file's Pre-Sprint Decisions section
+(`- YYYY-MM-DD (start): [decision] — [rationale]`) and check off the resolved Open Questions
+item. An answer that lives only in this conversation is lost to any later session that picks
+the sprint up.
+
 ---
 
 ## Phase 2: Execution
 
+- **Verify the brief first.** Before deliverable 1, confirm the plan's premises against the
+  actual code: the referenced files/symbols exist as described, cited APIs match the installed
+  versions, and Pre-Sprint Decisions are reflected in what you're about to build. Trivial
+  drift (a symbol moved lines) → locate it, note it, proceed. An approach-invalidating gap
+  (stale premise, missing referenced file, an acceptance criterion you cannot evaluate) →
+  stop and ask via AskUserQuestion with concrete alternatives — do not code around a broken
+  premise.
 - Read deliverables sequentially (1, 2, 3 …). The sprint file is the source of truth.
 - For each deliverable:
   1. Read all referenced files before changing anything.
@@ -99,6 +117,8 @@ details; "should I proceed" (the user already said start).
   fail — write RED first.
 - "I'll commit this broken and fix it next." The gate must pass before every commit.
 - "A try/catch makes the error go away." That hides the bug — `/debug` it.
+- "The plan says the v2 API, so I'll write v2 even though the repo has v3." The brief's
+  premises are claims to verify, not facts to transcribe.
 
 ---
 

@@ -41,10 +41,19 @@ BASENAME=$(basename "$FILE")
 TITLE=$(sed -n "s/^# $SPRINT: //p" "$FILE" | head -1)
 TITLE=${TITLE:-$BASENAME}
 
+# Plan-readiness (advisory — never blocks): /sprint wave plans unplanned sprints
+# before dispatch; a solo start proceeds with this warning.
+if [[ $(node "$SELF_DIR/frontmatter.mjs" get "$FILE" plan_date) == "null" ]]; then
+  echo "⚠ $SPRINT has no plan_date (never certified by /sprint plan) — starting anyway; /sprint wave would run a planning pass first" >&2
+fi
+
 TOKEN=$("$SELF_DIR/lock.sh" acquire "start-$SPRINT" --wait "$WAIT")
 COMMITTED=0
+MUTATING=0 # set just before the first ledger mutation — a precondition failure must NOT
+           # reset --hard (it would destroy unrelated in-flight work, e.g. the wave
+           # planning pass's uncommitted deepening edits)
 cleanup() {
-  if [[ $COMMITTED -eq 0 ]]; then
+  if [[ $MUTATING -eq 1 && $COMMITTED -eq 0 ]]; then
     git -C "$ROOT" reset --hard -q HEAD || true # roll back the staged transaction only
   fi
   "$SELF_DIR/lock.sh" release "$TOKEN" || true
@@ -68,6 +77,7 @@ fi
 node "$SELF_DIR/claims.mjs" check --paths "$CLAIM_PATHS" --sprint "$SPRINT" || exit $?
 
 # The transaction: move, flip frontmatter, write claims, regen, commit.
+MUTATING=1
 git -C "$ROOT" mv "docs/sprints/backlog/$BASENAME" "docs/sprints/in-progress/$BASENAME"
 NEW_FILE="$ROOT/docs/sprints/in-progress/$BASENAME"
 node "$SELF_DIR/frontmatter.mjs" set "$NEW_FILE" status in-progress

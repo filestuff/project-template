@@ -123,6 +123,7 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
 - Lite: `bash -n scripts/sprint/gate.sh` and `bash -n scripts/sprint/pre-push-gate.sh`; the
   four sprint dirs + `.gitkeep`s exist.
 - Full, additionally:
+  - `bash -n scripts/sprint/unstart.sh`
   - `scripts/sprint/lock.sh status` prints `FREE`
   - `node scripts/sprint/regen.mjs --check` exits 0 (empty skeleton is current — this also
     covers the ROADMAP Parallel Waves block)
@@ -130,6 +131,8 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
     skeleton)
   - `node scripts/sprint/frontmatter.mjs get docs/sprints/SPRINT_TEMPLATE.md sprint`
     prints `"S-NNN"`
+  - `node scripts/sprint/frontmatter.mjs get docs/sprints/SPRINT_TEMPLATE.md plan_date`
+    prints `null`
 
 Any failure: fix before offering the commit.
 
@@ -156,7 +159,11 @@ sprints out to subagents.
    marker skeleton — Done rows into the LLM-maintained Done table; Backlog/In-Progress rows
    are regenerated from frontmatter, so just verify, don't transcribe.
 4. Ensure every backlog sprint file has a `touches: []` field (the lite template already
-   includes it; add if missing).
+   includes it; add if missing). Do **not** backfill `plan_date` into existing sprint files —
+   a missing/null `plan_date` degrades gracefully to `⚠ unplanned` in the waves output, which
+   is correct (those sprints were never certified by `/sprint plan`); mechanically stamping a
+   date would defeat the readiness gate. They get certified per-sprint by `/sprint plan` or
+   the `/sprint wave` planning pass.
 5. Write `scripts/sprint/claims-tokens.json` (ask the schema/deps questions from step 1).
 6. `node scripts/sprint/regen.mjs` — populates the generated blocks from the existing sprint
    files (the tiers share frontmatter shape, so this just works).

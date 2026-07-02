@@ -83,7 +83,13 @@ the lifecycle paths if a transaction died mid-flight; abort any in-progress merg
 ### Step 1: Parse Sprint Frontmatter
 
 Read the sprint file and extract YAML frontmatter: `sprint`, `status`, `goal`, `depends_on`,
-`blocks`, `tags`, `story_points`.
+`blocks`, `tags`, `story_points`, `plan_date`.
+
+If `plan_date` is null the sprint was never certified implementation-ready by `/sprint plan` —
+warn (a solo start may proceed after asking; `/sprint wave` instead runs a planning pass over
+such sprints before dispatch, see `ORCHESTRATION.md`). If `plan_date` predates a dependency's
+`end_date` (the waves output tags this `⚠ stale plan`), the plan's `file:line` premises may
+cite code that landed work has since moved — re-verify them before trusting the brief.
 
 ### Step 2: Dependency Check
 
@@ -120,6 +126,10 @@ Do NOT silently skip unmet dependencies.
    `status: in-progress` / `start_date` / `touches:`, regenerates the INDEX/ROADMAP blocks,
    commits `sprint: start S-NNN — [name]` **on `main`**, verifies the committed frontmatter
    survived, and pushes. It prints the new `main` SHA — the worktree branches from it.
+
+   The inverse exists: `scripts/sprint/unstart.sh S-NNN` is the **only** sanctioned way to
+   move an in-flight sprint back to `backlog/` (locked; refuses if the branch carries
+   deliverable commits; keeps `plan_date`/`touches:`/decisions). Never hand-roll an unstart.
 
 ### Step 4: Create the Sprint Worktree (mandatory)
 
@@ -167,8 +177,10 @@ ambiguous cases. Commit doc fixes separately on the sprint branch:
 
 ### Step 6: Architectural Tradeoff Questions
 
-Read the sprint's Scope and Technical Details. Cross-reference the codebase. Surface
-**non-obvious** decisions via AskUserQuestion (2–4 max, grouped in one call):
+Read the sprint's **Pre-Sprint Decisions section first** — those decisions are already made;
+do not re-ask them. Then read Scope and Technical Details, cross-reference the codebase, and
+surface only the **non-obvious** decisions still open via AskUserQuestion (2–4 max, grouped
+in one call) — starting with any Open Questions items explicitly deferred to start:
 
 **Qualifies:** architectural tradeoffs with real alternatives; rate limits / quotas /
 resource constraints; module boundary decisions; data-model choices hard to reverse.
@@ -176,12 +188,28 @@ resource constraints; module boundary decisions; data-model choices hard to reve
 **Does not:** anything answerable by reading the sprint file; single-reasonable-approach
 details; "should I proceed" (the user already said start).
 
+**Record every answer** as a dated entry in the sprint file's Pre-Sprint Decisions section
+(`- YYYY-MM-DD (start): [decision] — [rationale]`) in the **worktree's copy** (invariant 3
+permits the branch editing its own sprint file in place) and check off the resolved Open
+Questions item. The sprint file is the entire brief for whoever executes — an answer that
+lives only in this conversation never reaches them. (In wave flows this step is normally
+already done by the planning pass — see `ORCHESTRATION.md` Step 2.)
+
 ---
 
 ## Phase 2: Execution
 
 - All deliverable work, gate commands, and commits run **inside the sprint worktree**
   (Phase 1 Step 4).
+- **Verify the brief first.** Before deliverable 1, confirm the plan's premises against the
+  worktree's actual code: the referenced files/symbols exist as described, cited APIs match
+  the installed versions (check the dependency manifest when a versioned API is cited), and
+  Pre-Sprint Decisions are reflected in what you're about to build. Trivial drift (a symbol
+  moved lines) → locate it, note it in the sprint file, proceed. An approach-invalidating gap
+  (stale premise, missing referenced file, unresolved decision, an acceptance criterion you
+  cannot evaluate) → do not code around it: a solo session asks via AskUserQuestion with
+  concrete alternatives; an execution subagent stops and returns **PLAN_GAP** per
+  `ORCHESTRATION.md`.
 - Read deliverables sequentially (1, 2, 3 …). The sprint file is the source of truth for what
   to build.
 - For each deliverable:
@@ -217,6 +245,8 @@ details; "should I proceed" (the user already said start).
   fail — write RED first.
 - "I'll commit this broken and fix it next." The gate must pass before every commit.
 - "A try/catch makes the error go away." That hides the bug — `/debug` it.
+- "The plan says the v2 API, so I'll write v2 even though the repo has v3." The brief's
+  premises are claims to verify, not facts to transcribe.
 
 ---
 

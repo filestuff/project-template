@@ -33,6 +33,7 @@ DOC_HEALTH.md (see PROTOCOL "Parallel Sprints").
 | `claims.mjs` | `check` claims overlap vs in-flight sprints; `add` expands a claim (locked main commit). Tokens: `claims-tokens.json` | 2 = overlap |
 | `regen.mjs` | Regenerate the marker-delimited blocks in INDEX.md + ROADMAP.md (`--check` for drift) | 2 = drift |
 | `start.sh S-NNN --touches "…"` | The whole locked start transaction on main | 2 = overlap/claimed, 75 = busy |
+| `unstart.sh S-NNN [--reason "…"]` | The locked inverse: in-progress → backlog (keeps `plan_date`/`touches:`/decisions) | 2 = not in flight / branch has commits, 75 = busy |
 | `merge-sprint.sh prepare\|land\|finish\|abort <branch>` | The locked completion (merge queue) | 3 = re-run gate, 4 = author docs, 75 = busy |
 | `frontmatter.mjs get\|set` | Read/write sprint frontmatter fields round-trip-safely | |
 
@@ -48,6 +49,8 @@ Print the current kanban state:
    sprint ID, goal, start date, days elapsed, and a `touches:` summary. This is authoritative
    for in-flight work.
 2. Glob `docs/sprints/backlog/*.md` — count total, sum story points, list unblocked sprints.
+   Tag any sprint whose `plan_date` is null as **unplanned** (never certified by
+   `/sprint plan`).
 3. Glob `docs/sprints/done/*.md` (and `done/archive/*.md`) — count total, show last 3 completed.
 4. **Orphan check**: run `git worktree list` and cross-reference —
    - an `in-progress/` file with **no matching worktree** → crashed/abandoned sprint; suggest
@@ -58,14 +61,17 @@ Print the current kanban state:
 6. Show total backlog points and critical path from `docs/sprints/ROADMAP.md`.
 7. **Parallel waves**: run `node scripts/sprint/claims.mjs waves` and show the current
    startable-in-parallel set (Wave 1 backlog members — skip any tagged "in flight"). This is
-   what `/sprint wave` would fan out.
+   what `/sprint wave` would fan out. Members tagged `⚠ unplanned` / `⚠ stale plan` get a
+   planning pass before dispatch (ORCHESTRATION.md Step 2) — mention which ones.
 
 Format as a concise board view. (Ignore `.gitkeep` files when counting.)
 
 ### `/sprint start [S-NNN]`
 
 Execute the full **Phase 1: Pre-Sprint** procedure from `docs/sprints/PROTOCOL.md`:
-dependency check (in-progress on main = in flight by a parallel agent) → derive `touches:`
+frontmatter parse (warn + ask if `plan_date` is null — never certified by `/sprint plan`;
+start.sh prints the same warning) → dependency check (in-progress on main = in flight by a
+parallel agent) → derive `touches:`
 from the sprint's Files lists → `claims.mjs check` (stop and ask on overlap) →
 **`start.sh S-NNN --touches "…"` — the start commit lands on `main`, not the branch** →
 create + enter the sprint worktree from the post-start main tip
@@ -108,8 +114,26 @@ Changes, testable Acceptance criteria), ordered in execution sequence; populate 
 Details, Testing (pattern reference), Dependencies, Risks, Open Questions; update
 `story_points` if scope reveals different complexity. **Required**: populate `touches:`
 from the Files lists you just wrote (plus tokens from `claims-tokens.json` and likely
-doc-sync targets) — `/sprint start` verifies rather than re-derives it. Commit on main
-under the lock (same pattern as `/sprint create`): `sprint: plan S-NNN — [name]`.
+doc-sync targets) — `/sprint start` verifies rather than re-derives it.
+
+**Readiness checklist** — all must hold before certifying:
+
+1. Every deliverable's Files list names exact paths (new|modified) — no bare globs
+   (`dir/**` remains legal in `touches:` only).
+2. Every Reference/Interface `file:line` and every cited API/library version was verified
+   against the repo **now**, not assumed from the source plan.
+3. Zero unresolved Open Questions: resolve each via AskUserQuestion during this pass
+   (recording answers as dated Pre-Sprint Decisions entries), or explicitly rewrite it as
+   an ask-at-start question with 2–4 concrete options.
+4. Every acceptance criterion states an observable difference — not "works correctly".
+5. Testing names an existing test file to follow, or states why test-first doesn't fit and
+   how the deliverable is verified instead.
+6. `touches:` is populated per the Required rule above.
+
+All pass → `node scripts/sprint/frontmatter.mjs set <file> plan_date "$(date +%F)"`. Any
+fail → leave `plan_date: null` and report what's missing (still commit partial progress).
+Either way, commit on main under the lock (same pattern as `/sprint create`):
+`sprint: plan S-NNN — [name]`.
 
 ### `/sprint next`
 
@@ -129,13 +153,16 @@ if stale. Commit on main under the lock: `docs: regenerate sprint roadmap`.
 Fan the current parallel-safe wave out to subagents. **Defer to
 `docs/sprints/ORCHESTRATION.md`** — it is the source of truth for this command (as `PROTOCOL.md`
 is for the rest). In short: compute the wave (`claims.mjs waves`), confirm the startable backlog
-members with the user, run **Phase 1 + `start.sh` + worktree creation per sprint yourself**
+members with the user, **plan the wave** (fan out one `sprint-planner` subagent per unplanned /
+stale member to verify + deepen its file against current code, batch all open decisions into one
+AskUserQuestion round, write the answers into the sprint files as Pre-Sprint Decisions — two
+short locked commits), then run **`start.sh` + worktree creation per sprint yourself**
 (serialized, on `main`, under the lock — you stay parked on `main` and never EnterWorktree),
 **dispatch one execution subagent per sprint** (single message = parallel) to run **Phase 2 only**
-in its worktree via `git -C`, then **complete finished sprints one at a time** (Phase 3 is
-lock-serialized and cannot be fanned out). Keep the durable ledger in
-`.claude/sprint-orchestration/`. Optional `N` caps the wave size. After the wave lands, run a
-broad `/review` and recompute the next wave.
+in its worktree via `git -C` (returns DONE / BLOCKED / NEEDS_CLAIM / **PLAN_GAP** + a report
+file), then **complete finished sprints one at a time** (Phase 3 is lock-serialized and cannot
+be fanned out). Keep the durable ledger in `.claude/sprint-orchestration/`. Optional `N` caps
+the wave size. After the wave lands, run a broad `/review` and recompute the next wave.
 
 ## No Arguments
 
