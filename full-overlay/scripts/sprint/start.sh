@@ -3,13 +3,15 @@
 # Runs entirely against the primary checkout (the lifecycle ledger on main);
 # call it BEFORE creating the sprint worktree, then branch from the SHA it prints.
 #
-#   start.sh S-NNN [--touches "p1,p2,…"] [--no-push] [--wait <secs>]
+#   start.sh S-NNN [--touches "p1,p2,…"] [--wave W-<id>] [--no-push] [--wait <secs>]
 #
 # --touches sets/replaces the claims manifest; omit it only when the backlog
 # file already carries a populated `touches:` (e.g. from /sprint plan).
+# --wave asserts this start belongs to a wave reservation (reserve-wave.sh);
+# a sprint reserved by a DIFFERENT wave refuses to start (exit 2).
 #
 # Exit codes: 0 ok (prints new main SHA) · 2 claims overlap / sprint not in
-# backlog · 75 lock busy · 1 unexpected (transaction rolled back)
+# backlog / reserved by another wave · 75 lock busy · 1 unexpected (rolled back)
 set -euo pipefail
 
 SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -17,12 +19,13 @@ GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
 ROOT=${GIT_COMMON%/.git}
 MAIN=${SPRINT_MAIN_BRANCH:-main}
 
-SPRINT=${1:?usage: start.sh S-NNN [--touches "p1,p2"] [--no-push] [--wait secs]}
+SPRINT=${1:?usage: start.sh S-NNN [--touches "p1,p2"] [--wave W-<id>] [--no-push] [--wait secs]}
 shift
-TOUCHES="" NO_PUSH=0 WAIT=300
+TOUCHES="" WAVE_ARG="" NO_PUSH=0 WAIT=300
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --touches) TOUCHES=$2; shift 2 ;;
+  --wave) WAVE_ARG=$2; shift 2 ;;
   --no-push) NO_PUSH=1; shift ;;
   --wait) WAIT=$2; shift 2 ;;
   *) echo "unknown arg: $1" >&2; exit 1 ;;
@@ -45,6 +48,17 @@ TITLE=${TITLE:-$BASENAME}
 # before dispatch; a solo start proceeds with this warning.
 if [[ $(node "$SELF_DIR/frontmatter.mjs" get "$FILE" plan_date) == "null" ]]; then
   echo "⚠ $SPRINT has no plan_date (never certified by /sprint plan) — starting anyway; /sprint wave would run a planning pass first" >&2
+fi
+
+# Wave reservation guard: a sprint reserved by another wave belongs to another
+# session's roster — refuse. The field rides into in-progress/ as provenance.
+SPRINT_WAVE=$(node "$SELF_DIR/frontmatter.mjs" get "$FILE" wave | tr -d '"')
+if [[ $SPRINT_WAVE != null && -n $SPRINT_WAVE && $SPRINT_WAVE != "$WAVE_ARG" ]]; then
+  echo "$SPRINT is reserved by wave $SPRINT_WAVE — pass --wave $SPRINT_WAVE if this is your wave, or pick another sprint" >&2
+  exit 2
+fi
+if [[ -n $WAVE_ARG && ( $SPRINT_WAVE == null || -z $SPRINT_WAVE ) ]]; then
+  echo "⚠ --wave $WAVE_ARG passed but $SPRINT carries no reservation — proceeding (reservation may have been dropped)" >&2
 fi
 
 TOKEN=$("$SELF_DIR/lock.sh" acquire "start-$SPRINT" --wait "$WAIT")

@@ -2,7 +2,8 @@
 # Locked sprint-unstart transaction — the ONLY sanctioned way to move an in-flight
 # sprint back to the backlog (the inverse of start.sh). Intended for sprints pulled
 # back after start — e.g. a wave member whose PLAN_GAP the user decides not to fix
-# now. Keeps plan_date, touches:, and Pre-Sprint Decisions; resets status/start_date.
+# now. Keeps plan_date, touches:, and Pre-Sprint Decisions; resets status/start_date
+# and clears any wave: reservation (the sprint becomes reservable again).
 #
 #   unstart.sh S-NNN [--reason "…"] [--force] [--no-push] [--wait <secs>]
 #
@@ -81,6 +82,7 @@ git -C "$ROOT" mv "docs/sprints/in-progress/$BASENAME" "docs/sprints/backlog/$BA
 NEW_FILE="$ROOT/docs/sprints/backlog/$BASENAME"
 node "$SELF_DIR/frontmatter.mjs" set "$NEW_FILE" status backlog
 node "$SELF_DIR/frontmatter.mjs" set "$NEW_FILE" start_date null
+node "$SELF_DIR/frontmatter.mjs" set "$NEW_FILE" wave null # re-reservable by any wave
 node "$SELF_DIR/regen.mjs" >/dev/null
 
 PATHS=("docs/sprints/backlog/$BASENAME" docs/sprints/INDEX.md docs/sprints/ROADMAP.md)

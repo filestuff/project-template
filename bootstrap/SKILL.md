@@ -123,7 +123,7 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
 - Lite: `bash -n scripts/sprint/gate.sh` and `bash -n scripts/sprint/pre-push-gate.sh`; the
   four sprint dirs + `.gitkeep`s exist.
 - Full, additionally:
-  - `bash -n scripts/sprint/unstart.sh`
+  - `bash -n scripts/sprint/unstart.sh` and `bash -n scripts/sprint/reserve-wave.sh`
   - `scripts/sprint/lock.sh status` prints `FREE`
   - `node scripts/sprint/regen.mjs --check` exits 0 (empty skeleton is current — this also
     covers the ROADMAP Parallel Waves block)

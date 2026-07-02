@@ -38,8 +38,16 @@ coordinate exclusively through `main`, which is the **lifecycle ledger**. Five i
    in-flight deliverable work, mutated only by lock-serialized transactions that each end in
    a commit leaving it clean (untracked junk is tolerated; scripts stage explicit paths only).
 5. **Every mutation of `main` goes through the lock** (`scripts/sprint/lock.sh`): start
-   transactions, claim expansions, completion merges, and `/sprint create`/`plan` commits
-   made from the primary checkout.
+   transactions, claim expansions, completion merges, wave reservations, and
+   `/sprint create`/`plan` commits made from the primary checkout.
+
+A sixth coordination fact exists for concurrent waves: a **wave reservation** — a
+`wave: W-<id>` frontmatter field on a *backlog* sprint, written by
+`scripts/sprint/reserve-wave.sh` (locked). It is a scheduling claim: the sprint belongs to
+one session's wave roster, and its `touches:` are held as if in-flight, so another wave can
+neither take the sprint nor claim overlapping files. `start.sh` refuses a sprint reserved by
+a different wave (pass `--wave W-<id>` for your own); `unstart.sh` clears the field. See
+`ORCHESTRATION.md` "Running waves from multiple sessions".
 
 ### File claims (`touches:`)
 
@@ -63,6 +71,9 @@ touches:
 - Claims are **advisory but protocol-enforced**: nothing technically blocks an edit — the
   Phase 2 claims-discipline rule is the enforcement, and `claims.mjs check` makes compliance
   a one-command habit.
+- **Claim holders** are the in-flight sprints (`in-progress/`) *plus* any backlog sprints
+  reserved by a live wave (`wave:` set) — `claims.mjs check`/`add` treat both as conflicts,
+  so a reservation protects files another wave has planned against but not yet started.
 
 ### The sprint-main lock
 
@@ -73,6 +84,13 @@ exits 75 with the holder's info (label, worktree, age) — show it to the user a
 re-run during a completion). **Never steal silently**: show `lock.sh status` to the user,
 get confirmation, then `lock.sh steal --force` — it prints the recovery checklist (restore
 the lifecycle paths if a transaction died mid-flight; abort any in-progress merge).
+
+Two guarantees the scripts already enforce, stated for multi-session operation: every locked
+transaction **pulls `--ff-only` before mutating and pushes before releasing the lock** —
+commit + push form one critical section, so two sessions cannot race pushes to `main`; and a
+failed push leaves the local commit intact with printed recovery instructions. When another
+session's wave is live, pass `--wait 900` to `start.sh` and `merge-sprint.sh prepare` — the
+other wave's completion legitimately holds the lock across its prepare→land→finish window.
 
 ---
 

@@ -147,6 +147,7 @@ function genWaves() {
     const plan = s.dir === "backlog" ? planStatus(s, byId) : "fresh";
     return (
       `${s.sprint}${s.dir === "in-progress" ? " (in flight)" : ""}` +
+      (s.dir === "backlog" && s.wave ? ` (reserved ${s.wave})` : "") +
       ((s.touches ?? []).length === 0 ? " ⚠️ no claims" : "") +
       (plan === "unplanned" ? " ⚠️ unplanned" : plan === "stale" ? " ⚠️ stale plan" : "")
     );

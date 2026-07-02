@@ -143,6 +143,7 @@ land)
   echo "  - docs/DOC_HEALTH.md: Last Verified / By Sprint rows + History entry"
   echo "  - docs/sprints/INDEX.md: Done-table row for $SPRINT + '_Last updated_' header line"
   echo "  - docs/sprints/ROADMAP.md: narrative (Status / In progress / unblocked notes)"
+  echo "  (waves: apply the pre-drafted .claude/sprint-orchestration/W-*/$SPRINT-docs-draft.md if one exists — the lock is held; keep this pause short)"
   echo "then run: merge-sprint.sh finish $BRANCH"
   exit 4
   ;;

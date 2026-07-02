@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// File-claims operations over the `touches:` manifests of in-flight sprints.
-// In-flight = files in docs/sprints/in-progress/ on main (the primary checkout,
-// which is parked clean on main — so reading the filesystem reads main).
+// File-claims operations over the `touches:` manifests of in-flight sprints
+// and wave-reserved backlog sprints. In-flight = files in docs/sprints/in-progress/
+// on main; reserved = backlog files with a `wave:` set by reserve-wave.sh (the
+// primary checkout is parked clean on main — so reading the filesystem reads main).
 //
 //   claims.mjs check --sprint S-NNN              # that sprint's touches vs all OTHER in-flight sprints
 //   claims.mjs check --paths a,b [--sprint S-NNN] # explicit paths vs in-flight (excluding own sprint)
@@ -116,6 +117,24 @@ function inFlightSprints(root) {
     .map((f) => readSprintFile(join(dir, f)));
 }
 
+// Backlog sprints reserved by a live wave (`wave: W-…` set by reserve-wave.sh).
+// They hold their claims like in-flight sprints do: a reservation is a scheduling
+// claim on files that another wave must not also reserve or start against.
+function reservedBacklogSprints(root) {
+  const dir = join(root, "docs/sprints/backlog");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => /^S-\d+.*\.md$/.test(f))
+    .map((f) => readSprintFile(join(dir, f)))
+    .filter((s) => s.wave)
+    .map((s) => ({ ...s, _reserved: true }));
+}
+
+// The full conflict set for claim checks: in-flight + wave-reserved backlog.
+function claimHolders(root) {
+  return [...inFlightSprints(root), ...reservedBacklogSprints(root)];
+}
+
 function findSprintFile(root, id) {
   for (const dir of ["in-progress", "backlog"]) {
     const abs = join(root, "docs/sprints", dir);
@@ -160,20 +179,28 @@ if (cmd === "check") {
   }
 
   const overlaps = [];
-  for (const other of inFlightSprints(root)) {
+  for (const other of claimHolders(root)) {
     if (args.sprint && other.sprint === args.sprint) continue;
     for (const theirClaim of other.touches ?? [])
       for (const myClaim of mine)
         if (claimsOverlap(myClaim, theirClaim))
-          overlaps.push({ sprint: other.sprint, mine: myClaim, theirs: theirClaim });
+          overlaps.push({
+            sprint: other.sprint,
+            mine: myClaim,
+            theirs: theirClaim,
+            reserved: other._reserved ? other.wave : null,
+          });
   }
 
   if (overlaps.length === 0) {
-    console.log("FREE — no overlap with in-flight claims");
+    console.log("FREE — no overlap with in-flight or wave-reserved claims");
     process.exit(0);
   }
-  console.log("OVERLAP with in-flight sprints:");
-  for (const o of overlaps) console.log(`  ${o.mine}  ⟂  ${o.theirs}  (claimed by ${o.sprint})`);
+  console.log("OVERLAP with in-flight / wave-reserved sprints:");
+  for (const o of overlaps)
+    console.log(
+      `  ${o.mine}  ⟂  ${o.theirs}  (claimed by ${o.sprint}${o.reserved ? `, reserved ${o.reserved}` : ""})`,
+    );
   process.exit(2);
 } else if (cmd === "add") {
   const [id, ...paths] = args.positional;
@@ -191,13 +218,16 @@ if (cmd === "check") {
   }
   const sprintFile = join(file, hit);
 
-  // The new paths must themselves be free before claiming them.
-  const others = inFlightSprints(root).filter((s) => s.sprint !== id);
+  // The new paths must themselves be free before claiming them — free of other
+  // in-flight sprints AND of any wave's reserved backlog members.
+  const others = claimHolders(root).filter((s) => s.sprint !== id);
   for (const other of others)
     for (const theirClaim of other.touches ?? [])
       for (const p of paths)
         if (claimsOverlap(p, theirClaim)) {
-          console.log(`OVERLAP: ${p}  ⟂  ${theirClaim}  (claimed by ${other.sprint})`);
+          console.log(
+            `OVERLAP: ${p}  ⟂  ${theirClaim}  (claimed by ${other.sprint}${other._reserved ? `, reserved ${other.wave}` : ""})`,
+          );
           process.exit(2);
         }
 
@@ -234,6 +264,7 @@ if (cmd === "check") {
         const plan = s.dir === "backlog" ? planStatus(s, byId) : "fresh";
         return (
           `${s.sprint}${s.dir === "in-progress" ? " (in flight)" : ""}` +
+          (s.dir === "backlog" && s.wave ? ` (reserved ${s.wave})` : "") +
           ((s.touches ?? []).length === 0 ? " ⚠ no claims" : "") +
           (plan === "unplanned" ? " ⚠ unplanned" : plan === "stale" ? " ⚠ stale plan" : "")
         );

@@ -32,8 +32,9 @@ DOC_HEALTH.md (see PROTOCOL "Parallel Sprints").
 | `lock.sh` | Mutex for all main mutations (`acquire`/`release`/`status`/`steal --force`) | 75 = busy |
 | `claims.mjs` | `check` claims overlap vs in-flight sprints; `add` expands a claim (locked main commit). Tokens: `claims-tokens.json` | 2 = overlap |
 | `regen.mjs` | Regenerate the marker-delimited blocks in INDEX.md + ROADMAP.md (`--check` for drift) | 2 = drift |
-| `start.sh S-NNN --touches "…"` | The whole locked start transaction on main | 2 = overlap/claimed, 75 = busy |
-| `unstart.sh S-NNN [--reason "…"]` | The locked inverse: in-progress → backlog (keeps `plan_date`/`touches:`/decisions) | 2 = not in flight / branch has commits, 75 = busy |
+| `start.sh S-NNN --touches "…" [--wave W-<id>]` | The whole locked start transaction on main (refuses a sprint reserved by another wave) | 2 = overlap/claimed/foreign-reserved, 75 = busy |
+| `unstart.sh S-NNN [--reason "…"]` | The locked inverse: in-progress → backlog (keeps `plan_date`/`touches:`/decisions; clears `wave:`) | 2 = not in flight / branch has commits, 75 = busy |
+| `reserve-wave.sh S-A S-B… \| --drop W-<id> S-NNN \| --release W-<id>` | Locked wave reservation: mints `W-<id>`, writes `wave:` into backlog members so concurrent sessions can't take them or overlapping claims | 2 = member gone/reserved/overlap, 75 = busy |
 | `merge-sprint.sh prepare\|land\|finish\|abort <branch>` | The locked completion (merge queue) | 3 = re-run gate, 4 = author docs, 75 = busy |
 | `frontmatter.mjs get\|set` | Read/write sprint frontmatter fields round-trip-safely | |
 
@@ -50,7 +51,9 @@ Print the current kanban state:
    for in-flight work.
 2. Glob `docs/sprints/backlog/*.md` — count total, sum story points, list unblocked sprints.
    Tag any sprint whose `plan_date` is null as **unplanned** (never certified by
-   `/sprint plan`).
+   `/sprint plan`), and any with a `wave:` field as **reserved by that wave** (another
+   session's roster — also list `W-*` dirs under `.claude/sprint-orchestration/` whose
+   reservations no longer exist on main: likely finished or abandoned waves).
 3. Glob `docs/sprints/done/*.md` (and `done/archive/*.md`) — count total, show last 3 completed.
 4. **Orphan check**: run `git worktree list` and cross-reference —
    - an `in-progress/` file with **no matching worktree** → crashed/abandoned sprint; suggest
@@ -152,17 +155,28 @@ if stale. Commit on main under the lock: `docs: regenerate sprint roadmap`.
 
 Fan the current parallel-safe wave out to subagents. **Defer to
 `docs/sprints/ORCHESTRATION.md`** — it is the source of truth for this command (as `PROTOCOL.md`
-is for the rest). In short: compute the wave (`claims.mjs waves`), confirm the startable backlog
-members with the user, **plan the wave** (fan out one `sprint-planner` subagent per unplanned /
-stale member to verify + deepen its file against current code, batch all open decisions into one
-AskUserQuestion round, write the answers into the sprint files as Pre-Sprint Decisions — two
-short locked commits), then run **`start.sh` + worktree creation per sprint yourself**
-(serialized, on `main`, under the lock — you stay parked on `main` and never EnterWorktree),
-**dispatch one execution subagent per sprint** (single message = parallel) to run **Phase 2 only**
-in its worktree via `git -C` (returns DONE / BLOCKED / NEEDS_CLAIM / **PLAN_GAP** + a report
-file), then **complete finished sprints one at a time** (Phase 3 is lock-serialized and cannot
-be fanned out). Keep the durable ledger in `.claude/sprint-orchestration/`. Optional `N` caps
-the wave size. After the wave lands, run a broad `/review` and recompute the next wave.
+is for the rest). In short: you are the **master/orchestrator** (this session, strongest model);
+every wave subagent has a pinned `model: sonnet` agent definition — dispatch by agent name only.
+Compute the wave (`claims.mjs waves` — skip members reserved by another session's wave), confirm
+the startable backlog members with the user, **reserve the roster**
+(`reserve-wave.sh S-A S-B…` — a locked commit that makes concurrent sessions safe and mints the
+wave id), **plan the wave** in a per-wave planning worktree (fan out one `sprint-planner`
+subagent per unplanned / stale member to verify + deepen its file against current code — the
+primary checkout stays clean; batch all open decisions into one AskUserQuestion round, write the
+answers into the sprint files as Pre-Sprint Decisions — two short locked commits), then run
+**`start.sh --wave W-<id>` + worktree creation per sprint yourself** (serialized, on `main`,
+under the lock — you stay parked on `main` and never EnterWorktree), **dispatch one
+`sprint-executor` subagent per sprint** (single message = parallel) to run **Phase 2 only** in
+its worktree via `git -C` — each runs a `reviewer` child over its branch before returning
+(DONE / BLOCKED / NEEDS_CLAIM / **PLAN_GAP** + a report file). **Advise blocked executors
+yourself** (answer from plan/repo context and continue the same agent via SendMessage; escalate
+to the user only for genuine tradeoffs), then **complete finished sprints one at a time**
+(Phase 3 is lock-serialized and cannot be fanned out; pre-draft the semantic docs before taking
+the lock). Keep the durable ledger in `.claude/sprint-orchestration/W-<id>/`. Optional `N` caps
+the wave size. After the wave lands, dispatch a `reviewer` subagent over the merged result
+(adjudicate its findings — don't read the diffs yourself), release any leftover reservations,
+and recompute the next wave. Multiple waves can run from different terminal sessions — see
+ORCHESTRATION.md "Running waves from multiple sessions".
 
 ## No Arguments
 
