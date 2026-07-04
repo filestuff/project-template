@@ -105,7 +105,7 @@ if git -C "$ROOT" diff --cached --name-only | grep -q ' 2\.'; then
   echo 'staged a " 2." sync-duplicate file — aborting' >&2
   exit 1
 fi
-git -C "$ROOT" commit --no-verify -q -m "sprint: start $SPRINT — $TITLE" -- "${PATHS[@]}" "docs/sprints/backlog/$BASENAME"
+git -C "$ROOT" commit --no-verify -q -m "sprint: start $SPRINT — $TITLE [skip ci]" -- "${PATHS[@]}" "docs/sprints/backlog/$BASENAME"
 COMMITTED=1
 
 # Survival check (the lint-staged/mv stash bug class): the commit must carry the claims.
@@ -116,6 +116,9 @@ git -C "$ROOT" show "HEAD:docs/sprints/in-progress/$BASENAME" | grep -q '^status
 
 if [[ $NO_PUSH -eq 0 ]]; then
   git -C "$ROOT" push origin "$MAIN" || { echo "push failed — local start commit is intact; resolve and push before creating the worktree" >&2; exit 1; }
+else
+  AHEAD=$(git -C "$ROOT" rev-list --count "origin/$MAIN..$MAIN" 2>/dev/null || echo '?')
+  echo "push deferred — local $MAIN is $AHEAD commit(s) ahead of origin/$MAIN; wave checkpoints push via scripts/sprint/push-main.sh"
 fi
 
 echo "started $SPRINT on $MAIN at $(git -C "$ROOT" rev-parse HEAD)"

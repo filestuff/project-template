@@ -240,12 +240,25 @@ if (cmd === "check") {
     execFileSync("git", ["-C", root, "add", "--", rel]);
     execFileSync("git", [
       "-C", root, "commit", "--no-verify", "-m",
-      `sprint: claim ${paths.join(", ")} for ${id}`, "--", rel,
+      `sprint: claim ${paths.join(", ")} for ${id} [skip ci]`, "--", rel,
     ]);
-    if (!args.noPush)
-      execFileSync("git", [
-        "-C", root, "push", "origin", process.env.SPRINT_MAIN_BRANCH || "main",
-      ]);
+    const mainBranch = process.env.SPRINT_MAIN_BRANCH || "main";
+    if (!args.noPush) {
+      execFileSync("git", ["-C", root, "push", "origin", mainBranch]);
+    } else {
+      let ahead;
+      try {
+        ahead = execFileSync(
+          "git", ["-C", root, "rev-list", "--count", `origin/${mainBranch}..${mainBranch}`],
+          { encoding: "utf8" },
+        ).trim();
+      } catch {
+        ahead = "?";
+      }
+      console.log(
+        `push deferred — local ${mainBranch} is ${ahead} commit(s) ahead of origin/${mainBranch}; wave checkpoints push via scripts/sprint/push-main.sh`,
+      );
+    }
     console.log(`claimed for ${id}: ${paths.join(", ")}`);
     console.log("Mirror the same touches: addition in the branch's copy of the sprint file.");
   } finally {

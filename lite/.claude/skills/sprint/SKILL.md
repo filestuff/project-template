@@ -20,6 +20,19 @@ procedure. Read it and follow it exactly — this skill is just the command surf
 This is the **lite** tier: one sprint at a time. If `in-progress/` is non-empty when asked
 to start another, stop and ask.
 
+## Step 0 (silent): template update check
+
+Before handling any command, run `bash scripts/template/update-check.sh 2>/dev/null || true`.
+
+- `UPGRADE_AVAILABLE <old> <new> <sha>` → prepend exactly ONE line to your response —
+  "project-template v\<new\> is available (you have v\<old\>) — run /template-upgrade, or say
+  'not now' to snooze" — then continue with the requested command immediately. If the user
+  later says "not now", run `bash scripts/template/update-check.sh --snooze`.
+- `JUST_UPGRADED <old> <new>` → one line pointing at the template CHANGELOG for what changed
+  between those versions, then continue.
+- No output, script missing, or any failure → proceed silently. This check must never block,
+  delay, or fail a sprint command.
+
 ## Commands
 
 Parse the first argument as the command, the second as the sprint ID.

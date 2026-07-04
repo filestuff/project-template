@@ -144,9 +144,9 @@ if git -C "$ROOT" diff --cached --name-only | grep -q ' 2\.'; then
   exit 1
 fi
 case "$MODE" in
-reserve) MSG="sprint: reserve wave $WAVE — $(IFS=,; echo "${MEMBERS[*]}")" ;;
-drop)    MSG="sprint: drop ${MEMBERS[0]} from wave $WAVE" ;;
-release) MSG="sprint: release wave $WAVE" ;;
+reserve) MSG="sprint: reserve wave $WAVE — $(IFS=,; echo "${MEMBERS[*]}") [skip ci]" ;;
+drop)    MSG="sprint: drop ${MEMBERS[0]} from wave $WAVE [skip ci]" ;;
+release) MSG="sprint: release wave $WAVE [skip ci]" ;;
 esac
 git -C "$ROOT" commit --no-verify -q -m "$MSG" -- "${REL_PATHS[@]}"
 COMMITTED=1
@@ -165,6 +165,9 @@ done
 
 if [[ $NO_PUSH -eq 0 ]]; then
   git -C "$ROOT" push origin "$MAIN" || { echo "push failed — local reservation commit is intact; resolve and push before proceeding" >&2; exit 1; }
+else
+  AHEAD=$(git -C "$ROOT" rev-list --count "origin/$MAIN..$MAIN" 2>/dev/null || echo '?')
+  echo "push deferred — local $MAIN is $AHEAD commit(s) ahead of origin/$MAIN; wave checkpoints push via scripts/sprint/push-main.sh"
 fi
 
 case "$MODE" in

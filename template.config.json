@@ -1,5 +1,7 @@
 {
-  "$comment": "Manifest read by the /bootstrap-project skill. Placeholders are replaced deterministically (literal find/replace) ONLY in the files listed for each token. After replacement, `grep -rn '{{' <copied files>` must return nothing.",
+  "$comment": "Manifest read by the /bootstrap-project skill (and, downstream, by scripts/template/upgrade.mjs during /template-upgrade). Placeholders are replaced deterministically (literal find/replace) ONLY in the files listed for each token. After replacement, `grep -rn '{{' <copied files>` must return nothing.",
+  "configVersion": 2,
+  "templateRepo": "https://github.com/filestuff/project-template.git",
   "placeholders": {
     "{{PROJECT_NAME}}": {
       "prompt": "Project name (short, kebab-case preferred)",
@@ -37,8 +39,21 @@
   "specialFiles": {
     "CLAUDE.project-block.md": "NOT copied verbatim — merged into the target's CLAUDE.md (see bootstrap step 6), then deleted from the copy set."
   },
+  "fileClasses": {
+    "$comment": "Read by upgrade.mjs plan/apply (classOf). 'seeded': copied once at bootstrap, never auto-merged on upgrade (structural changes ship as migrations/). 'merged': handled by a dedicated merge flow, never plan-merged; the value names the strategy (merge-claude-block / merge-settings subcommands). Keys are dest paths relative to the downstream repo root.",
+    "seeded": [
+      "scripts/sprint/claims-tokens.json",
+      "docs/sprints/INDEX.md",
+      "docs/sprints/ROADMAP.md",
+      "docs/TODOS.md"
+    ],
+    "merged": {
+      "CLAUDE.md": "claude-block",
+      ".claude/settings.json": "settings-union"
+    }
+  },
   "postCopy": {
-    "chmod+x": ["scripts/sprint/*.sh"],
+    "chmod+x": ["scripts/sprint/*.sh", "scripts/template/*.sh"],
     "writePerProject": [
       "scripts/sprint/claims-tokens.json (full tier — from stack answers)",
       ".claude/settings.json env.SPRINT_MAIN_BRANCH (only if default branch != main)"

@@ -37,6 +37,20 @@ DOC_HEALTH.md (see PROTOCOL "Parallel Sprints").
 | `reserve-wave.sh S-A S-B… \| --drop W-<id> S-NNN \| --release W-<id>` | Locked wave reservation: mints `W-<id>`, writes `wave:` into backlog members so concurrent sessions can't take them or overlapping claims | 2 = member gone/reserved/overlap, 75 = busy |
 | `merge-sprint.sh prepare\|land\|finish\|abort <branch>` | The locked completion (merge queue) | 3 = re-run gate, 4 = author docs, 75 = busy |
 | `frontmatter.mjs get\|set` | Read/write sprint frontmatter fields round-trip-safely | |
+| `push-main.sh [--wait <secs>]` | Lock-guarded batch push of deferred wave commits; guards against a `[skip ci]` HEAD hiding a code push | 75 = busy |
+
+## Step 0 (silent): template update check
+
+Before handling any command, run `bash scripts/template/update-check.sh 2>/dev/null || true`.
+
+- `UPGRADE_AVAILABLE <old> <new> <sha>` → prepend exactly ONE line to your response —
+  "project-template v\<new\> is available (you have v\<old\>) — run /template-upgrade, or say
+  'not now' to snooze" — then continue with the requested command immediately. If the user
+  later says "not now", run `bash scripts/template/update-check.sh --snooze`.
+- `JUST_UPGRADED <old> <new>` → one line pointing at the template CHANGELOG for what changed
+  between those versions, then continue.
+- No output, script missing, or any failure → proceed silently. This check must never block,
+  delay, or fail a sprint command.
 
 ## Commands
 
@@ -66,6 +80,10 @@ Print the current kanban state:
    startable-in-parallel set (Wave 1 backlog members — skip any tagged "in flight"). This is
    what `/sprint wave` would fan out. Members tagged `⚠ unplanned` / `⚠ stale plan` get a
    planning pass before dispatch (ORCHESTRATION.md Step 2) — mention which ones.
+8. **Unpushed ledger check**: run `git rev-list --count origin/<main>..<main>` (guard: skip if
+   the `origin/<main>` ref doesn't exist). If the count is > 0 and no wave is currently live,
+   warn that main carries unpushed lifecycle commits and suggest
+   `bash scripts/sprint/push-main.sh`.
 
 Format as a concise board view. (Ignore `.gitkeep` files when counting.)
 
@@ -94,7 +112,9 @@ evidence does not count) → doc sync via `git diff` (on the branch) → **`/adr
 **`merge-sprint.sh prepare S-NNN-…`** (locked; on exit 3 re-run `gate.sh`) →
 **`merge-sprint.sh land S-NNN-…`** (merges to main, moves the file, regenerates; exits 4) →
 author the semantic docs on main (DOC_HEALTH.md, INDEX Done-row + header, ROADMAP narrative)
-→ **`merge-sprint.sh finish S-NNN-…`** (commits, pushes, releases the lock) →
+→ **`merge-sprint.sh finish S-NNN-…`** (commits, pushes, releases the lock — the completion
+commit intentionally carries no `[skip ci]`, since its push is what lands the code; solo
+completions push per-transaction like this always, unlike wave mode's deferred checkpoints) →
 exit + remove the worktree and branch (Phase 3 Step 6).
 
 ### `/sprint create [title]`
@@ -106,8 +126,9 @@ exit + remove the worktree and branch (Phase 3 Step 6).
    (used in the generated INDEX/ROADMAP blocks), and an empty `touches: []` stub.
 5. Ask via AskUserQuestion for: `depends_on`, `blocks`, `tags`, `story_points`.
 6. Commit on main under the lock:
-   `lock.sh acquire create-S-NNN` → `regen.mjs` → commit `sprint: create S-NNN — [title]`
-   (explicit paths, `--no-verify`) → `lock.sh release <token>`.
+   `lock.sh acquire create-S-NNN` → `regen.mjs` → commit
+   `sprint: create S-NNN — [title] [skip ci]` (explicit paths, `--no-verify`) →
+   `lock.sh release <token>`.
 
 ### `/sprint plan [S-NNN]`
 
@@ -136,7 +157,7 @@ doc-sync targets) — `/sprint start` verifies rather than re-derives it.
 All pass → `node scripts/sprint/frontmatter.mjs set <file> plan_date "$(date +%F)"`. Any
 fail → leave `plan_date: null` and report what's missing (still commit partial progress).
 Either way, commit on main under the lock (same pattern as `/sprint create`):
-`sprint: plan S-NNN — [name]`.
+`sprint: plan S-NNN — [name] [skip ci]`.
 
 ### `/sprint next`
 
@@ -160,23 +181,29 @@ every wave subagent has a pinned `model: sonnet` agent definition — dispatch b
 Compute the wave (`claims.mjs waves` — skip members reserved by another session's wave), confirm
 the startable backlog members with the user, **reserve the roster**
 (`reserve-wave.sh S-A S-B…` — a locked commit that makes concurrent sessions safe and mints the
-wave id), **plan the wave** in a per-wave planning worktree (fan out one `sprint-planner`
-subagent per unplanned / stale member to verify + deepen its file against current code — the
-primary checkout stays clean; batch all open decisions into one AskUserQuestion round, write the
-answers into the sprint files as Pre-Sprint Decisions — two short locked commits), then run
-**`start.sh --wave W-<id>` + worktree creation per sprint yourself** (serialized, on `main`,
-under the lock — you stay parked on `main` and never EnterWorktree), **dispatch one
-`sprint-executor` subagent per sprint** (single message = parallel) to run **Phase 2 only** in
-its worktree via `git -C` — each runs a `reviewer` child over its branch before returning
-(DONE / BLOCKED / NEEDS_CLAIM / **PLAN_GAP** + a report file). **Advise blocked executors
-yourself** (answer from plan/repo context and continue the same agent via SendMessage; escalate
-to the user only for genuine tradeoffs), then **complete finished sprints one at a time**
-(Phase 3 is lock-serialized and cannot be fanned out; pre-draft the semantic docs before taking
-the lock). Keep the durable ledger in `.claude/sprint-orchestration/W-<id>/`. Optional `N` caps
-the wave size. After the wave lands, dispatch a `reviewer` subagent over the merged result
-(adjudicate its findings — don't read the diffs yourself), release any leftover reservations,
-and recompute the next wave. Multiple waves can run from different terminal sessions — see
-ORCHESTRATION.md "Running waves from multiple sessions".
+wave id — its commit carries `[skip ci]`, this is checkpoint P1), **plan the wave** in a
+per-wave planning worktree (fan out one `sprint-planner` subagent per unplanned / stale member
+to verify + deepen its file against current code — the primary checkout stays clean; batch all
+open decisions into one AskUserQuestion round, write the answers into the sprint files as
+Pre-Sprint Decisions — two short locked commits, both `[skip ci]`, neither pushed), then run
+**`start.sh --wave W-<id> --no-push` + worktree creation per sprint yourself** (serialized, on
+`main`, under the lock — you stay parked on `main` and never EnterWorktree; after the last
+start, checkpoint P2 — `bash scripts/sprint/push-main.sh`, a ledger-only push, zero CI),
+**dispatch one `sprint-executor` subagent per sprint** (single message = parallel) to run
+**Phase 2 only** in its worktree via `git -C` — each runs a `reviewer` child over its branch
+before returning (DONE / BLOCKED / NEEDS_CLAIM / **PLAN_GAP** + a report file). **Advise
+blocked executors yourself** (answer from plan/repo context and continue the same agent via
+SendMessage; escalate to the user only for genuine tradeoffs), then **complete finished
+sprints one at a time** with `merge-sprint.sh finish <branch> --no-push` (Phase 3 is
+lock-serialized and cannot be fanned out; pre-draft the semantic docs before taking the lock).
+Keep the durable ledger in `.claude/sprint-orchestration/W-<id>/`. Optional `N` caps the wave
+size. After the wave lands, dispatch a `reviewer` subagent over the merged result (adjudicate
+its findings — don't read the diffs yourself), release any leftover reservations, then run
+**checkpoint P3 (mandatory)** — `bash scripts/sprint/push-main.sh`, the wave's single
+CI-triggering push — and verify CI green against it (PROTOCOL Phase 3 Step 6, run once for the
+whole wave; see ORCHESTRATION Step 6 for red-run recovery). Recompute the next wave. Multiple
+waves can run from different terminal sessions — see ORCHESTRATION.md "Running waves from
+multiple sessions" and "Push policy" for the full checkpoint contract.
 
 ## No Arguments
 

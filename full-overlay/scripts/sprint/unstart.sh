@@ -95,6 +95,7 @@ MSG="sprint: unstart $SPRINT — $TITLE"
 if [[ -n $REASON ]]; then
   MSG="$MSG ($REASON)"
 fi
+MSG="$MSG [skip ci]"
 git -C "$ROOT" commit --no-verify -q -m "$MSG" -- "${PATHS[@]}" "docs/sprints/in-progress/$BASENAME"
 COMMITTED=1
 
@@ -104,6 +105,9 @@ git -C "$ROOT" show "HEAD:docs/sprints/backlog/$BASENAME" | grep '^status: backl
 
 if [[ $NO_PUSH -eq 0 ]]; then
   git -C "$ROOT" push origin "$MAIN" || { echo "push failed — local unstart commit is intact; resolve and push" >&2; exit 1; }
+else
+  AHEAD=$(git -C "$ROOT" rev-list --count "origin/$MAIN..$MAIN" 2>/dev/null || echo '?')
+  echo "push deferred — local $MAIN is $AHEAD commit(s) ahead of origin/$MAIN; wave checkpoints push via scripts/sprint/push-main.sh"
 fi
 
 echo "unstarted $SPRINT — back in backlog/ on $MAIN at $(git -C "$ROOT" rev-parse HEAD)"

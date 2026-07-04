@@ -34,6 +34,47 @@ The orchestrator's primary checkout stays parked on `main` (it is the lifecycle 
 **never** enters a worktree — it creates them with `git worktree add` and hands the path to a
 subagent.
 
+## Push policy
+
+A 5-sprint wave running the solo lifecycle scripts unmodified would push to `origin` on every
+transaction — reserve, deepen, decisions, N starts, N finishes — roughly 13 pushes, each firing
+downstream CI. Waves instead **defer** pushes and settle them at three checkpoints: **during a
+wave, every main-mutating script gets `--no-push`; only `scripts/sprint/push-main.sh` pushes.**
+
+- **P1 (wave start).** `reserve-wave.sh` is the sole exception to the no-push rule above — it
+  keeps its normal push as the wave's origin-sync point, backing up the roster. Its commit
+  carries `[skip ci]`, so it costs zero CI.
+- **P2 (after the last `start.sh --no-push`).** Run `push-main.sh` — a ledger-only backup push,
+  zero CI (HEAD is a `[skip ci]` start commit).
+- **P3 (wave end, mandatory).** After the last `merge-sprint.sh finish <branch> --no-push` and
+  any `reserve-wave.sh --release`, run `push-main.sh` — the single CI-triggering push of the
+  wave. PROTOCOL Phase 3 Step 6's "verify CI green" check runs exactly once here, against this
+  push, covering every sprint in the wave.
+
+**The `[skip ci]` convention:** ledger-only lifecycle commits (start, claim expansions, deepen,
+decisions, reservations) carry a trailing ` [skip ci]`. The `sprint: complete` commit written by
+`merge-sprint.sh finish` deliberately does **not** — it is the HEAD of a code-bearing push, and a
+skip marker there would skip CI for landed code.
+
+**`push-main.sh [--wait <secs>]` contract:** acquires the sprint-main lock (label `push-main`);
+fetches `origin` and refuses with a hard error if the remote has diverged (it never auto-rebases
+the ledger); exits 0 ("nothing to push") when local `main` already matches `origin`; guards a
+`[skip ci]` HEAD — if the HEAD commit carries a skip marker but the pushed range touches paths
+outside `docs/` and `.claude/`, it appends an empty, unmarked
+`ci: run checks for wave push (<range>)` commit so code pushes still trigger CI; then pushes and
+reports the pushed range.
+
+On a long-running (multi-hour) wave, the orchestrator **may** run `push-main.sh` after any
+individual sprint's finish for backup, at the cost of one CI cycle per extra push — a deliberate
+tradeoff, not a violation of the checkpoint schedule.
+
+**Abandoning or pausing a wave:** always run `bash scripts/sprint/push-main.sh` before walking
+away. A deferred wave must never leave local `main` silently ahead of `origin` — this applies
+equally to abandonment (Failure handling) and to any pause longer than a session (e.g. a decision
+round parked overnight).
+
+Solo (non-wave) `/sprint start` and `/sprint done` are unaffected — they keep push-per-transaction.
+
 ## Worktree mode: path-scoped (verified)
 
 Subagents operate **entirely through `git -C <worktree>` and absolute paths** — they do
@@ -64,7 +105,9 @@ paths for file edits. Either is fine; never use `EnterWorktree`.
 `bash scripts/sprint/reserve-wave.sh S-A S-B …` — a locked `main` commit that mints the wave
 id (`W-<date>-<hex>`, printed) and writes `wave: W-<id>` into each member's frontmatter.
 From this commit on, `claims.mjs` treats the members as claim holders: another session's wave
-can neither reserve them nor reserve/start anything whose `touches:` overlap theirs.
+can neither reserve them nor reserve/start anything whose `touches:` overlap theirs. This is
+**checkpoint P1** (see Push policy): the script pushes as usual, and its commit carries
+`[skip ci]`.
 
 - Exit 2 (member gone / already reserved / claims overlap): another session moved first —
   recompute Step 1 and re-confirm a smaller or different roster.
@@ -119,9 +162,10 @@ per roster file (a plain copy — the planners' edits are uncommitted working-tr
 the planning worktree, so `git checkout <branch> -- <path>` would NOT see them; the copy is
 safe because reserved files cannot move on `main` — only lifecycle scripts move them, and
 they are reserved) → `node scripts/sprint/regen.mjs` (the waves block depends on touches) →
-commit `sprint: wave-plan deepen W-<id> — S-A,S-B,…` (explicit backlog-file paths +
-INDEX/ROADMAP, `--no-verify`) → push → release. Deepening is committed even for members
-that later drop — the work keeps its value and its `plan_date`.
+commit `sprint: wave-plan deepen W-<id> — S-A,S-B,… [skip ci]` (explicit backlog-file paths +
+INDEX/ROADMAP, `--no-verify`) → release (no push — the commit carries `[skip ci]` and rides
+the next checkpoint). Deepening is committed even for members that later drop — the work
+keeps its value and its `plan_date`.
 
 **2e — Decision round (no lock held).** Batch **all** members' questions into AskUserQuestion
 calls (≤4 questions each), labeled `S-NNN D-A: …` with the planner's options. More than ~8
@@ -136,9 +180,9 @@ own edits take seconds — the ledger must not sit dirty outside it):
 **Pre-Sprint Decisions** section as `- YYYY-MM-DD (wave): [decision] — [rationale]`, check
 off the answered Open Questions items, apply any option-implied edits the planner
 pre-declared → re-run `claims.mjs waves` if decisions shifted touches → commit
-`sprint: wave decisions W-<id> — S-A,S-B,…`, push, release. Zero questions → 2e/2f collapse
-to nothing. Finally remove the planning worktree (`--force`: it still holds the planners'
-uncommitted edits, which 2d already copied and committed):
+`sprint: wave decisions W-<id> — S-A,S-B,… [skip ci]`, release (no push — see Push policy).
+Zero questions → 2e/2f collapse to nothing. Finally remove the planning worktree (`--force`:
+it still holds the planners' uncommitted edits, which 2d already copied and committed):
 `git worktree remove --force .claude/worktrees/wave-W-<id>-plan && git branch -D wave-W-<id>-plan`.
 
 ### Step 3 — Start each sprint + create its worktree (orchestrator, serialized)
@@ -153,16 +197,19 @@ For each remaining member, in the primary checkout:
    `Interface:` citations) may cite moved code — re-dispatch a `sprint-planner` for that
    member first (verify-only; the executor's verify-the-brief step remains the backstop).
 2. Dependency check → `claims.mjs check --sprint S-NNN` (stop/ask on overlap) →
-   `start.sh S-NNN --wave W-<id>` **without `--touches`** (the file's manifest was verified
-   in Step 2; the start commit lands on `main` under the lock; when another wave is live,
-   add `--wait 900`) → `git worktree add .claude/worktrees/S-NNN-… -b S-NNN-… main` (from
-   the post-start main tip; **no EnterWorktree**) → setup (copy env files, install deps with
-   `{{PACKAGE_MANAGER}}`).
+   `start.sh S-NNN --wave W-<id> --no-push` **without `--touches`** (the file's manifest was
+   verified in Step 2; the start commit lands on `main` under the lock; when another wave is
+   live, add `--wait 900`) → `git worktree add .claude/worktrees/S-NNN-… -b S-NNN-… main`
+   (from the post-start main tip; **no EnterWorktree**) → setup (copy env files, install deps
+   with `{{PACKAGE_MANAGER}}`).
 
 These run one-at-a-time: `start.sh` serializes on the lock anyway (each start is a fast
 commit, so brief contention). PROTOCOL Phase 1's doc validation and tradeoff questions are
 already covered by Step 2 (doc drift recorded in each file's PLAN NOTES; decisions in
 Pre-Sprint Decisions).
+
+After the **last** member's start: **checkpoint P2** — `bash scripts/sprint/push-main.sh`
+(ledger-only; the HEAD commit carries `[skip ci]`, so this triggers no CI).
 
 ### Step 4 — Fan out execution (parallel subagents)
 
@@ -198,9 +245,9 @@ CONTEXT / OPTIONS / DEFAULT). Handle it:
 Deliver the answer by **continuing the same subagent (SendMessage) — not a fresh dispatch**:
 its context (partial work, dead ends already explored) is the most valuable thing it has.
 Re-dispatch fresh only if the agent died (see Failure handling). For **NEEDS_CLAIM**: run
-`claims.mjs add S-NNN <path>` under the lock (checks the path is free of other in-flight
-sprints *and* other waves' reservations), then continue the subagent with "claim granted —
-mirror the touches: addition in your branch copy and proceed."
+`claims.mjs add S-NNN <path> --no-push` under the lock (checks the path is free of other
+in-flight sprints *and* other waves' reservations), then continue the subagent with "claim
+granted — mirror the touches: addition in your branch copy and proceed."
 
 Recording: the executor writes the answer into its sprint file's Pre-Sprint Decisions as
 `- YYYY-MM-DD (wave, in-flight): [decision] — [rationale]` (the file lives in its worktree);
@@ -228,13 +275,15 @@ racing completions make all but one hit the lock ceiling (exit 75). Complete fin
    live, recommended always): write the DOC_HEALTH rows/History entry, INDEX Done-row, and
    ROADMAP narrative into `.claude/sprint-orchestration/W-<id>/S-NNN-docs-draft.md`. The
    exit-4 pause then becomes "apply the draft" — seconds of lock-held time, not minutes.
-2. Run PROTOCOL **Phase 3** in full: acceptance-evidence check — work from the sprint's
-   report file in `.claude/sprint-orchestration/W-<id>/`, spot-checking citations, instead of
-   re-interrogating the worktree. The check now also covers the report's **review section**:
-   the reviewer child ran, Critical/Important findings were fixed or escalated, declined
-   findings have recorded reasons — adjudicate that from the report; do not read the diff.
-   Then doc sync → `/adr check` → `prepare` (add `--wait 900` when another wave is live) →
-   `land` → apply the docs draft → `finish`.
+2. Run PROTOCOL **Phase 3 through `finish`**: acceptance-evidence check — work from the
+   sprint's report file in `.claude/sprint-orchestration/W-<id>/`, spot-checking citations,
+   instead of re-interrogating the worktree. The check now also covers the report's **review
+   section**: the reviewer child ran, Critical/Important findings were fixed or escalated,
+   declined findings have recorded reasons — adjudicate that from the report; do not read the
+   diff. Then doc sync → `/adr check` → `prepare` (add `--wait 900` when another wave is live)
+   → `land` → apply the docs draft → `finish <branch> --no-push`. Phase 3 Step 6's CI check
+   does **not** run here — `finish` deferred its push, so there is nothing to poll yet; it
+   defers to checkpoint P3 in Step 6 below, which covers every sprint in the wave at once.
 3. Remove the sprint's worktree, then move to the next.
 
 A sprint that lands changes (`prepare` exit 3) re-runs the gate in its worktree before
@@ -250,7 +299,17 @@ list — fix now (small), spin a follow-up sprint, or accept — and records the
 wave-plan.md.
 
 Then close out the wave: `reserve-wave.sh --release W-<id>` if any backlog members still
-carry the reservation (deferred/split members), and recompute `claims.mjs waves` —
+carry the reservation (deferred/split members). Then **checkpoint P3 (mandatory)**: run
+`bash scripts/sprint/push-main.sh` — the single CI-triggering push of the wave — and run
+PROTOCOL Phase 3 Step 6's "verify CI green" check against **this** push; it covers every
+sprint in the wave in one pass. On a red run: identify the offending sprint locally by
+bisecting over the wave's merge commits (each sprint's `gate.sh` already passed inside its
+own worktree, so the regression is almost always an integration effect between sprints, not
+a single sprint's own gate) — fix on `main` under the lock, then run `push-main.sh` again
+(never a raw `git push` — the fix commit becomes the new HEAD and needs the same
+`[skip ci]`-guard treatment) and re-verify.
+
+Finally, recompute `claims.mjs waves` —
 newly-unblocked sprints form the next wave. Members whose `plan_date` predates the sprints
 that just landed are tagged `⚠ stale plan` and re-enter Step 2a automatically on the next
 wave. Repeat from Step 1 (a new wave = a new reservation + ledger dir), or report the board
@@ -314,9 +373,14 @@ safe, and what to do differently:
   user; **never steal silently**.
 - **Keep lock-held pauses short.** Pre-draft completion docs (Step 5.1) so the exit-4 pause
   is seconds. The exit-3 gate re-run is irreducible; the other wave's 900s wait absorbs it.
-- **Pushes cannot race.** Every locked transaction pulls `--ff-only` before mutating and
-  pushes before releasing the lock — commit+push is one critical section. A failed push
-  leaves the local commit intact with instructions; resolve before proceeding.
+- **Pushes cannot race.** During a wave, main-mutating transactions defer their push
+  (`--no-push`); pushes serialize on the sprint-main lock through `push-main.sh` at the P1/P2/P3
+  checkpoints instead. Sessions share one checkout, so a checkpoint push legitimately carries
+  the other wave's local commits too — that's harmless, both waves' ledgers advance together.
+  The pull/ff sync with `origin` now happens at P1 (`reserve-wave.sh`'s own push) and inside
+  `push-main.sh`'s fetch + divergence check at P2/P3. A failed push (divergence, not a race —
+  `push-main.sh` never auto-rebases the ledger) leaves the local commits intact with
+  instructions; resolve before proceeding.
 - **Stale reservations.** A crashed session leaves its `wave:` fields behind. Recovery is
   `reserve-wave.sh --release W-<id>` — but like `lock.sh steal`, only with the user's
   explicit confirmation that the other session is really dead.
@@ -412,5 +476,7 @@ carries the full duties; the prompt carries only the per-sprint variables:
 - **Orphaned worktree** (sprint in `in-progress/` with no worktree, or vice-versa): see
   `/sprint board`'s orphan check before re-dispatching.
 - **Abandoning a wave:** release what you hold — `reserve-wave.sh --release W-<id>` for
-  unstarted members; started members are individually `unstart`ed or completed. Leave the
-  ledger dir for the post-mortem.
+  unstarted members; started members are individually `unstart`ed or completed. Then, always,
+  `bash scripts/sprint/push-main.sh` before walking away (see Push policy) — a deferred wave
+  must never leave local `main` silently ahead of `origin`. Leave the ledger dir for the
+  post-mortem.

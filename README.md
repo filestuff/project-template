@@ -44,6 +44,28 @@ sprint files as-is.
 - `bootstrap/SKILL.md` — the installer skill. Symlink it:
   `ln -s "$(pwd)/bootstrap" ~/.claude/skills/bootstrap-project`
 - `template.config.json` — the placeholder manifest the bootstrap skill reads.
+- `VERSION` + `CHANGELOG.md` + `migrations/` — the release surface downstream repos
+  upgrade against (see **Releasing**).
+
+## Releasing
+
+Downstream repos pin what they installed in `.claude/template-manifest.json` and
+upgrade via `/template-upgrade`, which diffs template versions by commit SHA. That
+imposes three hard rules on this repo:
+
+1. **Every change to `lite/`, `full-overlay/`, `template.config.json`, or
+   `migrations/` must bump `VERSION` and add a `CHANGELOG.md` entry in the same
+   commit.** The update checker compares `VERSION` on `main` against downstream
+   manifests; an unbumped change is invisible to every installed repo, and the
+   changelog entry is what users read before approving an upgrade.
+2. **Never force-push `main`.** Downstream manifests pin commit SHAs as three-way
+   merge bases; rewriting history orphans those SHAs and degrades every future
+   upgrade to a manual new-vs-local diff.
+3. **Structural changes to seeded files must ship as migrations.** Seeded files
+   (the INDEX/ROADMAP generated skeletons, `claims-tokens.json`, `TODOS.md`) are
+   copied once at bootstrap and never auto-merged afterwards — a template-side edit
+   to them never reaches downstream unless a `migrations/vX.Y.Z.sh` script applies
+   it in place (see `migrations/README.md`).
 
 ## Fixed conventions (deliberately not configurable)
 

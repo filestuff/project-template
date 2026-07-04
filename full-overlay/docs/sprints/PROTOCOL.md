@@ -87,10 +87,13 @@ the lifecycle paths if a transaction died mid-flight; abort any in-progress merg
 
 Two guarantees the scripts already enforce, stated for multi-session operation: every locked
 transaction **pulls `--ff-only` before mutating and pushes before releasing the lock** —
-commit + push form one critical section, so two sessions cannot race pushes to `main`; and a
-failed push leaves the local commit intact with printed recovery instructions. When another
-session's wave is live, pass `--wait 900` to `start.sh` and `merge-sprint.sh prepare` — the
-other wave's completion legitimately holds the lock across its prepare→land→finish window.
+commit + push form one critical section, so two sessions cannot race pushes to `main` —
+unless the caller defers (`--no-push` — the wave orchestrator's mode), in which case the
+pull/push pair moves to the wave's lock-guarded checkpoint pushes
+(`scripts/sprint/push-main.sh`; see ORCHESTRATION "Push policy"); and a failed push leaves
+the local commit intact with printed recovery instructions. When another session's wave is
+live, pass `--wait 900` to `start.sh` and `merge-sprint.sh prepare` — the other wave's
+completion legitimately holds the lock across its prepare→land→finish window.
 
 ---
 
@@ -143,7 +146,10 @@ Do NOT silently skip unmet dependencies.
    Under the lock it re-checks claims, moves `backlog/ → in-progress/`, sets
    `status: in-progress` / `start_date` / `touches:`, regenerates the INDEX/ROADMAP blocks,
    commits `sprint: start S-NNN — [name]` **on `main`**, verifies the committed frontmatter
-   survived, and pushes. It prints the new `main` SHA — the worktree branches from it.
+   survived, and pushes. It prints the new `main` SHA — the worktree branches from it. In wave
+   mode the orchestrator passes `--no-push`, deferring this push to the wave's checkpoint
+   push (`scripts/sprint/push-main.sh`; see ORCHESTRATION "Push policy") — solo starts always
+   push immediately.
 
    The inverse exists: `scripts/sprint/unstart.sh S-NNN` is the **only** sanctioned way to
    move an in-flight sprint back to `backlog/` (locked; refuses if the branch carries
@@ -343,7 +349,11 @@ the sprint branch.
    `status: done` (commit hooks that stash unstaged changes can silently drop edits made
    around a `git mv`), guards against `" 2."` macOS sync-duplicate files, commits
    `sprint: complete S-NNN — [name]` with explicit paths `--no-verify`, pushes, and releases
-   the lock.
+   the lock. Other ledger-only lifecycle commits (start, claim expansions, wave reservations)
+   carry a trailing ` [skip ci]`; this completion commit never does — it is the HEAD of a
+   code-bearing push, and a skip marker there would skip CI for the landed code. In wave mode
+   the orchestrator passes `--no-push` and this push defers to the wave's checkpoint push
+   (ORCHESTRATION "Push policy"); solo completions push immediately as above.
 
 If anything goes wrong mid-land: `merge-sprint.sh abort S-NNN-kebab-name` rolls `main` back
 to the recorded pre-land SHA and releases the lock.
@@ -356,7 +366,9 @@ to the recorded pre-land SHA and releases the lock.
    (e.g. `gh run list --branch <main> --limit 5`, or `gh run watch <id>`). A red run
    **reopens the sprint's close**: fix on a follow-up commit (small fixes can go straight to
    `main` under the lock; anything larger reopens the worktree), then re-verify. Cite the
-   green run IDs in the close summary. (No CI? skip this step.)
+   green run IDs in the close summary. (No CI? skip this step.) (Wave mode: this check runs
+   once, against the wave-end checkpoint push — see ORCHESTRATION Step 6 / checkpoint P3 —
+   not after each sprint's `finish`.)
 2. `ExitWorktree {action: "keep"}` — returns the session to the primary checkout
    (path-entered worktrees are not auto-removed, so "keep" is correct here).
 3. `git worktree remove .claude/worktrees/S-NNN-kebab-name`

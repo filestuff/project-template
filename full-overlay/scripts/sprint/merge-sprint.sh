@@ -19,6 +19,9 @@
 #
 # Exit codes: 0 ok · 1 error (lock kept — fix and re-run, or abort) ·
 # 3 gate re-run needed · 4 paused for doc authoring · 75 lock busy
+#
+# Must run under macOS /bin/bash 3.2: no mapfile/readarray/associative arrays,
+# and empty-array "${arr[@]}" expansion is an unbound-variable error under set -u.
 set -euo pipefail
 
 SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -81,9 +84,10 @@ prepare)
   if ! git -C "$WT" merge "$MAIN" -m "merge $MAIN into $BRANCH pre-land" >/dev/null 2>&1; then
     # Auto-resolve generated docs by taking main's side (their regen happens on main now);
     # anything else is a real conflict for the agent.
-    mapfile -t conflicted < <(git -C "$WT" diff --name-only --diff-filter=U)
+    conflicted=()
+    while IFS= read -r f; do conflicted+=("$f"); done < <(git -C "$WT" diff --name-only --diff-filter=U)
     remaining=()
-    for f in "${conflicted[@]}"; do
+    for f in ${conflicted[@]+"${conflicted[@]}"}; do
       if printf '%s\n' "${GENERATED[@]}" | grep -qx "$f"; then
         git -C "$WT" checkout --theirs -- "$f" && git -C "$WT" add -- "$f"
       else
@@ -127,7 +131,8 @@ land)
   node "$SELF_DIR/frontmatter.mjs" set "$DONE_FILE" end_date "$(date +%F)"
 
   # Archive rotation: keep the 10 most recent (highest-numbered) in done/.
-  mapfile -t done_files < <(ls "$ROOT/docs/sprints/done/" | grep -E '^S-[0-9]+.*\.md$' | sort -V)
+  done_files=()
+  while IFS= read -r f; do done_files+=("$f"); done < <(ls "$ROOT/docs/sprints/done/" | grep -E '^S-[0-9]+.*\.md$' | sort -V)
   excess=$((${#done_files[@]} - 10))
   if ((excess > 0)); then
     mkdir -p "$ROOT/docs/sprints/done/archive"
@@ -166,6 +171,9 @@ finish)
     echo 'staged a " 2." sync-duplicate file — unstage it before re-running finish' >&2
     exit 1
   fi
+  # No [skip ci] here: this commit is the HEAD of a push whose range contains the
+  # land merge (real code); GitHub checks the push HEAD, so a marker here would
+  # skip CI for landed code.
   git -C "$ROOT" commit --no-verify -q -m "sprint: complete $SPRINT — $TITLE"
 
   # grep without -q: -q exits on first match and SIGPIPEs git-show, which trips pipefail
@@ -176,6 +184,8 @@ finish)
   if [[ $NO_PUSH -eq 0 ]]; then
     git -C "$ROOT" push origin "$MAIN" ||
       { echo "push failed — local commits intact, lock kept; resolve and re-run finish" >&2; exit 1; }
+  else
+    echo "push deferred — wave orchestrator: run scripts/sprint/push-main.sh after the wave's LAST completion and verify CI on that push (PROTOCOL Phase 3 Step 6)"
   fi
 
   rm -f "$LOCK_DIR/preland-sha"
