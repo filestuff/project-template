@@ -125,7 +125,7 @@ function readJSON(path) {
 
 function writeJSON(path, obj) {
   mkdirpFor(path);
-  writeFileSync(path, JSON.stringify(obj, null, 2) + "\n");
+  writeFileSync(path, `${JSON.stringify(obj, null, 2)}\n`);
 }
 
 function gitDir(repoRoot) {
@@ -273,8 +273,7 @@ function findLeftoverTokens(text, placeholders) {
   const known = new Set(Object.keys(placeholders));
   const found = new Set();
   const re = /\{\{[^}]*\}\}/g;
-  let m;
-  while ((m = re.exec(text))) {
+  for (const m of text.matchAll(re)) {
     if (!known.has(m[0])) found.add(m[0]);
   }
   return [...found];
@@ -319,7 +318,7 @@ function cmdRender(argv) {
   }
 
   // Sidecars next to --out (see DECISION 2) — never inside the rendered tree.
-  const sidecarDir = dirname(join(outDir, "_")); // == dirname(outDir) when outDir has no trailing slash tricks
+  // parentDir == dirname(outDir) once trailing slashes are stripped.
   const parentDir = dirname(outDir.replace(/\/+$/, ""));
   copyFileSync(configPath, join(parentDir, "template.config.json"));
   const versionSrc = join(templateDir, "VERSION");
@@ -343,7 +342,6 @@ function cmdRender(argv) {
   }
 
   console.log(`rendered ${fileSet.size} file(s) for tier "${tier}" -> ${outDir}`);
-  void sidecarDir; // computed for clarity/documentation; parentDir is what's actually used
 }
 
 // --- plan ---------------------------------------------------------------
@@ -354,7 +352,7 @@ function classOf(dest, manifest, templateConfig) {
   const fc = templateConfig?.fileClasses;
   if (fc) {
     if (Array.isArray(fc.seeded) && fc.seeded.includes(dest)) return "seeded";
-    if (fc.merged && Object.prototype.hasOwnProperty.call(fc.merged, dest)) return "merged";
+    if (fc.merged && Object.hasOwn(fc.merged, dest)) return "merged";
   }
   if (entry?.class) return entry.class;
   return "managed";
@@ -471,9 +469,9 @@ function readJournal(path) {
 
 function appendJournal(path, dest) {
   mkdirpFor(path);
-  const line = dest + "\n";
+  const line = `${dest}\n`;
   if (!existsSync(path)) writeFileSync(path, line);
-  else writeFileSync(path, readFileSync(path, "utf8") + line);
+  else writeFileSync(path, `${readFileSync(path, "utf8")}${line}`);
 }
 
 function applyChmodGlobsToDest(dest, globs) {
@@ -692,7 +690,7 @@ function cmdMergeSettings(argv) {
   }
   for (const [key, value] of Object.entries(newSettings)) {
     if (key === "permissions") continue;
-    if (!Object.prototype.hasOwnProperty.call(existing, key)) merged[key] = value;
+    if (!Object.hasOwn(existing, key)) merged[key] = value;
   }
 
   writeJSON(settingsPath, merged);

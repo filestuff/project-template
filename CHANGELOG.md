@@ -4,6 +4,17 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.0.1] - 2026-07-04
+
+- `scripts/template/upgrade.mjs` now passes strict repo-wide Biome lint rules
+  (`Object.hasOwn` instead of prototype `hasOwnProperty`, template literals
+  instead of string concatenation, `matchAll` instead of an assign-in-expression
+  `exec` loop, and removal of an unused `void`'d variable). Behavior-identical —
+  a post-fix render of v1.0.0 is byte-identical to the pre-fix render. If your
+  repo lints `scripts/` with Biome (e.g. a whole-repo `pnpm check`), upgrading
+  clears those errors; if you already applied the same fixes locally, the
+  three-way merge lands clean.
+
 ## [1.0.0] - 2026-07-04
 
 - Versioned template: a root `VERSION` file plus a committed
