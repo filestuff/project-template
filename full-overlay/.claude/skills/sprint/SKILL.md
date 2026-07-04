@@ -24,6 +24,17 @@ on `main` always shows the in-flight sprints and their claimed files (`touches:`
 Sprint branches carry deliverable work only and never touch INDEX.md / ROADMAP.md /
 DOC_HEALTH.md (see PROTOCOL "Parallel Sprints").
 
+## Boundaries
+
+One-shot command dispatcher — handle the requested command, then stop. In scope: the
+lifecycle commands below. Out of scope: execution rules (PROTOCOL.md is the source of
+truth — never restate or override it here), breaking a plan into sprints (`/plan`),
+recording decisions (`/adr`), root-causing failures (`/debug`), wave orchestration details
+(`docs/sprints/ORCHESTRATION.md` governs those). `main` mutations go through the helper
+scripts only — never hand-rolled. Null results: an empty board is printed as-is — don't
+invent rows; `/sprint next` with nothing unblocked says so and names what blocks each
+backlog sprint.
+
 ## Helper scripts (`scripts/sprint/`)
 
 | Script | Purpose | Key exits |

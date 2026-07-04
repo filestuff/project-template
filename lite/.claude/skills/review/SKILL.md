@@ -11,6 +11,9 @@ Code review with craftsman's eye. Auto-fix obvious issues, surface real bugs.
 Reference `AGENTS.md` / `CLAUDE.md` (if present) for project conventions. Apply those
 patterns as review criteria.
 
+Out of scope: behavior-preserving polish (`/code-simplifier`) and root-causing a failing
+test (`/debug`) — hand off, don't fold them into the review.
+
 ## Critical Rules
 
 1. **AUTO-FIX safe obvious issues** - Don't ask permission for no-brainers
@@ -80,6 +83,16 @@ flagging, so the tradeoff is reviewable.
 - One reason to change per module (no "and" in its description)?
 - Leaky or premature abstractions; fat interfaces forcing callers to depend on unused methods?
 - Concrete coupling at a seam that should be an injected dependency (and makes it hard to test)?
+
+### Could a rung lower on the ladder have solved this? (decision ladder)
+- New helper/code that an existing util, the stdlib, or an already-installed dependency
+  provides? (`docs/ENGINEERING_PRINCIPLES.md`, "Before you code")
+- New file where an existing module had room?
+
+### Bug fixes: root cause, not symptom
+- Is the fix in the shared function, or patched at one caller? Were sibling callers checked?
+- Carve-out guard: do NOT flag input validation at trust boundaries, data-loss error
+  handling, security, or accessibility as YAGNI/KISS violations — those are hard carve-outs.
 
 ### Does it follow project patterns?
 - Whatever `AGENTS.md` / `CLAUDE.md` and the surrounding code establish: file
@@ -166,6 +179,9 @@ Batch 1 done: AUTO: 2 fixed | BUG: 1 | FIX: 2
 ──────────
 
 ### Step 3: Summary & Options (After All Batches)
+
+Null result: a clean review reports `BUG: 0 | FIX: 0 | CONSIDER: 0` and "no material issues
+found" — never invent findings to look thorough.
 
 ```
 Total: BUG: X | FIX: X | CONSIDER: X (auto-fixed: Y)

@@ -38,6 +38,9 @@ assert.
   - **YAGNI** — speculative flags/params/extension points, or abstractions with a single caller.
   - **SOLID** — leaky/premature abstractions, fat interfaces, responsibilities that should
     split, concrete coupling that makes the code hard to test.
+  - **Ladder** — reimplementation of something the codebase, stdlib, or an installed
+    dependency already provides.
+  - **Root cause** — a symptom patch at one caller when the fault lives in shared code.
 - **Project conventions** — whatever `AGENTS.md` / `CLAUDE.md` and the surrounding code establish.
 
 ## Severity tiers

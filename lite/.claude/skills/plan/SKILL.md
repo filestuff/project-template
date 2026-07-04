@@ -11,7 +11,14 @@ allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill"
 # Plan Breakdown Skill
 
 Takes a reviewed plan and breaks it into sprint files in `docs/sprints/backlog/`.
-It does NOT run plan reviews — those run separately first if used.
+
+## Boundaries
+
+In scope: breaking a reviewed plan into backlog sprint files. Out of scope: plan reviews
+(those run separately first if used), per-sprint certification (`/sprint plan` — this skill
+leaves `plan_date: null`), starting execution (`/sprint start`). Null result: if the plan
+genuinely fits one sprint, create one sprint and say so — do not manufacture a multi-sprint
+split.
 
 ## Pipeline
 

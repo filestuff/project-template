@@ -20,6 +20,15 @@ procedure. Read it and follow it exactly — this skill is just the command surf
 This is the **lite** tier: one sprint at a time. If `in-progress/` is non-empty when asked
 to start another, stop and ask.
 
+## Boundaries
+
+One-shot command dispatcher — handle the requested command, then stop. In scope: the
+lifecycle commands below. Out of scope: execution rules (PROTOCOL.md is the source of
+truth — never restate or override it here), breaking a plan into sprints (`/plan`),
+recording decisions (`/adr`), root-causing failures (`/debug`). Null results: an empty
+board is printed as-is — don't invent rows; `/sprint next` with nothing unblocked says so
+and names what blocks each backlog sprint.
+
 ## Step 0 (silent): template update check
 
 Before handling any command, run `bash scripts/template/update-check.sh 2>/dev/null || true`.

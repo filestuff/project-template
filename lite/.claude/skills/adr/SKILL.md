@@ -13,6 +13,12 @@ allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion"
 
 Architecture Decision Records live in `docs/decisions/` named `NNN-kebab-case-title.md`.
 
+## Boundaries
+
+In scope: durable architectural decisions. Out of scope: sprint-scoped choices (record those
+as Pre-Sprint Decisions in the sprint file) and not-yet-decided designs (`docs/proposals/`
+RFCs). `/adr check`'s "none — [reason]" is the required null output — no padding.
+
 ## Commands
 
 ### `/adr create [title]`

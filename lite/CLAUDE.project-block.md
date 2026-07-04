@@ -11,7 +11,7 @@ Entry points (discover the rest by listing `docs/`):
 - `docs/decisions/` — ADRs · `docs/proposals/` — RFCs
 - `docs/DOC_HEALTH.md` — doc staleness tracker (read first during pre-sprint)
 - `docs/TODOS.md` — deferred-work ledger
-- `docs/ENGINEERING_PRINCIPLES.md` — YAGNI/KISS/DRY/SOLID design defaults (planning, execution, review)
+- `docs/ENGINEERING_PRINCIPLES.md` — design defaults: the decision ladder (reuse before build), YAGNI/KISS/DRY/SOLID, root-cause-over-symptom, hard safety carve-outs (planning, execution, review)
 - `docs/sprints/testing-anti-patterns.md` — test-first traps to avoid
 
 ## Sprint Workflow

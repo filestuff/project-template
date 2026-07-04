@@ -16,6 +16,11 @@ allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion"
 change fixes it* — is a guess. Guesses that happen to make the symptom disappear leave the real
 bug in place and add code nobody understands. Find the cause, then fix the cause.
 
+This is a **persistent mode** for the rest of the investigation, not a one-shot report.
+Null result: if the investigation proves the behavior is actually *correct* (not a bug),
+report that with the evidence and change nothing. Style/quality findings discovered en route
+go to `/review`, not into the fix.
+
 Work the four phases in order. Do not jump to Phase 4.
 
 ## Phase 1 — Reproduce & locate the failure
@@ -47,7 +52,10 @@ Work the four phases in order. Do not jump to Phase 4.
 
 1. **Write a failing test that reproduces the bug** — proves you understand it and guards against
    regression. (See `docs/sprints/testing-anti-patterns.md`.)
-2. Apply the **single** fix at the root, not a patch at the symptom.
+2. Apply the **single** fix at the root, not a patch at the symptom. Before applying it,
+   grep every caller of the faulty function — the report named one symptom path; a fix in the
+   shared function covers the siblings a per-caller patch would miss
+   (`docs/ENGINEERING_PRINCIPLES.md`, "Root cause over symptom").
 3. **Defense in depth:** once you know the root cause, ask whether a validation/guard at an
    earlier layer would make this class of bug *structurally impossible*, not just this instance
    fixed. Add it where it's cheap.

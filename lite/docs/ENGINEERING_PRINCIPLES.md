@@ -3,7 +3,30 @@
 The default design values for this project. They are the shared vocabulary for `/plan`
 (sizing deliverables), sprint execution (PROTOCOL Phase 2), and review (`/review`,
 `.claude/agents/reviewer.md`). They are heuristics, not laws — name the principle when you
-invoke it so a reviewer can weigh the tradeoff.
+invoke it so a reviewer can weigh the tradeoff. The doc opens with the operating procedure
+(the decision ladder); the principles it leans on follow.
+
+## Before you code: understand, then climb the ladder
+
+The ladder runs *after* you understand the problem, not instead of it: read the task and the
+code it touches, trace the real flow end to end, then climb. A small diff you don't
+understand is just laziness dressed up as efficiency.
+
+Then, before writing any code, stop at the first rung that answers:
+
+1. Does it need to be built at all? (see **YAGNI** below)
+2. Does this codebase already do it? Reuse the existing helper, util, or pattern.
+3. Does the standard library do it?
+4. Does a native platform feature cover it?
+5. Does an already-installed dependency solve it?
+6. Can it be one line?
+7. Only then: write the minimum code that works.
+
+When two options land on the same rung, tie-break with:
+
+- Deletion over addition.
+- Boring over clever.
+- Fewest files possible.
 
 ## YAGNI — You Aren't Gonna Need It
 
@@ -48,6 +71,28 @@ extracting.
 - **D**ependency Inversion — depend on abstractions (interfaces) at module seams, not on
   concrete implementations; this is also what makes code testable without heavy mocking.
 
+## Root cause over symptom (bug fixes)
+
+A bug report names a *symptom*, not the cause. Before patching the reported path, grep every
+caller of the function you touch; if the fault lives in shared code, fix the shared function
+once — one guard there is a smaller diff than one per caller, and patching only the path the
+ticket names leaves a sibling caller still broken. The smallest change in the wrong place
+isn't lazy, it's a second bug. (`/debug` — `.claude/skills/debug/SKILL.md` — is the
+procedure; this is the principle.)
+
+## Hard carve-outs — never simplified away
+
+Minimalism has a floor. These are never cut in the name of YAGNI/KISS:
+
+- Input validation at trust boundaries.
+- Error handling that prevents data loss.
+- Security.
+- Accessibility.
+- Anything the user explicitly requested.
+
+And when two approaches are the same size, pick the edge-case-correct one — lazy means *less
+code*, not the flimsier algorithm.
+
 ## Smell → principle quick table
 
 | You notice… | Likely principle | Fix |
@@ -59,6 +104,10 @@ extracting.
 | Must mock everything to test it | DIP / SRP | Invert a dependency; split responsibilities |
 | Can't explain the class in one sentence without "and" | SRP | Split it |
 | Clever code needing a decoder comment | KISS | Rewrite the boring way |
+| Reimplements what the codebase/stdlib/an installed dep already provides | Ladder (rungs 2–5) | Delete it; call the existing thing |
+| Guard/fix added at one caller of a shared function | Root cause | Grep all callers; fix the shared function once |
+| New file where an existing module had room | Ladder tie-breakers | Fold it into the existing file |
 
 Related: the review lenses in `.claude/skills/review/SKILL.md`, the test discipline in
-`docs/sprints/testing-anti-patterns.md`.
+`docs/sprints/testing-anti-patterns.md`, the debugging procedure in
+`.claude/skills/debug/SKILL.md`.

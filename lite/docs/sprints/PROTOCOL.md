@@ -99,7 +99,8 @@ the sprint up.
      for the right reason. (Skip only when test-first genuinely doesn't fit — exploratory spike,
      pure config, visual/UI — and say so + state how you'll verify instead. Traps:
      `docs/sprints/testing-anti-patterns.md`.)
-  3. **Implement (GREEN), then refactor** — the simplest change that passes (YAGNI/KISS,
+  3. **Implement (GREEN), then refactor** — the simplest change that passes (run the decision
+     ladder first — reuse > stdlib > platform > installed dep > one line > new code; YAGNI/KISS,
      `docs/ENGINEERING_PRINCIPLES.md`); clean up only once the test is green.
   4. **Gate before commit** — run `scripts/sprint/gate.sh`; all commands must pass. Fix
      failures before committing — do NOT commit broken code and defer.

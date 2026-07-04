@@ -14,6 +14,7 @@ Reference `AGENTS.md` / `CLAUDE.md` (if present) and any more specific local ins
 Focus on code touched in the current session or current branch diff unless the user explicitly asks for a broader pass.
 
 Do not introduce broad refactors, formatting churn, dependency changes, or unrelated edits.
+Behavior-changing fixes are out of scope — route them to `/review` or `/debug`.
 
 ## Rules
 
@@ -39,6 +40,9 @@ Do not introduce broad refactors, formatting churn, dependency changes, or unrel
    - Do not create clever dense one-liners.
    - Do not combine too many concerns into one function or component.
    - Do not remove helpful abstractions that make the code easier to understand or extend.
+   - Never simplify away the hard carve-outs: input validation at trust boundaries, error
+     handling that prevents data loss, security, accessibility, anything explicitly requested
+     (`docs/ENGINEERING_PRINCIPLES.md`).
 
 ## Workflow
 
@@ -46,4 +50,6 @@ Do not introduce broad refactors, formatting churn, dependency changes, or unrel
 2. Look for low-risk simplifications that improve clarity or consistency.
 3. Apply only changes that preserve behavior.
 4. Run focused validation when practical for the files touched (`scripts/sprint/gate.sh` covers the project's standard checks).
-5. Report significant changes and validation performed.
+5. Report significant changes and validation performed. If the diff is already lean, report
+   "already lean — no changes made" and stop; never manufacture edits to justify the
+   invocation.

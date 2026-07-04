@@ -24,3 +24,8 @@ Review the recent changes and provide:
 7. **Questions for me**: Anything you're uncertain about or made assumptions on that I should verify?
 
 Be concise. Flag problems, don't over-explain things that are fine.
+
+## Boundaries
+
+One-shot and **read-only** — this skill reports, it never edits (fixes go through
+`/review`). For any numbered section with nothing to flag, write "none found" — don't pad.

@@ -29,7 +29,7 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
 | Per-sprint git worktrees | — | ✅ |
 | Generated INDEX/ROADMAP blocks (`regen.mjs`, Mermaid dep graph) | — | ✅ |
 | INDEX.md maintenance | by hand (tiny) | regenerated |
-| PROTOCOL.md size | ~90 lines | ~230 lines |
+| PROTOCOL.md size | ~165 lines | ~400 lines |
 
 Start lite. Upgrade later with `/bootstrap-project --upgrade` (requires an empty
 `in-progress/`); the tiers share frontmatter shape, so the full tooling picks up existing
@@ -37,10 +37,13 @@ sprint files as-is.
 
 ## Layout
 
-- `lite/` — complete, self-sufficient payload. Always copied.
-- `full-overlay/` — copied on top for the full tier. Overwrites exactly three files
+- `lite/` — the complete base payload **shared by both tiers** (a lite install is exactly
+  this; a full install starts from it — so everything here, e.g.
+  `docs/ENGINEERING_PRINCIPLES.md`, ships with full too). Always copied.
+- `full-overlay/` — **full-tier additions and overrides only**, copied on top of `lite/`.
+  Overwrites exactly three files
   (`docs/sprints/PROTOCOL.md`, `.claude/skills/sprint/SKILL.md`, `docs/sprints/INDEX.md`)
-  and adds the scripts + `ROADMAP.md`.
+  and adds the agents, scripts, `ORCHESTRATION.md` + `ROADMAP.md`.
 - `bootstrap/SKILL.md` — the installer skill. Symlink it:
   `ln -s "$(pwd)/bootstrap" ~/.claude/skills/bootstrap-project`
 - `template.config.json` — the placeholder manifest the bootstrap skill reads.
