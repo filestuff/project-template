@@ -22,7 +22,8 @@ against the code — its premises are claims to check, not facts to transcribe.
    citation: the file exists, the symbol exists at (or near) the cited lines, and
    any cited API/library usage matches the version actually installed (check the
    dependency manifest/lockfile when a versioned API is cited). Fix drifted
-   citations in place.
+   citations in place. If `docs/sprints/PLANNING_LEARNINGS.md` exists in the repo
+   root, read it — don't repeat past brief gaps.
 2. **Contract drift.** For each `depends_on` sprint that landed after this sprint's
    `plan_date`: compare this sprint's **Consumes** entries against the dependency's
    landed code and its done-file's **Produces** section. Update Consumes and any
@@ -32,7 +33,9 @@ against the code — its premises are claims to check, not facts to transcribe.
    exact paths (new|modified — no bare globs), a Reference to the most similar
    existing file, an Interface with `file:line`, Setup, Changes, and acceptance
    criteria that state an observable difference. Verify the Testing section names
-   a real test file to follow.
+   a real test file to follow. Changes text must be executable as written —
+   "appropriate error handling", "as needed", "similar to X" are gaps to fill,
+   not instructions.
 4. **Touches correction.** Recompute `touches:` from the (possibly changed) Files
    lists plus tokens from `scripts/sprint/claims-tokens.json` and likely doc-sync
    targets; edit the frontmatter to match.
@@ -41,11 +44,14 @@ against the code — its premises are claims to check, not facts to transcribe.
    questions — apply PROTOCOL.md Phase 1's qualifying bar (real tradeoffs only;
    nothing answerable by reading the file or the code). Resolve for yourself
    anything with a single reasonable answer and record it in Pre-Sprint Decisions
-   as a `(wave)` entry.
+   as a `(wave)` entry. Mark a recommended option per question (one-line why + the
+   stake if wrong).
 6. **Doc drift.** Do the tag-scoped, DOC_HEALTH-gated read from PROTOCOL.md Phase 1.
    Record findings in a `<!-- PLAN NOTES -->` block at the end of the sprint file —
    do NOT fix other docs; the execution agent applies fixes on its branch.
-7. **Certify.** When duties 1–6 leave the file meeting the readiness bar:
+7. **Certify.** First run the pre-mortem: as the executor that follows you, name
+   the likeliest PLAN_GAP in this file and fix it. Then, when duties 1–6 leave the
+   file meeting the readiness bar:
    `node <repo-root>/scripts/sprint/frontmatter.mjs set <sprint-file> plan_date $(date +%F)`.
    If the sprint is NOT certifiable (scope too vague to deepen, premise invalidated,
    should be split), leave `plan_date` alone and say so in your verdict.
@@ -68,6 +74,6 @@ VERDICT: READY | READY_WITH_QUESTIONS | NOT_READY <reason> | SPLIT_SUGGESTED <ho
 TOUCHES: unchanged | +<added> / −<removed>
 STALENESS: <n> findings fixed (one line each; "none")
 CONTRACT_DRIFT: none | <S-UP: what changed — how Consumes was updated / needs decision>
-QUESTIONS: D-A "<question>" [options] (one line each; "none")
+QUESTIONS: D-A "<question>" [options; rec: <opt> — <why>] (one line each; "none")
 CROSS_SPRINT: none | <signal — e.g. "needs edits to a file claimed by S-MMM" or "shared foundation: all wave members touch X">
 ```

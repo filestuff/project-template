@@ -4,6 +4,42 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.2.0] - 2026-07-10
+
+- `/plan` gained a scope gate (Phase 2 step 1): before cutting sprints it runs the
+  decision ladder over each major piece (cut deliverables that rebuild existing
+  capability), routes deferrable work to `docs/TODOS.md`, flags complexity smells
+  (a sprint touching >8 files, or >2 new services/stores/frameworks in the plan,
+  forces one reduce-or-proceed question), and checks completeness (new artifacts
+  must include their build/publish/deploy story or an explicit Out of Scope owner).
+- `/plan` gained a blocking exit gate before its commit: a coverage map proving
+  every source-plan requirement landed in a sprint (orphans and ghost sprints block),
+  a placeholder scan over generated sprint bodies ("appropriate", "as needed",
+  "similar to S-NNN" are gaps), and a Produces/Consumes signature-consistency check.
+  Sprint cutting also gained a boundary test (a reviewer could accept one sprint
+  while rejecting its neighbor) and a >~10-sprints phasing smell.
+- `/sprint plan`'s readiness checklist gained two items in both tiers: **no
+  placeholders** (every Changes/Interface text executable as written) and a
+  **fresh-reader pre-mortem** (re-read the file as an executor with zero
+  conversation context; find and fix the likeliest gap before certifying). The
+  `sprint-planner` wave agent applies the same bar.
+- New planning feedback loop: brief failures (an executor PLAN_GAP in full tier, a
+  mid-sprint stop caused by a stale/thin brief in lite) append one line to
+  `docs/sprints/PLANNING_LEARNINGS.md` (created lazily, capped at 20 entries), and
+  `/sprint plan` + the wave planner read it before planning — briefs stop failing
+  the same way twice.
+- Sprint files gained a `## Context` section (SPRINT_TEMPLATE.md): source plan path,
+  originating task IDs, and the source plan's global constraints copied verbatim —
+  the sprint file is the executor's entire brief, so constraints must travel with it.
+  Existing sprint files without the section remain valid; no backfill needed.
+- Decision-ready Open Questions now carry a recommended option, a one-line why, and
+  the stake if wrong (template comment, `sprint-planner` question harvest + return
+  format, wave decision round).
+- The decision ladder (`docs/ENGINEERING_PRINCIPLES.md`) gained two tie-breakers:
+  reversible over locked-in, and small blast radius.
+- All changes are to managed files — `/template-upgrade`'s three-way merge applies
+  them and your local customizations survive as usual. No migrations.
+
 ## [1.1.0] - 2026-07-04
 
 - `docs/ENGINEERING_PRINCIPLES.md` now opens with a 7-rung decision ladder run

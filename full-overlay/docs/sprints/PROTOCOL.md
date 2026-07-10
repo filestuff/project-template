@@ -254,6 +254,9 @@ already done by the planning pass — see `ORCHESTRATION.md` Step 2.)
 - **Blockers/ambiguity:** do NOT guess or skip — ask via AskUserQuestion with concrete
   alternatives. If a deliverable turns out unnecessary, ask whether to skip and update the
   sprint file. Hit an unexpected bug or failing test? Use `/debug` — root-cause before fixing.
+  If the stop was caused by a brief gap (stale premise, missing file, unevaluable criterion),
+  log one line in `docs/sprints/PLANNING_LEARNINGS.md` after resolving it (create if absent;
+  newest 20 entries — a doc-sync target: claim the file if editing it mid-sprint, full tier).
 - **Deferred work:** anything descoped or discovered-but-not-done goes to `docs/TODOS.md`
   with a backlink to this sprint — not into a comment, not into thin air. (`docs/TODOS.md`
   edits are doc-sync targets; claim the file if editing it mid-sprint.)

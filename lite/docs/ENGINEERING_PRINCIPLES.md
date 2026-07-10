@@ -27,6 +27,10 @@ When two options land on the same rung, tie-break with:
 - Deletion over addition.
 - Boring over clever.
 - Fewest files possible.
+- Reversible over locked-in — prefer the choice you can undo (feature flag, adapter,
+  additive migration) when rungs tie.
+- Small blast radius — prefer the change whose failure stays contained to its feature
+  over one that can break neighbors.
 
 ## YAGNI — You Aren't Gonna Need It
 

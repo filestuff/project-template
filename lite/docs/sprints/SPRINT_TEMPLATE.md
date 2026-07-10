@@ -36,6 +36,17 @@ touches: []
 <!-- Deliverables are numbered in execution order. Claude executes 1, then 2, etc.
      If two deliverables are independent, say so in their description. -->
 
+## Context
+
+<!-- Populated by /plan (or by hand for standalone sprints): source plan path +
+     originating task IDs, and the source plan's GLOBAL constraints that bind this
+     sprint — copied verbatim, not paraphrased. This file is the executor's entire
+     brief; a constraint living only in the source plan is invisible to it.
+     "— none" is a valid entry for standalone sprints. -->
+
+- Source: `path/to/plan.md` (tasks: T-x, T-y) | — none
+- Binding constraints: …
+
 ## Scope
 
 ### Deliverables
@@ -142,7 +153,8 @@ touches: []
 ## Open Questions
 
 <!-- Non-obvious decisions, written DECISION-READY: each question carries 2–4
-     concrete options with their plan/touches implications. Resolved during
+     concrete options with their plan/touches implications, a recommended option
+     with a one-line why, and the stake if the choice is wrong. Resolved during
      /sprint plan (preferred — the planner has the most context) or the
      pre-sprint AskUserQuestion phase; every answer moves to Pre-Sprint
      Decisions below and the item is checked off. An unresolved question

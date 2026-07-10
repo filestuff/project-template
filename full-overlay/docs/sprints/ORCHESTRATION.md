@@ -168,7 +168,8 @@ the next checkpoint). Deepening is committed even for members that later drop �
 keeps its value and its `plan_date`.
 
 **2e — Decision round (no lock held).** Batch **all** members' questions into AskUserQuestion
-calls (≤4 questions each), labeled `S-NNN D-A: …` with the planner's options. More than ~8
+calls (≤4 questions each), labeled `S-NNN D-A: …` with the planner's options and its
+marked recommendation. More than ~8
 total questions is a planning smell — the per-planner cap is 2–3; push back rather than
 relay a quiz. `NOT_READY` / `SPLIT_SUGGESTED` verdicts surface here as defer / split /
 proceed-anyway choices — never silently drop a member (and `--drop` whatever the user
@@ -459,7 +460,10 @@ carries the full duties; the prompt carries only the per-sprint variables:
   claim, then **continue the same agent** (SendMessage). Re-dispatch a fresh `sprint-executor`
   only if the agent died (its committed work persists on the branch; tell the fresh agent to
   read `git -C <worktree> log` first).
-- **PLAN_GAP:** the brief is wrong — fix the brief, don't abandon the sprint. Re-dispatch a
+- **PLAN_GAP:** the brief is wrong — fix the brief, don't abandon the sprint. Before
+  re-dispatching, append one line to `docs/sprints/PLANNING_LEARNINGS.md` (create with a
+  one-line header if absent): `- YYYY-MM-DD S-NNN PLAN_GAP: <gap class> — <root cause in
+  one line>`; cap the file at the newest 20 entries. Then re-dispatch a
   `sprint-planner` in post-start mode against the **worktree copy** of the in-progress file
   (edits commit on the sprint branch); run `claims.mjs add` under the lock for any touches
   growth it reports (mirror in the branch copy); run a mini decision round if it raises

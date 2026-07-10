@@ -91,7 +91,9 @@ Populate a backlog sprint with implementation-ready detail (Files w/ new|modifie
 **Reference** to the most similar existing file, Interface contract w/ file:line, Setup,
 Changes, testable Acceptance criteria), ordered in execution sequence; populate Technical
 Details, Testing (pattern reference), Dependencies, Risks, Open Questions; update
-`story_points` if scope reveals different complexity.
+`story_points` if scope reveals different complexity. If
+`docs/sprints/PLANNING_LEARNINGS.md` exists, read it first — it lists how past briefs
+failed; don't repeat those gaps.
 
 **Readiness checklist** — all must hold before certifying:
 
@@ -104,6 +106,13 @@ Details, Testing (pattern reference), Dependencies, Risks, Open Questions; updat
 4. Every acceptance criterion states an observable difference — not "works correctly".
 5. Testing names an existing test file to follow, or states why test-first doesn't fit and
    how the deliverable is verified instead.
+6. **No placeholders**: every deliverable's Changes/Interface text is executable as
+   written — "appropriate error handling", "as needed", "similar to deliverable N"
+   are gaps, not instructions. Name the handling, the values, the exact difference.
+7. **Fresh-reader pre-mortem**: re-read the file as an executor with zero conversation
+   context. Name the likeliest gap that would force a mid-sprint stop-and-ask (missing
+   premise, unstated constraint, criterion you can't evaluate) — and fix it. Any
+   decision that still lives only in this conversation goes into Pre-Sprint Decisions now.
 
 All pass → set `plan_date:` to today and commit `sprint: plan S-NNN — [name]`. Any fail →
 leave `plan_date: null`, still commit the partial progress, and report what's missing.

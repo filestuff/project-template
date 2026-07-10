@@ -149,7 +149,9 @@ Changes, testable Acceptance criteria), ordered in execution sequence; populate 
 Details, Testing (pattern reference), Dependencies, Risks, Open Questions; update
 `story_points` if scope reveals different complexity. **Required**: populate `touches:`
 from the Files lists you just wrote (plus tokens from `claims-tokens.json` and likely
-doc-sync targets) — `/sprint start` verifies rather than re-derives it.
+doc-sync targets) — `/sprint start` verifies rather than re-derives it. If
+`docs/sprints/PLANNING_LEARNINGS.md` exists, read it first — it lists how past briefs
+failed; don't repeat those gaps.
 
 **Readiness checklist** — all must hold before certifying:
 
@@ -164,6 +166,14 @@ doc-sync targets) — `/sprint start` verifies rather than re-derives it.
 5. Testing names an existing test file to follow, or states why test-first doesn't fit and
    how the deliverable is verified instead.
 6. `touches:` is populated per the Required rule above.
+7. **No placeholders**: every deliverable's Changes/Interface text is executable as
+   written — "appropriate error handling", "as needed", "similar to deliverable N"
+   are gaps, not instructions. Name the handling, the values, the exact difference.
+8. **Fresh-reader pre-mortem**: re-read the file as a wave executor with zero
+   conversation context. Name the likeliest gap that would make it return PLAN_GAP
+   (missing premise, unstated constraint, criterion it can't evaluate) — and fix it.
+   Any decision that still lives only in this conversation goes into Pre-Sprint
+   Decisions now.
 
 All pass → `node scripts/sprint/frontmatter.mjs set <file> plan_date "$(date +%F)"`. Any
 fail → leave `plan_date: null` and report what's missing (still commit partial progress).

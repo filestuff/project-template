@@ -38,10 +38,23 @@ split.
 
 ### Phase 2: Sprint Breakdown
 
-1. **Identify natural sprint boundaries.** Foundation/infra first; independent features
+1. **Scope-gate the plan (quick pass, not a re-review).**
+   - Run the decision ladder (`docs/ENGINEERING_PRINCIPLES.md`) over each major piece:
+     what does the codebase / stdlib / platform / an installed dep already do? A
+     deliverable that rebuilds existing capability is cut or rewritten to reuse it.
+   - Flag deferrable work: anything not needed for the plan's goal goes to
+     `docs/TODOS.md` with a backlink — not into a sprint. Also check `docs/TODOS.md`
+     for deferred items this plan should absorb.
+   - **Complexity smell**: any single sprint shaping up to touch >8 files, or the plan
+     introducing >2 new services/stores/frameworks overall, triggers one mandatory
+     reduce-or-proceed AskUserQuestion before cutting continues.
+   - **Completeness**: is this the full version or a shortcut? A new artifact (package,
+     service, pipeline) includes its build/publish/deploy story as a deliverable — or
+     an explicit Out of Scope entry naming who owns it.
+2. **Identify natural sprint boundaries.** Foundation/infra first; independent features
    parallelizable; DB/schema before features; integration/eval last. Each sprint completable
    in ≤ ~2 weeks. Respect any build order the source plan locks in.
-2. **Cut for parallelism.** The aim is sprints that *parallel agents* can run at the same time:
+3. **Cut for parallelism.** The aim is sprints that *parallel agents* can run at the same time:
    - Prefer **vertical slices that own disjoint file regions** so two sprints never edit the
      same files — disjoint `touches:` is exactly what makes concurrent execution safe (full
      tier). If a file is shared by several features, extract it into its own foundation sprint.
@@ -50,11 +63,15 @@ split.
      *against the agreed signature* instead of waiting for the blocker to land.
    - Keep each sprint cohesive — don't over-split into chatter, and don't collapse independent
      features into one mega-sprint.
-3. **Confirm boundaries via AskUserQuestion** — present the proposed split as a numbered list
+   - **Boundary test**: a reviewer could accept one sprint while rejecting its
+     neighbor. If rejecting sprint B necessarily reopens sprint A, the seam is wrong.
+4. **Confirm boundaries via AskUserQuestion** — present the proposed split as a numbered list
    with goals + the dependency chain, calling out which sprints are meant to run in parallel;
-   ask whether to merge/split/reorder.
-4. **Assign story points** (Fibonacci 1/2/3/5/8/13; 13 → consider splitting).
-5. **Determine dependencies** between new sprints and against existing backlog items.
+   ask whether to merge/split/reorder. A breakdown of more than ~10 sprints is a scope
+   smell — offer a phased split (a ship-first tranche now; later tranches seeded as
+   backlog with `depends_on`).
+5. **Assign story points** (Fibonacci 1/2/3/5/8/13; 13 → consider splitting).
+6. **Determine dependencies** between new sprints and against existing backlog items.
 
 **Red flags — don't rationalize past these:**
 - "I'll just put it all in one sprint." A mega-sprint can't be parallelized and hides
@@ -70,6 +87,11 @@ For each sprint, starting at S-{highest+1}, create a file from
 `docs/sprints/SPRINT_TEMPLATE.md` in `docs/sprints/backlog/` and populate:
 - **Frontmatter**: sprint ID, `status: backlog`, goal, a concise `short:` label,
   `depends_on`, `blocks`, `tags`, `story_points`.
+- **Context** (top of body): the source plan's path + this sprint's originating task
+  IDs, and every global constraint from the source plan that binds this sprint (stack
+  pins, perf budgets, compatibility promises) — copied **verbatim**, not paraphrased.
+  The sprint file is the executor's entire brief; a constraint that lives only in the
+  source plan is invisible to it.
 - **Deliverables** (execution order): Files (new|modified), Reference implementation,
   Interface contract (file:line where code exists), Setup, Changes, Acceptance criteria.
   Apply YAGNI — only the deliverables the plan actually needs (`docs/ENGINEERING_PRINCIPLES.md`).
@@ -97,9 +119,6 @@ wave assignment. If two sprints you intended to run in parallel land in differen
 their claims overlap, re-cut the seam (or extract the shared file into a foundation sprint) and
 re-run. The waves output is the ground truth for what can actually run concurrently.
 
-If the source plan numbers its tasks, tie each generated sprint back to its originating task
-IDs in the sprint body so traceability is preserved.
-
 If a breakdown surfaces a standalone architectural decision, offer to record it via
 `/adr create`.
 
@@ -107,7 +126,20 @@ If a breakdown surfaces a standalone architectural decision, offer to record it 
 
 Update `docs/sprints/INDEX.md` (full tier: run `node scripts/sprint/regen.mjs`, which also
 regenerates the ROADMAP graph, critical path, and **Parallel Waves** block; lite: edit the
-Backlog table by hand). Commit all new sprints + index:
+Backlog table by hand).
+
+**Exit gate (blocking, before the commit)** — re-read what you generated:
+- **Coverage map**: table mapping every source-plan requirement/task → the sprint ID
+  that delivers it. An orphan requirement (no sprint) or ghost sprint (no requirement)
+  blocks the commit — fix the cut, or record the deferral in `docs/TODOS.md`. Include
+  the map in the Parallelization Summary.
+- **Placeholder scan**: search the generated sprint bodies for hedges — "appropriate",
+  "as needed", "handle errors properly", "similar to S-NNN". Each is a gap: fill it or
+  shape it into a decision-ready Open Question.
+- **Contract consistency**: every Consumes entry cites its dependency's Produces with
+  the identical signature. Mismatch = fix before commit.
+
+Commit all new sprints + index:
 `sprint: create S-{first}..S-{last} — [feature] (from /plan)`.
 Full tier: make this commit on `main` under the lock (`scripts/sprint/lock.sh`).
 
