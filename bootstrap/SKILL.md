@@ -34,7 +34,9 @@ Detect before asking:
 Then ask (grouped): project name; one-line description; tier (lite = one sprint at a time,
 no extra machinery; full = parallel agents, file claims, lock, worktrees); confirm gate
 commands; the cheap **pre-push** checks (the fast subset of CI to run on every push — propose
-the project's quickest structural/lint checks; "none" → a gitleaks-only pre-push gate); full
+the project's quickest structural/lint checks, mirroring the CI steps that most often go red,
+e.g. lint/typecheck/unit; catching a failure locally is the top CI-cost lever, since a red push
+re-runs the whole workflow. "none" → a gitleaks-only pre-push gate); full
 tier only — where the schema/migrations live (for `claims-tokens.json`; "none" is valid).
 
 ## Step 2: Preflight
@@ -228,6 +230,12 @@ Any failure: fix before offering the commit.
      mid-publish abort.
    - **`schedule:` triggers** → report the cron cadence and a rough monthly-minutes estimate,
      suggest the user consider reducing cadence — informational only, no patch.
+   - **Redundant full builds** → if two or more jobs each run a full app build (`next build`,
+     `vite build`, etc.) on the same push/PR trigger, OR a full build duplicates one the repo's
+     deploy platform (Vercel/Netlify/Render/Fly) already runs on that same trigger, report it
+     with a rough per-run minutes estimate. Informational only, no patch — dropping a build can
+     remove real coverage (a second engine catches errors the other misses; a CI gate fails
+     louder and earlier than a failed deploy). Surface the trade-off; let the user decide.
 4. Rationale: the sprint ledger commits carry `[skip ci]` and waves batch pushes, but code
    pushes and pre-existing unfiltered workflows still burn minutes — this audit is the
    downstream repo's defense. Patches are proposed and confirmed via the grouped question
