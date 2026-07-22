@@ -5,7 +5,8 @@ description: >
   with dependency checking, file claims, doc validation, and lock-serialized
   lifecycle commits on main. Use when asked to "start a sprint", "complete a
   sprint", "show the board", "create a sprint", "plan a sprint", "what's next",
-  "sprint roadmap", or "run/fan out a parallel wave".
+  "sprint roadmap", "run/fan out a parallel wave", or "run a serial train of
+  sprints".
 argument-hint: "[command] [sprint-id]"
 allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion EnterWorktree ExitWorktree Task"
 ---
@@ -46,7 +47,7 @@ backlog sprint.
 | `start.sh S-NNN --touches "…" [--wave W-<id>]` | The whole locked start transaction on main (refuses a sprint reserved by another wave) | 2 = overlap/claimed/foreign-reserved, 75 = busy |
 | `unstart.sh S-NNN [--reason "…"]` | The locked inverse: in-progress → backlog (keeps `plan_date`/`touches:`/decisions; clears `wave:`) | 2 = not in flight / branch has commits, 75 = busy |
 | `reserve-wave.sh S-A S-B… \| --drop W-<id> S-NNN \| --release W-<id>` | Locked wave reservation: mints `W-<id>`, writes `wave:` into backlog members so concurrent sessions can't take them or overlapping claims | 2 = member gone/reserved/overlap, 75 = busy |
-| `merge-sprint.sh prepare\|land\|finish\|abort <branch>` | The locked completion (merge queue) | 3 = re-run gate, 4 = author docs, 75 = busy |
+| `merge-sprint.sh prepare\|land\|finish\|abort <branch>` | The locked completion (merge queue); `land`/`finish` take `--sprints S-A,S-B,…` in train mode to land a whole segment in one merge + one completion commit | 3 = re-run gate, 4 = author docs, 75 = busy |
 | `frontmatter.mjs get\|set` | Read/write sprint frontmatter fields round-trip-safely | |
 | `push-main.sh [--wait <secs>]` | Lock-guarded batch push of deferred wave commits; guards against a `[skip ci]` HEAD hiding a code push | 75 = busy |
 
@@ -225,6 +226,33 @@ CI-triggering push — and verify CI green against it (PROTOCOL Phase 3 Step 6, 
 whole wave; see ORCHESTRATION Step 6 for red-run recovery). Recompute the next wave. Multiple
 waves can run from different terminal sessions — see ORCHESTRATION.md "Running waves from
 multiple sessions" and "Push policy" for the full checkpoint contract.
+
+### `/sprint train S-A S-B … [--every K] [--fast-gate]`
+
+Drive a **serial chain** of sprints — members that cannot parallelize (each depends on the
+previous, or their `touches:` overlap) — through one long-lived worktree with batched
+landings. **Defer to `docs/sprints/ORCHESTRATION.md` "The serial train"** — it is the source
+of truth for this command. In short: you are the master (this session, strongest model);
+subagents dispatch by agent name only (pinned `model: sonnet`). Validate the user's ordered
+chain (deps in `done/` or earlier in the chain; warn on pairs that would parallelize —
+suggest `/sprint wave`), **reserve the whole chain** (`reserve-wave.sh` — the wave id doubles
+as the train id; checkpoint P1, `[skip ci]`), **plan all members upfront** (wave Step 2
+verbatim: parallel `sprint-planner` fan-out in a planning worktree, then ONE batched decision
+round for the entire chain — after it the train runs unattended), create **one** train
+worktree/branch (`train-W-<id>`), then loop strictly serially: `start.sh S-i --wave W-<id>
+--no-push` + a ledger-sync merge into the branch, a mechanical delta-refresh screen, one
+fresh `sprint-executor` per sprint (pass the predecessor's boundary SHA as the reviewer
+diff base), advise BLOCKED executors yourself (SendMessage continuation; decision-ladder
+auto-answers recorded as `(train, auto)`). Every K sprints (default 3, `--every K` to
+change) and at the end: a **checkpoint** — `merge-sprint.sh prepare` → `land --sprints
+S-A,S-B,…` → apply pre-drafted docs → `finish --sprints … --no-push` → `push-main.sh` (the
+segment's single CI push) → verify CI green once. Hard stops only: 2nd PLAN_GAP on one
+sprint, red checkpoint CI not cured by one fix, a NOT_READY delta verdict, or an
+irreversible tradeoff. `--fast-gate` (opt-in) relaxes per-commit gates to the cheap static
+subset with the full gate mandatory at sprint boundaries. Ledger:
+`.claude/sprint-orchestration/W-<id>/train-progress.md` (per-sprint boundary SHAs). Close:
+post-train `reviewer` over merged main, release leftovers, final `push-main.sh` + CI verify,
+remove the train worktree/branch.
 
 ## No Arguments
 

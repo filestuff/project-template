@@ -49,6 +49,11 @@ neither take the sprint nor claim overlapping files. `start.sh` refuses a sprint
 a different wave (pass `--wave W-<id>` for your own); `unstart.sh` clears the field. See
 `ORCHESTRATION.md` "Running waves from multiple sessions".
 
+Chains that *cannot* parallelize (each member depends on the previous, or their `touches:`
+overlap) have their own orchestration mode: the **serial train** (`/sprint train`) — one
+long-lived worktree/branch for the whole chain, landings batched every few sprints into one
+merge + one CI push. See `ORCHESTRATION.md` "The serial train".
+
 ### File claims (`touches:`)
 
 Each in-flight sprint declares the files it expects to modify in its frontmatter:
@@ -357,7 +362,10 @@ the sprint branch.
    carry a trailing ` [skip ci]`; this completion commit never does — it is the HEAD of a
    code-bearing push, and a skip marker there would skip CI for the landed code. In wave mode
    the orchestrator passes `--no-push` and this push defers to the wave's checkpoint push
-   (ORCHESTRATION "Push policy"); solo completions push immediately as above.
+   (ORCHESTRATION "Push policy"); solo completions push immediately as above. In train mode,
+   Steps 4–6 run once **per checkpoint segment**, not per sprint: `land`/`finish` take
+   `--sprints S-A,S-B,…` and one lock transaction lands the whole segment
+   (ORCHESTRATION "The serial train").
 
 If anything goes wrong mid-land: `merge-sprint.sh abort S-NNN-kebab-name` rolls `main` back
 to the recorded pre-land SHA and releases the lock.

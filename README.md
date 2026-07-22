@@ -5,7 +5,9 @@ repo a sprint kanban (`/sprint`), plan breakdown (`/plan`), Architecture Decisio
 (`/adr`), a documentation staleness tracker (`DOC_HEALTH.md`), versioned in-place upgrades
 (`/template-upgrade`), and — in the full tier — the machinery for **multiple Claude Code
 agents running sprints in parallel** (`/sprint wave`: file claims, a main-branch mutex,
-per-sprint git worktrees, planner/executor subagents, generated kanban/roadmap blocks).
+per-sprint git worktrees, planner/executor subagents, generated kanban/roadmap blocks) and
+for **driving serial sprint chains autonomously** (`/sprint train`: one worktree for the
+whole chain, front-loaded decisions, landings batched into one CI push per few sprints).
 
 **Requirements:** [Claude Code](https://claude.com/claude-code) (the skills and agents are
 Claude Code skills), git, bash. Node ≥ 18 for the full tier and for `/template-upgrade`
@@ -38,6 +40,10 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
    subagent per sprint — each in its own git worktree, serialized on `main` by a lock.
    Brief failures feed back into `docs/sprints/PLANNING_LEARNINGS.md` so plans stop failing
    the same way twice.
+5. **Full tier, in series**: when the backlog is a chain that can't parallelize,
+   `/sprint train S-A S-B …` runs it autonomously — all decisions batched upfront, one
+   executor at a time in a single shared worktree, landings checkpointed every 3 sprints
+   into one merge + one CI run (instead of one per sprint).
 
 The sprint file is the executor's **entire brief** — every gate above exists to make that
 single file sufficient for an agent (or developer) with zero conversation context.
@@ -55,6 +61,7 @@ single file sufficient for an agent (or developer) with zero conversation contex
 | Planning gates (scope challenge, coverage map, readiness checklist, `PLANNING_LEARNINGS.md` loop) | ✅ | ✅ |
 | Concurrent sprints | one at a time | many, in parallel agents |
 | Wave orchestration (`/sprint wave` + `sprint-planner`/`sprint-executor`/`wave-planner` agents) | — | ✅ |
+| Serial-train orchestration (`/sprint train`: shared worktree, batched CI checkpoints) | — | ✅ |
 | File claims (`touches:` + `claims.mjs`) | — | ✅ |
 | Main-branch mutex (`lock.sh`) | — | ✅ |
 | Per-sprint git worktrees | — | ✅ |

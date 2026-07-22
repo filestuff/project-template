@@ -7,13 +7,18 @@
 #       main into the sprint branch. Exit 0 = branch already up to date;
 #       exit 3 = merge brought changes — re-run the commit gate in the
 #       worktree, then call `land`.
-#   merge-sprint.sh land <branch>
-#       Merge --no-ff into main, move the sprint file in-progress/ → done/,
+#   merge-sprint.sh land <branch> [--sprints S-A,S-B,…]
+#       Merge --no-ff into main, move the sprint file(s) in-progress/ → done/,
 #       flip status/end_date, rotate the archive, regenerate. Exits 4: author
 #       the semantic docs on main (docs/DOC_HEALTH.md row + History; INDEX.md
 #       Done-table row + header narrative; ROADMAP.md narrative), then `finish`.
-#   merge-sprint.sh finish <branch> [--no-push]
+#   merge-sprint.sh finish <branch> [--sprints S-A,S-B,…] [--no-push]
 #       Verify, commit `sprint: complete S-NNN`, push, release the lock.
+#
+# --sprints (train mode — ORCHESTRATION.md "The serial train"): the branch carries
+# several sprints and its name (`train-W-<id>`) has no sprint id, so land/finish
+# take the roster explicitly and land them in ONE merge + ONE completion commit.
+# Without the flag, behavior is unchanged (single sprint, id from the branch name).
 #   merge-sprint.sh abort <branch>
 #       Roll main back to the pre-land SHA, abort in-progress merges, release.
 #
@@ -33,16 +38,37 @@ MAIN=${SPRINT_MAIN_BRANCH:-main}
 CMD=${1:?usage: merge-sprint.sh prepare|land|finish|abort <branch>}
 BRANCH=${2:?usage: merge-sprint.sh $CMD <branch>}
 shift 2
-NO_PUSH=0 WAIT=300
+NO_PUSH=0 WAIT=300 SPRINTS_CSV=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --no-push) NO_PUSH=1; shift ;;
   --wait) WAIT=$2; shift 2 ;;
+  --sprints) SPRINTS_CSV=$2; shift 2 ;;
   *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
 done
 
-SPRINT=$(echo "$BRANCH" | grep -oE '^S-[0-9]+')
+# Roster for land/finish: --sprints wins; otherwise the single id in the branch
+# name. prepare/abort never use it, so an id-less branch is fine there.
+SPRINTS=()
+if [[ -n $SPRINTS_CSV ]]; then
+  IFS=',' read -r -a SPRINTS <<<"$SPRINTS_CSV"
+  for s in "${SPRINTS[@]}"; do
+    [[ $s =~ ^S-[0-9]+$ ]] || { echo "--sprints: '$s' is not an S-NNN id" >&2; exit 1; }
+  done
+else
+  SPRINT=$(echo "$BRANCH" | grep -oE '^S-[0-9]+' || true)
+  if [[ -n $SPRINT ]]; then SPRINTS=("$SPRINT"); fi
+fi
+CSV=""
+if [[ ${#SPRINTS[@]} -gt 0 ]]; then CSV=$(IFS=,; echo "${SPRINTS[*]}"); fi
+FINISH_ARGS="${SPRINTS_CSV:+ --sprints $SPRINTS_CSV}"
+
+require_roster() {
+  [[ ${#SPRINTS[@]} -gt 0 ]] ||
+    { echo "cannot derive a sprint id from branch '$BRANCH' — pass --sprints S-A,S-B,…" >&2; exit 1; }
+}
+
 LABEL="land-$BRANCH"
 GENERATED=(docs/sprints/INDEX.md docs/sprints/ROADMAP.md docs/DOC_HEALTH.md)
 
@@ -51,10 +77,10 @@ worktree_path() {
     /^worktree /{wt=$2} /^branch /{if ($2==b) print wt}'
 }
 
-sprint_title() { # $1 = absolute sprint file path
+sprint_title() { # $1 = sprint id, $2 = absolute sprint file path
   local t
-  t=$(sed -n "s/^# $SPRINT: //p" "$1" | head -1)
-  echo "${t:-$SPRINT}"
+  t=$(sed -n "s/^# $1: //p" "$2" | head -1)
+  echo "${t:-$1}"
 }
 
 case "$CMD" in
@@ -112,23 +138,35 @@ prepare)
 
 land)
   "$SELF_DIR/lock.sh" continue "$LABEL" || { echo "run prepare first (it takes the lock)" >&2; exit 75; }
+  require_roster
   git -C "$ROOT" merge-base --is-ancestor "$MAIN" "$BRANCH" ||
     { echo "$BRANCH does not contain $MAIN — run prepare first" >&2; exit 1; }
 
   git -C "$ROOT" rev-parse HEAD >"$LOCK_DIR/preland-sha"
 
   shopt -s nullglob
-  files=("$ROOT/docs/sprints/in-progress/$SPRINT-"*.md)
-  [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one in-progress file for $SPRINT on main, found ${#files[@]}" >&2; exit 1; }
-  BASENAME=$(basename "${files[0]}")
-  TITLE=$(sprint_title "${files[0]}")
+  # Resolve every roster member's in-progress file before mutating anything.
+  BASENAMES=() TITLES=()
+  for s in "${SPRINTS[@]}"; do
+    files=("$ROOT/docs/sprints/in-progress/$s-"*.md)
+    [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one in-progress file for $s on main, found ${#files[@]}" >&2; exit 1; }
+    BASENAMES+=("$(basename "${files[0]}")")
+    TITLES+=("$(sprint_title "$s" "${files[0]}")")
+  done
 
-  git -C "$ROOT" merge --no-ff "$BRANCH" -m "sprint: merge $SPRINT — $TITLE"
+  if [[ ${#SPRINTS[@]} -eq 1 ]]; then
+    git -C "$ROOT" merge --no-ff "$BRANCH" -m "sprint: merge ${SPRINTS[0]} — ${TITLES[0]}"
+  else
+    git -C "$ROOT" merge --no-ff "$BRANCH" -m "sprint: merge $CSV"
+  fi
 
-  git -C "$ROOT" mv "docs/sprints/in-progress/$BASENAME" "docs/sprints/done/$BASENAME"
-  DONE_FILE="$ROOT/docs/sprints/done/$BASENAME"
-  node "$SELF_DIR/frontmatter.mjs" set "$DONE_FILE" status done
-  node "$SELF_DIR/frontmatter.mjs" set "$DONE_FILE" end_date "$(date +%F)"
+  for ((i = 0; i < ${#SPRINTS[@]}; i++)); do
+    BASENAME=${BASENAMES[i]}
+    git -C "$ROOT" mv "docs/sprints/in-progress/$BASENAME" "docs/sprints/done/$BASENAME"
+    DONE_FILE="$ROOT/docs/sprints/done/$BASENAME"
+    node "$SELF_DIR/frontmatter.mjs" set "$DONE_FILE" status done
+    node "$SELF_DIR/frontmatter.mjs" set "$DONE_FILE" end_date "$(date +%F)"
+  done
 
   # Archive rotation: keep the 10 most recent (highest-numbered) in done/.
   done_files=()
@@ -143,28 +181,31 @@ land)
 
   node "$SELF_DIR/regen.mjs" >/dev/null
 
-  echo "landed $SPRINT onto main (uncommitted lifecycle changes staged)."
+  echo "landed $CSV onto main (uncommitted lifecycle changes staged)."
   echo "NOW author the semantic docs in the PRIMARY checkout ($ROOT):"
   echo "  - docs/DOC_HEALTH.md: Last Verified / By Sprint rows + History entry"
-  echo "  - docs/sprints/INDEX.md: Done-table row for $SPRINT + '_Last updated_' header line"
+  echo "  - docs/sprints/INDEX.md: Done-table row(s) for $CSV + '_Last updated_' header line"
   echo "  - docs/sprints/ROADMAP.md: narrative (Status / In progress / unblocked notes)"
-  echo "  (waves: apply the pre-drafted .claude/sprint-orchestration/W-*/$SPRINT-docs-draft.md if one exists — the lock is held; keep this pause short)"
-  echo "then run: merge-sprint.sh finish $BRANCH"
+  echo "  (waves/trains: apply any pre-drafted .claude/sprint-orchestration/W-*/S-NNN-docs-draft.md — the lock is held; keep this pause short)"
+  echo "then run: merge-sprint.sh finish $BRANCH$FINISH_ARGS"
   exit 4
   ;;
 
 finish)
   "$SELF_DIR/lock.sh" continue "$LABEL" || { echo "lock not held for $LABEL — was land run?" >&2; exit 75; }
+  require_roster
 
   shopt -s nullglob
   # A low-numbered sprint can be archived by the land-step rotation immediately (keeps the 10
   # highest-numbered in done/), so look in done/ AND done/archive/.
-  files=("$ROOT/docs/sprints/done/$SPRINT-"*.md "$ROOT/docs/sprints/done/archive/$SPRINT-"*.md)
-  [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one done/ file for $SPRINT (checked done/ + done/archive/)" >&2; exit 1; }
-  BASENAME=$(basename "${files[0]}")
-  REL_FILE="${files[0]#"$ROOT"/}"
-  TITLE=$(sprint_title "${files[0]}")
-  grep -q '^status: done' "${files[0]}" || { echo "${files[0]} is not status: done" >&2; exit 1; }
+  REL_FILES=() TITLES=()
+  for s in "${SPRINTS[@]}"; do
+    files=("$ROOT/docs/sprints/done/$s-"*.md "$ROOT/docs/sprints/done/archive/$s-"*.md)
+    [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one done/ file for $s (checked done/ + done/archive/)" >&2; exit 1; }
+    grep -q '^status: done' "${files[0]}" || { echo "${files[0]} is not status: done" >&2; exit 1; }
+    REL_FILES+=("${files[0]#"$ROOT"/}")
+    TITLES+=("$(sprint_title "$s" "${files[0]}")")
+  done
 
   git -C "$ROOT" add -u -- docs/sprints docs/DOC_HEALTH.md
   if git -C "$ROOT" diff --cached --name-only | grep -q ' 2\.'; then
@@ -174,23 +215,29 @@ finish)
   # No [skip ci] here: this commit is the HEAD of a push whose range contains the
   # land merge (real code); GitHub checks the push HEAD, so a marker here would
   # skip CI for landed code.
-  git -C "$ROOT" commit --no-verify -q -m "sprint: complete $SPRINT — $TITLE"
+  if [[ ${#SPRINTS[@]} -eq 1 ]]; then
+    git -C "$ROOT" commit --no-verify -q -m "sprint: complete ${SPRINTS[0]} — ${TITLES[0]}"
+  else
+    git -C "$ROOT" commit --no-verify -q -m "sprint: complete $CSV"
+  fi
 
   # grep without -q: -q exits on first match and SIGPIPEs git-show, which trips pipefail
-  # into a false FATAL. REL_FILE (not a hardcoded done/ path) so an archived file resolves.
-  git -C "$ROOT" show "HEAD:$REL_FILE" | grep '^status: done' >/dev/null ||
-    { echo "FATAL: committed sprint file is not status: done — inspect HEAD" >&2; exit 1; }
+  # into a false FATAL. REL_FILES entries (not hardcoded done/ paths) so archived files resolve.
+  for rel in "${REL_FILES[@]}"; do
+    git -C "$ROOT" show "HEAD:$rel" | grep '^status: done' >/dev/null ||
+      { echo "FATAL: committed sprint file $rel is not status: done — inspect HEAD" >&2; exit 1; }
+  done
 
   if [[ $NO_PUSH -eq 0 ]]; then
     git -C "$ROOT" push origin "$MAIN" ||
       { echo "push failed — local commits intact, lock kept; resolve and re-run finish" >&2; exit 1; }
   else
-    echo "push deferred — wave orchestrator: run scripts/sprint/push-main.sh after the wave's LAST completion and verify CI on that push (PROTOCOL Phase 3 Step 6)"
+    echo "push deferred — orchestrator: run scripts/sprint/push-main.sh at the wave's/train's next checkpoint and verify CI on that push (PROTOCOL Phase 3 Step 6)"
   fi
 
   rm -f "$LOCK_DIR/preland-sha"
   "$SELF_DIR/lock.sh" release-label "$LABEL"
-  echo "completed $SPRINT — $MAIN at $(git -C "$ROOT" rev-parse HEAD)"
+  echo "completed $CSV — $MAIN at $(git -C "$ROOT" rev-parse HEAD)"
   echo "cleanup: ExitWorktree {action: \"keep\"} · git worktree remove .claude/worktrees/$BRANCH · git branch -d $BRANCH"
   ;;
 

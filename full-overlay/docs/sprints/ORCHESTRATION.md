@@ -1,7 +1,9 @@
 # Sprint Orchestration Protocol (full tier)
 
 How a session fans a **wave** of sprints out to parallel subagents and integrates the
-results, for {{PROJECT_NAME}}. The `/sprint wave` command defers to this file. This is the
+results, for {{PROJECT_NAME}} — and how it drives a serial **train** of dependent sprints
+through one worktree with batched landings (see "The serial train" below). The
+`/sprint wave` and `/sprint train` commands defer to this file. This is the
 **full tier only** — it relies on the worktree + file-claims + main-lock machinery described in
 `PROTOCOL.md` ("Parallel Sprints"). Read that first; this document only adds the orchestration
 layer on top.
@@ -408,6 +410,152 @@ a BLOCKED executor inside a workflow surfaces its question in the workflow resul
 advisor loop answers it via a fresh dispatch (pointing at the branch's committed work) instead
 of a continuation. When the Workflow tool is absent, the Agent-tool dispatch described in
 Steps 2b/4 is the primary path — the two are interchangeable per wave.
+
+## The serial train (`/sprint train`)
+
+A **train** is the serial dual of a wave, for a chain of sprints that cannot parallelize —
+each depends on the previous, or their `touches:` overlap, so `claims.mjs waves` degenerates
+to one sprint per wave. Running such a chain as N solo lifecycles (or N one-member waves)
+repeats the full ceremony per sprint: worktree + branch + deps install, a three-phase merge
+queue, a CI-triggering push, a CI-green wait. A train collapses that: **one reservation for
+the whole chain, one long-lived worktree/branch carrying all code, fresh executors dispatched
+one at a time, and landings batched every K sprints** (default K=3) into one `--no-ff` merge,
+one push, one CI run — N sprints cost ceil(N/K) CI runs instead of N.
+
+Everything not stated in this section is inherited from the wave protocol verbatim: the
+division of labor (master never reads code, diffs, or sprint bodies), Push policy and the
+`[skip ci]` convention, worktree mode (`git -C`, never EnterWorktree), the advisor loop,
+Executor children, the durable ledger, Roles and models (all subagents pinned
+`model: sonnet` — dispatch by agent name only), multi-session rules, and Failure handling.
+
+What is structurally different from a wave:
+
+- **One branch, boundary SHAs.** Deliverable commits for every member accumulate on
+  `train-W-<id>` (`S-NNN:`-prefixed). After each member's last commit, record its
+  **boundary SHA** (`git -C <wt> rev-parse HEAD`) in the ledger — that is the per-sprint
+  attribution, bisect grain, and rollback point; no per-sprint branches or tags.
+- **Ledger-sync merges.** Each `start.sh --no-push` commit lands on `main`, not the branch —
+  so after every start, run `git -C <wt> merge main -m "train: sync ledger after start
+  S-NNN"`. Conflict-free by construction: between checkpoints `main` moves only via
+  lifecycle/generated-doc commits the branch never edits (PROTOCOL invariant). This also
+  keeps checkpoint `prepare` a near-no-op in single-session operation.
+- **Board truth vs train truth.** `in-progress/` on `main` stays authoritative for claims:
+  between checkpoints up to K members legitimately sit there (accurate — claims held, code
+  unlanded). The `in-progress/ → done/` moves happen **only at the checkpoint land** — moving
+  earlier would let another session's dependency check treat unlanded code as satisfied.
+  Inside your own train, an earlier member with a recorded DONE boundary counts as a
+  satisfied dependency for the next member; PROTOCOL Phase 1's "in flight by a parallel
+  agent" warning does not apply to your own train's members.
+- **The reservation is longer-lived.** The whole chain's `touches:` are held against other
+  sessions for the train's full duration — inherent to serial work; expect to starve
+  overlapping foreign work longer than a wave would.
+- **Autonomy contract.** The confirmation at Step T1 authorizes the whole chain. Between
+  sprints the master proceeds without asking; executor OPTIONS are run through the decision
+  ladder (`docs/ENGINEERING_PRINCIPLES.md`) before any escalation, and auto-answers are
+  recorded as `- YYYY-MM-DD (train, auto): [decision] — [rationale]` in Pre-Sprint Decisions
+  plus one line in train-progress.md. The **only four hard stops**: (1) a second PLAN_GAP on
+  the same sprint; (2) a red checkpoint CI not cured by one targeted fix; (3) a delta-refresh
+  `NOT_READY`/`SPLIT_SUGGESTED` verdict; (4) an irreversible / architectural / security /
+  spend tradeoff the ladder cannot rank.
+- **Gate economics.** Default unchanged: full `gate.sh` before every deliverable commit.
+  Opt-in `--fast-gate` (the user must ask for it): executors run only the cheap static
+  subset per commit, with the full `gate.sh` mandatory at every sprint boundary (DONE
+  requires it green) and at checkpoint `prepare` exit-3 re-runs. Tradeoff: mid-sprint
+  commits may be broken — intra-sprint bisect degrades; boundaries stay green.
+
+### Train protocol
+
+**T1 — Compute + confirm the train.** `node scripts/sprint/claims.mjs waves`; take the
+user's ordered chain S-A … S-N. Validate: every member's `depends_on` is in `done/` or
+earlier in the chain; skip members `(in flight)` or reserved by a foreign wave; **warn** on
+adjacent members that are dep-independent and touches-disjoint ("these would parallelize —
+consider `/sprint wave`"); ask before exceeding ~10 members. Present per member: ID, goal,
+points, plan status, open-question count — and the autonomy contract: "after the decision
+round I run unattended; planned stops are checkpoints every K sprints and the four
+hard-stop events."
+
+**T2 — Reserve the whole chain.** `bash scripts/sprint/reserve-wave.sh S-A … S-N` — the
+wave id doubles as the train id, and this is checkpoint P1 (the train's one origin-sync
+push, `[skip ci]`, zero CI). Create `.claude/sprint-orchestration/W-<id>/` with
+`train-progress.md` + `train-plan.md` (same roles as wave-progress/wave-plan; progress
+lines are `S-NNN | started | DONE boundary=<sha> | report=… | landed@ckpt-n`).
+
+**T3 — Plan the train upfront.** Wave Step 2 (2a–2f) verbatim over **all** members: one
+planning worktree, parallel `sprint-planner` fan-out, constraints check, locked deepen
+commit, **one batched decision round covering the entire chain** (the single biggest
+autonomy lever), locked decisions commit. A CROSS_SPRINT "shared foundation" signal in a
+serial chain usually means "make it the first car" — reorder rather than reshape.
+`NOT_READY` / `SPLIT_SUGGESTED` members are dropped (`reserve-wave.sh --drop`) or the chain
+re-cut **now** — never mid-train.
+
+**T4 — Open the train.** `start.sh S-A --wave W-<id> --no-push` →
+`git worktree add .claude/worktrees/train-W-<id> -b train-W-<id> main` (once; never
+EnterWorktree) → setup (env files, one `{{PACKAGE_MANAGER}}` install). Record the base SHA
+in train-progress.md.
+
+**T5 — The sprint loop** (strictly serial, per member i):
+
+1. **Start + sync** (i > 1): `start.sh S-i --wave W-<id> --no-push`, then the ledger-sync
+   merge into the branch.
+2. **Delta refresh (mechanical, master-only — no code reads).** `planStatus` is blind
+   mid-train (dep `end_date`s flip only at checkpoints), so screen staleness yourself: read
+   the predecessor's report's *deviations-from-brief* and Produces lines, and grep S-i's
+   brief citations against the predecessor's `touches:`. Clean → dispatch. Dirty → one
+   `sprint-planner` in **post-start mode against the worktree copy** (commits
+   `S-i: revise plan — train delta` on the branch); auto-decide its new questions via the
+   ladder where an option is recommended + reversible + small-blast-radius, else hard stop.
+3. **Dispatch** one fresh `sprint-executor` (by name — pinned sonnet) with the standard
+   execution prompt plus the **diff-base SHA** (the predecessor's boundary): its reviewer
+   child diffs `<base>..HEAD`, not `main...HEAD`.
+4. **Advise** BLOCKED / NEEDS_CLAIM via the advisor loop (SendMessage continuation;
+   `claims.mjs add S-i <path> --no-push` under the lock — S-i is in `in-progress/`, so the
+   precondition holds).
+5. **On DONE:** evidence check from the report (citations only — never the diff); record the
+   boundary SHA + status line in train-progress.md; pre-draft S-i's semantic docs into
+   `W-<id>/S-i-docs-draft.md`.
+6. **Checkpoint due** (i ≡ 0 mod K, last member, or any pause/abort)? → T6, then continue
+   the loop.
+
+**T6 — Checkpoint land** (one lock transaction, at a sprint boundary only):
+`merge-sprint.sh prepare train-W-<id>` (exit 3 → full `gate.sh` in the worktree, lock held)
+→ `merge-sprint.sh land train-W-<id> --sprints S-A,S-B,…` (one `--no-ff` merge; per-sprint
+done-moves + status/end_date flips; one regen; exit 4) → apply the segment's pre-drafted
+docs (seconds) → `merge-sprint.sh finish train-W-<id> --sprints S-A,S-B,… --no-push` →
+`bash scripts/sprint/push-main.sh` — **the checkpoint's single CI-triggering push** — →
+verify CI green once (PROTOCOL Phase 3 Step 6). Update train-progress.md (`landed@ckpt-n`).
+**Red CI:** the segment's boundary SHAs narrow a first-parent bisect to one sprint in ≤2
+steps; fix on `main` under the lock, `push-main.sh` again (never raw `git push`), re-verify.
+Not cured by one targeted fix → hard stop; the batched land gives a clean escape hatch —
+`git revert -m 1 <segment-merge-sha>` undoes the whole segment in one commit (surface to the
+user first).
+
+**T7 — Close the train.** After the final segment: one fresh `reviewer` over merged `main`
+(hand it all report paths; small fixes on `main` under the lock ride the final push, larger
+ones become follow-up sprints) → `reserve-wave.sh --release W-<id>` for never-started
+members → final `push-main.sh` + CI verify →
+`git worktree remove .claude/worktrees/train-W-<id> && git branch -d train-W-<id>` →
+recompute `claims.mjs waves`, report the board, stop.
+
+### Train failure handling (deltas from the wave table)
+
+- **PLAN_GAP:** as in waves (learnings line, planner post-start repair on the branch,
+  re-dispatch) — but a **second PLAN_GAP on the same sprint is a hard stop**, not another
+  repair loop.
+- **Mid-train abort (user or hard stop):** rescue any partial member
+  (`git branch rescue/S-i <branch-tip>`), reset the train branch to the last recorded
+  boundary, run an immediate T6 checkpoint over the DONE prefix (always landable —
+  boundaries are gate-green), then `unstart.sh S-i` for the aborted member. Caution:
+  `unstart.sh`'s deliverable-commit guard keys off an `S-NNN-*` branch name and cannot see
+  the train branch — check for non-disposable partial work yourself before unstarting.
+  Release leftovers (`--release`), final `push-main.sh`, keep the ledger dir for the
+  post-mortem. Never leave local `main` ahead of `origin`.
+- **Executor dies:** fresh dispatch pointed at
+  `git -C <wt> log <boundary>..HEAD` — committed work persists on the branch.
+- **Compaction:** train-progress.md + `git log` + `/sprint board`; never re-dispatch a
+  member with a recorded boundary.
+- **Foreign session lands mid-train:** surfaces at checkpoint `prepare` (exit 3 → full gate
+  re-run under the lock) and at the delta refresh; use `--wait 900` on contention, never
+  steal the lock silently.
 
 ---
 

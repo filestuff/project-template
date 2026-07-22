@@ -4,6 +4,29 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.3.0] - 2026-07-22
+
+- **New `/sprint train S-A S-B … [--every K] [--fast-gate]` (full tier):** an autonomous
+  runner for serial sprint chains — members that cannot parallelize because each depends
+  on the previous or their `touches:` overlap. Where running such a chain sprint-by-sprint
+  costs one worktree, one merge-queue transaction, one push, and one CI run *per sprint*,
+  a train uses one reservation, one long-lived worktree/branch for the whole chain, and
+  batches landings every K sprints (default 3) into one merge + one push + one CI run —
+  N sprints cost ceil(N/K) CI runs. All planning and user decisions are front-loaded into
+  a single batched round; the master then drives one `sprint-executor` at a time
+  unattended, stopping only for four hard-stop events (repeat PLAN_GAP, uncured red CI,
+  a not-ready re-plan verdict, or an irreversible tradeoff). Full protocol in
+  `docs/sprints/ORCHESTRATION.md` "The serial train".
+- `merge-sprint.sh land`/`finish` accept `--sprints S-A,S-B,…` to land several sprints
+  from one branch in a single `--no-ff` merge and a single completion commit (train
+  checkpoints). Without the flag, behavior is unchanged — solo and wave flows are
+  untouched.
+- `sprint-executor` and `sprint-planner` agent definitions gained train-mode notes
+  (shared-worktree etiquette, reviewer diff-base SHA, delta refresh against branch
+  state); PROTOCOL.md cross-references the train from "Parallel Sprints" and Phase 3.
+- All changes are to managed files — `/template-upgrade`'s three-way merge applies them.
+  No migrations.
+
 ## [1.2.0] - 2026-07-10
 
 - `/plan` gained a scope gate (Phase 2 step 1): before cutting sprints it runs the

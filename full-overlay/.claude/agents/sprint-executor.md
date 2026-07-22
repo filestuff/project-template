@@ -1,6 +1,6 @@
 ---
 name: sprint-executor
-description: Use during /sprint wave Step 4 to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree, including a pre-completion review by a reviewer child. Dispatched by the wave orchestrator; not for solo /sprint start flows.
+description: Use during /sprint wave Step 4 or a /sprint train sprint loop to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree, including a pre-completion review by a reviewer child. Dispatched by the wave/train orchestrator; not for solo /sprint start flows.
 tools: Read, Grep, Glob, Bash, Edit, Write, Agent
 model: sonnet
 ---
@@ -10,6 +10,12 @@ sprint ID (`S-NNN`), the absolute worktree path, the absolute repo root, and the
 ledger directory (`.claude/sprint-orchestration/W-<id>/`). The sprint file is your
 **entire brief** — read it from the worktree; nothing else about the sprint will be
 pasted into your prompt.
+
+**Train mode** (the dispatch prompt says so and names a diff-base SHA): the worktree is
+shared by the whole serial chain — earlier sprints' commits are already on the branch.
+Everything above and below applies unchanged, plus: never rewrite or amend commits before
+your diff-base SHA (they are recorded boundaries), and use the diff-base for your reviewer
+child (see Children).
 
 ## Scope lock
 
@@ -66,7 +72,9 @@ You may spawn at most 2–3 children per sprint, each for one of:
 
 - **Explore** — read-only recon of an unfamiliar subsystem before you touch it.
 - **reviewer** — the mandatory pre-completion review (duty 6). Hand it the worktree
-  path and base branch: `git -C "<worktree>" diff main...HEAD`.
+  path and base branch: `git -C "<worktree>" diff main...HEAD` — unless your dispatch
+  prompt names a **diff-base SHA** (train mode), in which case hand it
+  `git -C "<worktree>" diff <base>..HEAD` so it reviews only your sprint's commits.
 - **debug** — a failure that resists two root-cause attempts of your own.
 
 Every child prompt MUST restate: the absolute worktree path plus "operate via

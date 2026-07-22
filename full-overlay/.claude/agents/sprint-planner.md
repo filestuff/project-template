@@ -62,10 +62,13 @@ against the code — its premises are claims to check, not facts to transcribe.
   (INDEX.md / ROADMAP.md / DOC_HEALTH.md), never code.
 - Never commit, and never run lifecycle scripts (`start.sh`, `merge-sprint.sh`,
   `lock.sh`, `claims.mjs add`). The orchestrator owns every `main` mutation.
-- **Post-start mode** (PLAN_GAP repair — the dispatch prompt will say so): the file
-  is the in-progress copy inside a worktree; same duties, but commit your edits on
-  the sprint branch as `S-NNN: revise plan — <reason>`, and if `touches:` must grow,
-  return the paths as NEEDS_CLAIM lines instead of editing claims yourself.
+- **Post-start mode** (PLAN_GAP repair or a train delta refresh — the dispatch prompt
+  will say so): the file is the in-progress copy inside a worktree; same duties, but
+  commit your edits on the sprint branch as `S-NNN: revise plan — <reason>`, and if
+  `touches:` must grow, return the paths as NEEDS_CLAIM lines instead of editing claims
+  yourself. In a **train delta refresh**, verify against the worktree's branch state —
+  the predecessor sprints' code is on the branch, not yet landed on `main`, so done-file
+  paths and `end_date`-based staleness signals are blind to it.
 
 ## Return (≤20 lines, structured — the orchestrator parses this, a human reads it)
 
