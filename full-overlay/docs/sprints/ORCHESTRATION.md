@@ -28,11 +28,14 @@ file paths.
 | **Planning subagent** (`sprint-planner`, one per unplanned/stale sprint) | Verify + deepen ONE sprint file against current `main`: staleness, contract drift, deliverable detail, `touches:`, decision-ready questions; set `plan_date` | its assigned sprint file only (in the wave's planning worktree — the orchestrator commits) |
 | **Wave-planning subagent** (`wave-planner`, conditional) | Cross-sprint constraint check when planner reports signal it (shared foundations, contract misalignment) | the wave's wave-plan.md only |
 | **Execution subagent** (`sprint-executor`, one per sprint) | PROTOCOL **Phase 2 only** — verify the brief, implement deliverables test-first, gate, commit atomically, run a `reviewer` child before DONE — inside its assigned worktree; may spawn read-only Explore/debug children (see Executor children) | its worktree branch only + its report file |
+| **Doc-sync subagent** (`doc-sync`, one per completing sprint) | Step 5 completion pass: resolve the diff base (`git -C <worktree> merge-base HEAD main`), run PROTOCOL Phase 3's doc-sync pass and `/adr check` over the diff | nothing — docs/ADR signal only |
 | **Reviewer subagent** (`reviewer`) | Per-sprint branch review (as the executor's child) and the post-wave broad review over merged `main` | nothing — findings list only |
 
-Every subagent role has an agent definition under `.claude/agents/` with `model: sonnet`
-pinned — **never dispatch a definition-less generic subagent in a wave**; there is no
-spawn-time model override, so it would silently inherit the master's (expensive) model.
+Every subagent role — including `doc-sync` — has an agent definition under `.claude/agents/`
+with `model: sonnet` pinned — **never dispatch a definition-less generic subagent in a
+wave, and never pass a spawn-time `model` override**: the Agent tool accepts one, so skipping
+the pin (or passing `model` explicitly) lets a subagent silently inherit the master's
+(expensive) model.
 
 The orchestrator's primary checkout stays parked on `main` (it is the lifecycle ledger). It
 **never** enters a worktree — it creates them with `git worktree add` and hands the path to a
@@ -367,11 +370,13 @@ sprint bodies (diff-dependent duties — doc sync, `/adr check`, review — are 
 to fresh subagents; the master only adjudicates their structured returns) — that is what
 keeps it alive across a whole wave.
 
-All wave subagents — `sprint-planner`, `sprint-executor`, `wave-planner`, `reviewer` — are
-pinned `model: sonnet` in their agent definitions. There is **no spawn-time model override**,
-so the definition is the only thing standing between a wave and N executors silently running
-on the master's model: always dispatch by agent name, never as a generic subagent. Executors'
-children inherit the same tier via their own definitions (`reviewer`) or the dispatch default.
+All wave subagents — `sprint-planner`, `sprint-executor`, `wave-planner`, `reviewer`, `doc-sync` —
+are pinned `model: sonnet` in their agent definitions. The Agent tool DOES accept a spawn-time
+`model` override, so the pin alone is not a guarantee: always dispatch by agent name, never
+as a generic subagent, and never pass a `model` parameter when dispatching wave agents —
+otherwise N executors silently run on the master's model tier and multiply the wave's cost.
+Executors' children inherit the same tier via their own definitions (`reviewer`) or the dispatch
+default.
 
 ### Running waves from multiple sessions
 
