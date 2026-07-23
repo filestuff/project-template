@@ -17,6 +17,68 @@ repo that installed this template, not for template maintainers.
   solo-sprint claims still block exactly as before. Both files are managed —
   `/template-upgrade`'s three-way merge applies them. No migrations.
 
+The fixes below also shipped in v1.3.1 (they landed via PR #1 before the version
+bump) but were originally omitted from this entry; added retroactively.
+
+- **Fix (both tiers): update checks no longer go permanently stale for the most
+  active users.** `update-check.sh` rewrote its cache timestamp on every run,
+  including cache hits — anyone running `/sprint` more often than the 1-hour TTL
+  kept sliding the window forward and never hit the network again, so new template
+  versions were never surfaced. The cache is now written only after a real fetch.
+- **Fix (both tiers): update checks and upgrades now work when the template repo is
+  private.** `update-check.sh` and `upgrade.mjs` fetched over
+  `raw.githubusercontent.com` / codeload tarballs, which serve nothing for private
+  repos without a token. Both now use a single bounded shallow `git fetch` that
+  reuses the same credential helper or SSH auth you cloned with. This also removes
+  the unbounded `ls-remote` call, satisfying the update check's "must never block"
+  contract by construction.
+- **Fix (both tiers): template-shipped `deny`/`ask` permissions are no longer
+  dropped on upgrade.** `upgrade.mjs`'s settings merge unioned only
+  `permissions.allow`; `deny` and `ask` entries shipped by the template were
+  silently discarded, weakening the permission posture of upgraded repos. All three
+  lists are unioned now.
+- **Fix (both tiers): a failing `git merge-file` during upgrade no longer
+  masquerades as conflicts.** `git merge-file` exits negative on error (e.g. binary
+  input), which was recorded as "255 conflict(s)", journaled, and the renderHash
+  bumped — your local file silently kept its old content while the manifest claimed
+  the new render had been applied. Such errors now abort the apply with exit 1.
+- **Fix (both tiers): `/plan`'s batch sprint-creation commit now carries
+  `[skip ci]`.** It was the one ledger-only commit missing the marker, costing a CI
+  run per plan despite the push-batching policy.
+- **Fix (full tier): worktree paths containing spaces no longer break
+  `merge-sprint.sh`.** The porcelain output parse truncated the worktree path at
+  the first space, so any checkout under a path like `~/Documents/Claude Code/…`
+  failed `prepare` with "no worktree found".
+- **Fix (full tier): a merge that fails before starting is no longer misdiagnosed
+  as merge conflicts.** A `git merge` that aborts up front (dirty worktree, etc.)
+  leaves no `MERGE_HEAD`; `merge-sprint.sh`'s conflict path then ran
+  `git commit --no-edit` with no merge in progress and died cryptically under
+  `set -e` with the lock still held. The no-`MERGE_HEAD` case is now detected and
+  the real worktree status reported.
+- **Fix (full tier): post-wave review no longer passes on an empty diff.** "Review
+  the merged wave result on main" had no defined base — after landing, the
+  reviewer's branch-vs-main diff was empty, so wave reviews trivially passed.
+  `reserve-wave.sh` now records a `pre_wave_sha` (as a trailer on the reservation
+  commit), ORCHESTRATION.md Step 6 and the train checkpoints dispatch the reviewer
+  with it, and the `reviewer` agent refuses to pass an empty default-branch diff.
+- **Fix (full tier): the master's doc-sync/ADR duties no longer contradict its
+  context diet.** ORCHESTRATION.md Step 5.2 required the master to run doc sync and
+  the `/adr` check — both diff work — while the context-diet rule forbids the
+  master from reading diffs, so different sessions resolved the conflict
+  differently. Diff-dependent duties are now delegated to a short-lived subagent
+  whose ≤10-line return the master adjudicates, and a new `doc-sync` agent
+  definition backs the role (previously dispatched by name with no definition,
+  violating ORCHESTRATION's own invariant).
+- **Fix (full tier, docs): corrected ORCHESTRATION.md's stale model-override
+  premise.** It claimed the Agent tool has no spawn-time model override — it does
+  (the `model` parameter). The cost-control guidance now states the real rule:
+  never pass `model` when dispatching wave agents.
+- PR #1 also added the template's first regression test suite (`tests/`, covering
+  the update-check cache, the settings union, the merge-file error path, and the
+  worktree path parse). Tests live only in the template repo and do not ship
+  downstream. All shipped changes above are to managed files — `/template-upgrade`'s
+  three-way merge applies them. No migrations.
+
 ## [1.3.0] - 2026-07-22
 
 - **New `/sprint train S-A S-B … [--every K] [--fast-gate]` (full tier):** an autonomous
