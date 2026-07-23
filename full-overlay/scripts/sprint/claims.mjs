@@ -150,6 +150,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--sprint") args.sprint = argv[++i];
     else if (argv[i] === "--paths") args.paths = argv[++i].split(",").map((s) => s.trim());
+    else if (argv[i] === "--wave") args.wave = argv[++i];
     else if (argv[i] === "--no-push") args.noPush = true;
     else args.positional.push(argv[i]);
   }
@@ -181,6 +182,10 @@ if (cmd === "check") {
   const overlaps = [];
   for (const other of claimHolders(root)) {
     if (args.sprint && other.sprint === args.sprint) continue;
+    // Same-wave holders are our own train/wave roster: a reservation guards
+    // against OTHER sessions, and a serial train's members legitimately share
+    // claims (they run one at a time on one branch). Foreign waves still block.
+    if (args.wave && other.wave === args.wave) continue;
     for (const theirClaim of other.touches ?? [])
       for (const myClaim of mine)
         if (claimsOverlap(myClaim, theirClaim))

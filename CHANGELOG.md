@@ -4,6 +4,19 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.3.1] - 2026-07-23
+
+- **Fix (full tier): serial trains could not start their second sprint.** `start.sh
+  S-NNN --wave W-…` ran the file-claims overlap check without telling it which wave
+  the caller belongs to, so the train's own reservation (which legitimately covers
+  every member of the chain) was treated as a foreign blocking claim — every train
+  member after the first failed with exit 2, contradicting ORCHESTRATION.md's serial-train
+  protocol and start.sh's own contract ("a sprint reserved by a *different* wave refuses
+  to start"). `claims.mjs check` now accepts `--wave` and skips claim holders in the
+  caller's own wave/train; `start.sh` passes its `--wave` through. Foreign-wave and
+  solo-sprint claims still block exactly as before. Both files are managed —
+  `/template-upgrade`'s three-way merge applies them. No migrations.
+
 ## [1.3.0] - 2026-07-22
 
 - **New `/sprint train S-A S-B … [--every K] [--fast-gate]` (full tier):** an autonomous

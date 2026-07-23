@@ -88,7 +88,7 @@ else
   CLAIM_PATHS=$(node "$SELF_DIR/frontmatter.mjs" get "$FILE" touches | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(Array.isArray(v)?v.join(","):"")')
   [[ -n $CLAIM_PATHS ]] || { echo "no claims: pass --touches or populate touches: in $BASENAME first" >&2; exit 2; }
 fi
-node "$SELF_DIR/claims.mjs" check --paths "$CLAIM_PATHS" --sprint "$SPRINT" || exit $?
+node "$SELF_DIR/claims.mjs" check --paths "$CLAIM_PATHS" --sprint "$SPRINT" ${WAVE_ARG:+--wave "$WAVE_ARG"} || exit $?
 
 # The transaction: move, flip frontmatter, write claims, regen, commit.
 MUTATING=1
