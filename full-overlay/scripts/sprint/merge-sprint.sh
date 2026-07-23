@@ -73,8 +73,10 @@ LABEL="land-$BRANCH"
 GENERATED=(docs/sprints/INDEX.md docs/sprints/ROADMAP.md docs/DOC_HEALTH.md)
 
 worktree_path() {
+  # substr, not $2: worktree paths may contain spaces ("Claude Code", ...).
+  # "worktree " is 9 chars, "branch " is 7.
   git worktree list --porcelain | awk -v b="refs/heads/$BRANCH" '
-    /^worktree /{wt=$2} /^branch /{if ($2==b) print wt}'
+    /^worktree /{wt=substr($0,10)} /^branch /{if (substr($0,8)==b) print wt}'
 }
 
 sprint_title() { # $1 = sprint id, $2 = absolute sprint file path
