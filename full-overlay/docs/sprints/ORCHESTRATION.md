@@ -113,8 +113,9 @@ can neither reserve them nor reserve/start anything whose `touches:` overlap the
 
 - Exit 2 (member gone / already reserved / claims overlap): another session moved first —
   recompute Step 1 and re-confirm a smaller or different roster.
-- Record the wave id, then create the wave's ledger dir (see Durable progress ledger):
-  `.claude/sprint-orchestration/W-<id>/`.
+- Record the wave id and the printed `pre_wave_sha` (also committed as a trailer on this
+  reservation commit — Step 6 needs it as the post-wave review's diff base), then create the
+  wave's ledger dir (see Durable progress ledger): `.claude/sprint-orchestration/W-<id>/`.
 - A member that later leaves the roster is released at that moment with
   `reserve-wave.sh --drop W-<id> S-NNN`; the whole reservation is released at wave end (or
   abandonment) with `--release W-<id>`.
@@ -297,7 +298,14 @@ A sprint that lands changes (`prepare` exit 3) re-runs the gate in its worktree 
 After the wave's sprints have all landed on `main`, dispatch one **`reviewer`** subagent
 (fresh context) over the merged wave result on `main` — a fresh reviewer catches cross-sprint
 integration issues per-sprint review can't. Hand it the wave's report-file paths as a starting
-map. The master does **not** perform this review itself: it adjudicates the returned findings
+map. Hand it the diff base explicitly, too: `pre_wave_sha`, recorded at Step 1.5 from
+`reserve-wave.sh`'s output and committed as a trailer on the wave's reservation commit — the
+reviewer runs `git diff <pre_wave_sha>...HEAD` on `main`. Without an explicit base the
+"merged result on main" is an empty diff and the review silently approves nothing. The same
+rule applies to train checkpoint reviews (base = `pre_wave_sha` from the train's T2
+reservation — see "Close the train" below).
+
+The master does **not** perform this review itself: it adjudicates the returned findings
 list — fix now (small), spin a follow-up sprint, or accept — and records the disposition in
 wave-plan.md.
 
@@ -476,7 +484,8 @@ hard-stop events."
 
 **T2 — Reserve the whole chain.** `bash scripts/sprint/reserve-wave.sh S-A … S-N` — the
 wave id doubles as the train id, and this is checkpoint P1 (the train's one origin-sync
-push, `[skip ci]`, zero CI). Create `.claude/sprint-orchestration/W-<id>/` with
+push, `[skip ci]`, zero CI). Record the printed `pre_wave_sha` alongside the wave id — T7's
+close-the-train review uses it as the diff base. Create `.claude/sprint-orchestration/W-<id>/` with
 `train-progress.md` + `train-plan.md` (same roles as wave-progress/wave-plan; progress
 lines are `S-NNN | started | DONE boundary=<sha> | report=… | landed@ckpt-n`).
 
@@ -530,8 +539,10 @@ Not cured by one targeted fix → hard stop; the batched land gives a clean esca
 user first).
 
 **T7 — Close the train.** After the final segment: one fresh `reviewer` over merged `main`
-(hand it all report paths; small fixes on `main` under the lock ride the final push, larger
-ones become follow-up sprints) → `reserve-wave.sh --release W-<id>` for never-started
+(hand it all report paths, plus `pre_wave_sha` from T2's reservation as the explicit diff
+base — `git diff <pre_wave_sha>...HEAD` on `main`; same rule as the wave review in Step 6, an
+implicit branch-vs-main diff on `main` is empty; small fixes on `main` under the lock ride
+the final push, larger ones become follow-up sprints) → `reserve-wave.sh --release W-<id>` for never-started
 members → final `push-main.sh` + CI verify →
 `git worktree remove .claude/worktrees/train-W-<id> && git branch -d train-W-<id>` →
 recompute `claims.mjs waves`, report the board, stop.

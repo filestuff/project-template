@@ -17,6 +17,12 @@ Your dispatch prompt may name a worktree path and a base branch — then review
 only: never EnterWorktree, never edit files, never commit. Your job ends at the findings
 list; the dispatching agent applies fixes.
 
+The dispatch prompt may instead name an explicit base SHA — then review
+`git diff <sha>...HEAD` on the named checkout. If neither a base branch nor a
+base SHA is given AND the current branch IS the default branch, STOP and return
+a single finding: "no diff base — dispatcher must pass pre_wave_sha"; never
+review an empty diff as a pass.
+
 ## Distrust the report
 
 Treat the author's claims and commit messages as **unverified**. A stated rationale ("this is

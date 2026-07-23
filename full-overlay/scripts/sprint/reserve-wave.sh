@@ -132,6 +132,13 @@ if [[ $MODE == reserve ]]; then
   done
 fi
 
+if [[ $MODE == reserve ]]; then
+  # Record the review base: ORCHESTRATION.md Step 6's post-wave reviewer later diffs
+  # pre_wave_sha..HEAD on main — without this, "review the merged wave result on main"
+  # has no base and produces an empty diff.
+  PRE_WAVE_SHA=$(git -C "$ROOT" rev-parse "$MAIN")
+fi
+
 node "$SELF_DIR/regen.mjs" >/dev/null
 
 REL_PATHS=(docs/sprints/INDEX.md docs/sprints/ROADMAP.md)
@@ -148,7 +155,14 @@ reserve) MSG="sprint: reserve wave $WAVE — $(IFS=,; echo "${MEMBERS[*]}") [ski
 drop)    MSG="sprint: drop ${MEMBERS[0]} from wave $WAVE [skip ci]" ;;
 release) MSG="sprint: release wave $WAVE [skip ci]" ;;
 esac
-git -C "$ROOT" commit --no-verify -q -m "$MSG" -- "${REL_PATHS[@]}"
+if [[ $MODE == reserve ]]; then
+  # pre_wave_sha lands as a commit trailer — durable (git history, survives across
+  # sessions/machines) and unambiguous: ORCHESTRATION.md Step 6 and the train chapter
+  # look it up from this reservation commit.
+  git -C "$ROOT" commit --no-verify -q -m "$MSG" -m "pre_wave_sha: $PRE_WAVE_SHA" -- "${REL_PATHS[@]}"
+else
+  git -C "$ROOT" commit --no-verify -q -m "$MSG" -- "${REL_PATHS[@]}"
+fi
 COMMITTED=1
 
 # Survival check: the committed files must carry (or have dropped) the reservation.
@@ -174,6 +188,7 @@ case "$MODE" in
 reserve)
   echo "reserved wave $WAVE: $(IFS=' '; echo "${MEMBERS[*]}") on $MAIN at $(git -C "$ROOT" rev-parse HEAD)"
   echo "wave id: $WAVE"
+  echo "pre_wave_sha: $PRE_WAVE_SHA"
   echo "ledger dir: .claude/sprint-orchestration/$WAVE/"
   ;;
 drop)    echo "dropped ${MEMBERS[0]} from wave $WAVE at $(git -C "$ROOT" rev-parse HEAD)" ;;
