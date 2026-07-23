@@ -17,8 +17,10 @@ sessions" below.
 
 The trick that makes this safe: **the orchestrator owns everything that mutates `main` or needs
 human judgment; subagents only write into files they are explicitly handed.** The orchestrator
-stays lean — it never reads sprint bodies, diffs, or code into its own context; subagents
-return short structured summaries or file paths.
+stays lean — it never reads sprint bodies, diffs, or code into its own context (diff-dependent
+duties — doc sync, `/adr check`, review — are always delegated to fresh subagents; the master
+only adjudicates their structured returns); subagents return short structured summaries or
+file paths.
 
 | Owner | Does | Touches |
 |-------|------|---------|
@@ -284,7 +286,13 @@ racing completions make all but one hit the lock ceiling (exit 75). Complete fin
    instead of re-interrogating the worktree. The check now also covers the report's **review
    section**: the reviewer child ran, Critical/Important findings were fixed or escalated,
    declined findings have recorded reasons — adjudicate that from the report; do not read the
-   diff. Then doc sync → `/adr check` → `prepare` (add `--wait 900` when another wave is live)
+   diff. Then dispatch a short-lived **doc-sync subagent** (fresh context) with the sprint's
+   worktree path: it resolves its own diff base (`git -C <worktree> merge-base HEAD main` —
+   the branch's fork point; the report contract carries no start-SHA field), runs the PROTOCOL
+   Phase 3 doc-sync pass and `/adr check` over `git diff <base>..HEAD`, and returns ≤10 lines
+   (docs drafted yes/no, ADR needed yes/no + one-line why). The master adjudicates that
+   return — it still never reads the diff itself. Then `prepare` (add `--wait 900` when
+   another wave is live)
    → `land` → apply the docs draft → `finish <branch> --no-push`. Phase 3 Step 6's CI check
    does **not** run here — `finish` deferred its push, so there is nothing to poll yet; it
    defers to checkpoint P3 in Step 6 below, which covers every sprint in the wave at once.
@@ -355,7 +363,9 @@ re-dispatched already-landed sprints — the most expensive failure mode. Keep a
 The **master** is this interactive session — assumed to run the strongest available model
 (e.g. Fable). Its judgment is spent where it is cheapest and highest-leverage: orchestrating,
 advising blocked agents, adjudicating findings lists and reports. It never reads diffs or
-sprint bodies — that is what keeps it alive across a whole wave.
+sprint bodies (diff-dependent duties — doc sync, `/adr check`, review — are always delegated
+to fresh subagents; the master only adjudicates their structured returns) — that is what
+keeps it alive across a whole wave.
 
 All wave subagents — `sprint-planner`, `sprint-executor`, `wave-planner`, `reviewer` — are
 pinned `model: sonnet` in their agent definitions. There is **no spawn-time model override**,
