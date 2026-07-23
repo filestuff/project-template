@@ -228,11 +228,14 @@ fi
 
 looks_like_version "$remote_version" || exit 0
 
-# --- 5. Write cache (always, even when reusing — refreshes the epoch) --------
-
+# --- 5. Write cache — ONLY after a real fetch. A cache hit must not refresh
+# the epoch: that turns the TTL into a sliding window, and anyone running
+# /sprint more often than the TTL would never hit the network again.
 sha_for_cache="$remote_sha"
 [ -n "$sha_for_cache" ] || sha_for_cache="-"
-echo "$now $remote_version $sha_for_cache" >"$LAST_CHECK_FILE" 2>/dev/null
+if [ "$use_cache" -ne 1 ]; then
+  echo "$now $remote_version $sha_for_cache" >"$LAST_CHECK_FILE" 2>/dev/null
+fi
 
 # --- 6. Compare (never downgrade) --------------------------------------------
 
