@@ -562,10 +562,14 @@ function cmdApply(argv) {
       try {
         execFileSync("git", ["merge-file", localPath, oldPath, newPath], { stdio: "pipe" });
       } catch (e) {
-        if (typeof e.status === "number" && e.status > 0) {
+        // git merge-file: exit 1..127 = number of conflicts; a NEGATIVE exit
+        // (error, e.g. binary input) surfaces as 128..255 and must NOT be
+        // counted as conflicts — that would journal the file and bump its
+        // renderHash while the local content silently diverges.
+        if (typeof e.status === "number" && e.status >= 1 && e.status <= 127) {
           conflictCount = e.status;
         } else {
-          die(`git merge-file failed unexpectedly for ${dest}: ${e.message}`, 1);
+          die(`git merge-file failed for ${dest} (exit ${e.status ?? "?"}): ${e.message}`, 1);
         }
       }
       if (execBit) chmodSync(localPath, 0o755);
