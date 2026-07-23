@@ -200,27 +200,24 @@ else
     [ -n "$remote_sha" ] || exit 0
     remote_version=$(git -C "$local_path" show main:VERSION 2>/dev/null | trim) || exit 0
   else
-    remote_sha=$(git ls-remote "$url" refs/heads/main 2>/dev/null | cut -f1 | trim)
-    [ -n "$remote_sha" ] || exit 0
-
-    raw_base="${TEMPLATE_RAW_BASE:-}"
-    if [ -z "$raw_base" ]; then
-      owner_repo=$(printf '%s' "$url" | node -e '
-        var url = require("fs").readFileSync(0, "utf8").trim();
-        var m = url.match(/github\.com[:/]+([^/]+)\/([^/]+?)(\.git)?\/?$/);
-        if (!m) { process.exit(1); }
-        process.stdout.write(m[1] + "/" + m[2]);
-      ' 2>/dev/null)
-      [ -n "$owner_repo" ] || exit 0
-      raw_base="https://raw.githubusercontent.com/$owner_repo"
+    # One bounded shallow fetch into a throwaway bare repo replaces the old
+    # ls-remote + raw.githubusercontent.com curl pair. Why: raw.githubusercontent
+    # serves nothing for PRIVATE repos without a token, while git fetch reuses
+    # the user's existing credential helper / SSH setup — the same auth that
+    # cloning the template needed in the first place. GIT_TERMINAL_PROMPT=0 is
+    # already exported above, so missing credentials fail silently (contract).
+    # lowSpeed*: abort when the transfer stalls (<1000 B/s for 5s) — the old
+    # ls-remote had no bound at all and a hung network stalled every /sprint.
+    fetch_tmp=$(mktemp -d 2>/dev/null) || exit 0
+    remote_version=""
+    remote_sha=""
+    if git -C "$fetch_tmp" init -q --bare 2>/dev/null &&
+      git -C "$fetch_tmp" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 \
+        fetch -q --depth=1 "$url" main 2>/dev/null; then
+      remote_sha=$(git -C "$fetch_tmp" rev-parse FETCH_HEAD 2>/dev/null | trim)
+      remote_version=$(git -C "$fetch_tmp" show FETCH_HEAD:VERSION 2>/dev/null | trim)
     fi
-
-    remote_version=$(curl -fsSL --max-time 5 "$raw_base/$remote_sha/VERSION" 2>/dev/null | trim)
-    if [ -z "$remote_version" ]; then
-      remote_version=$(curl -fsSL --max-time 5 "$raw_base/main/VERSION" 2>/dev/null | trim)
-      # sha becomes unreliable once we fall back to the main branch VERSION;
-      # keep it if we already have it, otherwise report unknown.
-    fi
+    rm -rf "$fetch_tmp" 2>/dev/null
     [ -n "$remote_version" ] || exit 0
     [ -n "$remote_sha" ] || remote_sha="-"
   fi
@@ -228,11 +225,14 @@ fi
 
 looks_like_version "$remote_version" || exit 0
 
-# --- 5. Write cache (always, even when reusing — refreshes the epoch) --------
-
+# --- 5. Write cache — ONLY after a real fetch. A cache hit must not refresh
+# the epoch: that turns the TTL into a sliding window, and anyone running
+# /sprint more often than the TTL would never hit the network again.
 sha_for_cache="$remote_sha"
 [ -n "$sha_for_cache" ] || sha_for_cache="-"
-echo "$now $remote_version $sha_for_cache" >"$LAST_CHECK_FILE" 2>/dev/null
+if [ "$use_cache" -ne 1 ]; then
+  echo "$now $remote_version $sha_for_cache" >"$LAST_CHECK_FILE" 2>/dev/null
+fi
 
 # --- 6. Compare (never downgrade) --------------------------------------------
 

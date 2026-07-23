@@ -17,8 +17,10 @@ sessions" below.
 
 The trick that makes this safe: **the orchestrator owns everything that mutates `main` or needs
 human judgment; subagents only write into files they are explicitly handed.** The orchestrator
-stays lean — it never reads sprint bodies, diffs, or code into its own context; subagents
-return short structured summaries or file paths.
+stays lean — it never reads sprint bodies, diffs, or code into its own context (diff-dependent
+duties — doc sync, `/adr check`, review — are always delegated to fresh subagents; the master
+only adjudicates their structured returns); subagents return short structured summaries or
+file paths.
 
 | Owner | Does | Touches |
 |-------|------|---------|
@@ -26,11 +28,14 @@ return short structured summaries or file paths.
 | **Planning subagent** (`sprint-planner`, one per unplanned/stale sprint) | Verify + deepen ONE sprint file against current `main`: staleness, contract drift, deliverable detail, `touches:`, decision-ready questions; set `plan_date` | its assigned sprint file only (in the wave's planning worktree — the orchestrator commits) |
 | **Wave-planning subagent** (`wave-planner`, conditional) | Cross-sprint constraint check when planner reports signal it (shared foundations, contract misalignment) | the wave's wave-plan.md only |
 | **Execution subagent** (`sprint-executor`, one per sprint) | PROTOCOL **Phase 2 only** — verify the brief, implement deliverables test-first, gate, commit atomically, run a `reviewer` child before DONE — inside its assigned worktree; may spawn read-only Explore/debug children (see Executor children) | its worktree branch only + its report file |
+| **Doc-sync subagent** (`doc-sync`, one per completing sprint) | Step 5 completion pass: resolve the diff base (`git -C <worktree> merge-base HEAD main`), run PROTOCOL Phase 3's doc-sync pass and `/adr check` over the diff | nothing — docs/ADR signal only |
 | **Reviewer subagent** (`reviewer`) | Per-sprint branch review (as the executor's child) and the post-wave broad review over merged `main` | nothing — findings list only |
 
-Every subagent role has an agent definition under `.claude/agents/` with `model: sonnet`
-pinned — **never dispatch a definition-less generic subagent in a wave**; there is no
-spawn-time model override, so it would silently inherit the master's (expensive) model.
+Every subagent role — including `doc-sync` — has an agent definition under `.claude/agents/`
+with `model: sonnet` pinned — **never dispatch a definition-less generic subagent in a
+wave, and never pass a spawn-time `model` override**: the Agent tool accepts one, so skipping
+the pin (or passing `model` explicitly) lets a subagent silently inherit the master's
+(expensive) model.
 
 The orchestrator's primary checkout stays parked on `main` (it is the lifecycle ledger). It
 **never** enters a worktree — it creates them with `git worktree add` and hands the path to a
@@ -113,8 +118,9 @@ can neither reserve them nor reserve/start anything whose `touches:` overlap the
 
 - Exit 2 (member gone / already reserved / claims overlap): another session moved first —
   recompute Step 1 and re-confirm a smaller or different roster.
-- Record the wave id, then create the wave's ledger dir (see Durable progress ledger):
-  `.claude/sprint-orchestration/W-<id>/`.
+- Record the wave id and the printed `pre_wave_sha` (also committed as a trailer on this
+  reservation commit — Step 6 needs it as the post-wave review's diff base), then create the
+  wave's ledger dir (see Durable progress ledger): `.claude/sprint-orchestration/W-<id>/`.
 - A member that later leaves the roster is released at that moment with
   `reserve-wave.sh --drop W-<id> S-NNN`; the whole reservation is released at wave end (or
   abandonment) with `--release W-<id>`.
@@ -283,7 +289,13 @@ racing completions make all but one hit the lock ceiling (exit 75). Complete fin
    instead of re-interrogating the worktree. The check now also covers the report's **review
    section**: the reviewer child ran, Critical/Important findings were fixed or escalated,
    declined findings have recorded reasons — adjudicate that from the report; do not read the
-   diff. Then doc sync → `/adr check` → `prepare` (add `--wait 900` when another wave is live)
+   diff. Then dispatch a short-lived **doc-sync subagent** (fresh context) with the sprint's
+   worktree path: it resolves its own diff base (`git -C <worktree> merge-base HEAD main` —
+   the branch's fork point; the report contract carries no start-SHA field), runs the PROTOCOL
+   Phase 3 doc-sync pass and `/adr check` over `git diff <base>..HEAD`, and returns ≤10 lines
+   (docs drafted yes/no, ADR needed yes/no + one-line why). The master adjudicates that
+   return — it still never reads the diff itself. Then `prepare` (add `--wait 900` when
+   another wave is live)
    → `land` → apply the docs draft → `finish <branch> --no-push`. Phase 3 Step 6's CI check
    does **not** run here — `finish` deferred its push, so there is nothing to poll yet; it
    defers to checkpoint P3 in Step 6 below, which covers every sprint in the wave at once.
@@ -297,7 +309,14 @@ A sprint that lands changes (`prepare` exit 3) re-runs the gate in its worktree 
 After the wave's sprints have all landed on `main`, dispatch one **`reviewer`** subagent
 (fresh context) over the merged wave result on `main` — a fresh reviewer catches cross-sprint
 integration issues per-sprint review can't. Hand it the wave's report-file paths as a starting
-map. The master does **not** perform this review itself: it adjudicates the returned findings
+map. Hand it the diff base explicitly, too: `pre_wave_sha`, recorded at Step 1.5 from
+`reserve-wave.sh`'s output and committed as a trailer on the wave's reservation commit — the
+reviewer runs `git diff <pre_wave_sha>...HEAD` on `main`. Without an explicit base the
+"merged result on main" is an empty diff and the review silently approves nothing. The same
+rule applies to train checkpoint reviews (base = `pre_wave_sha` from the train's T2
+reservation — see "Close the train" below).
+
+The master does **not** perform this review itself: it adjudicates the returned findings
 list — fix now (small), spin a follow-up sprint, or accept — and records the disposition in
 wave-plan.md.
 
@@ -347,13 +366,17 @@ re-dispatched already-landed sprints — the most expensive failure mode. Keep a
 The **master** is this interactive session — assumed to run the strongest available model
 (e.g. Fable). Its judgment is spent where it is cheapest and highest-leverage: orchestrating,
 advising blocked agents, adjudicating findings lists and reports. It never reads diffs or
-sprint bodies — that is what keeps it alive across a whole wave.
+sprint bodies (diff-dependent duties — doc sync, `/adr check`, review — are always delegated
+to fresh subagents; the master only adjudicates their structured returns) — that is what
+keeps it alive across a whole wave.
 
-All wave subagents — `sprint-planner`, `sprint-executor`, `wave-planner`, `reviewer` — are
-pinned `model: sonnet` in their agent definitions. There is **no spawn-time model override**,
-so the definition is the only thing standing between a wave and N executors silently running
-on the master's model: always dispatch by agent name, never as a generic subagent. Executors'
-children inherit the same tier via their own definitions (`reviewer`) or the dispatch default.
+All wave subagents — `sprint-planner`, `sprint-executor`, `wave-planner`, `reviewer`, `doc-sync` —
+are pinned `model: sonnet` in their agent definitions. The Agent tool DOES accept a spawn-time
+`model` override, so the pin alone is not a guarantee: always dispatch by agent name, never
+as a generic subagent, and never pass a `model` parameter when dispatching wave agents —
+otherwise N executors silently run on the master's model tier and multiply the wave's cost.
+Executors' children inherit the same tier via their own definitions (`reviewer`) or the dispatch
+default.
 
 ### Running waves from multiple sessions
 
@@ -476,7 +499,8 @@ hard-stop events."
 
 **T2 — Reserve the whole chain.** `bash scripts/sprint/reserve-wave.sh S-A … S-N` — the
 wave id doubles as the train id, and this is checkpoint P1 (the train's one origin-sync
-push, `[skip ci]`, zero CI). Create `.claude/sprint-orchestration/W-<id>/` with
+push, `[skip ci]`, zero CI). Record the printed `pre_wave_sha` alongside the wave id — T7's
+close-the-train review uses it as the diff base. Create `.claude/sprint-orchestration/W-<id>/` with
 `train-progress.md` + `train-plan.md` (same roles as wave-progress/wave-plan; progress
 lines are `S-NNN | started | DONE boundary=<sha> | report=… | landed@ckpt-n`).
 
@@ -530,8 +554,10 @@ Not cured by one targeted fix → hard stop; the batched land gives a clean esca
 user first).
 
 **T7 — Close the train.** After the final segment: one fresh `reviewer` over merged `main`
-(hand it all report paths; small fixes on `main` under the lock ride the final push, larger
-ones become follow-up sprints) → `reserve-wave.sh --release W-<id>` for never-started
+(hand it all report paths, plus `pre_wave_sha` from T2's reservation as the explicit diff
+base — `git diff <pre_wave_sha>...HEAD` on `main`; same rule as the wave review in Step 6, an
+implicit branch-vs-main diff on `main` is empty; small fixes on `main` under the lock ride
+the final push, larger ones become follow-up sprints) → `reserve-wave.sh --release W-<id>` for never-started
 members → final `push-main.sh` + CI verify →
 `git worktree remove .claude/worktrees/train-W-<id> && git branch -d train-W-<id>` →
 recompute `claims.mjs waves`, report the board, stop.

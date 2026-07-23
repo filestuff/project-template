@@ -8,7 +8,9 @@
 // Subcommands:
 //   upgrade.mjs fetch <sha-or-ref> <outdir> [--repo <url-or-path>]
 //     Fetch a template version's tree into <outdir>. Local path / file:// → `git archive`;
-//     https GitHub URL → tarball download + extract. Verifies <outdir>/VERSION exists.
+//     https GitHub URL → shallow `git fetch` into a throwaway bare repo, then `git archive`
+//     (works for private repos via the user's credential helper/SSH). Verifies
+//     <outdir>/VERSION exists.
 //
 //   upgrade.mjs render <templateDir> --manifest <path> --out <dir>
 //     Render the manifest tier's file set from <templateDir>, substituting every stored
@@ -32,7 +34,7 @@
 //     Replace the marked block in CLAUDE.md with the rendered project block.
 //
 //   upgrade.mjs merge-settings --new <rendered-settings.json> [--repo-root <path>]
-//     Union permissions.allow, preserve all other existing keys/values.
+//     Union permissions.allow/deny/ask, preserve all other existing keys/values.
 //
 //   upgrade.mjs hash <file>
 //     Print sha256 hex of a file.
@@ -65,7 +67,7 @@
 
 import {
   readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync,
-  chmodSync, rmSync, copyFileSync,
+  chmodSync, rmSync, copyFileSync, mkdtempSync,
 } from "node:fs";
 import { join, dirname, relative, sep } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -171,6 +173,11 @@ function saveManifest(path, manifest) {
 
 // --- fetch ---------------------------------------------------------------
 
+// Shared by both fetch branches: extract a `git archive` tar stream into outdir.
+function extractArchive(archive, outdir) {
+  execFileSync("tar", ["-x", "-C", outdir], { input: archive });
+}
+
 function cmdFetch(argv) {
   const args = parseArgs(argv);
   const [ref, outdir] = args.positional;
@@ -199,19 +206,27 @@ function cmdFetch(argv) {
       const archive = execFileSync("git", ["-C", localPath, "archive", ref], {
         maxBuffer: 1024 * 1024 * 512,
       });
-      execFileSync("tar", ["-x", "-C", outdir], { input: archive });
+      extractArchive(archive, outdir);
     } else {
-      const m = repo.match(/github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?\/?$/);
-      if (!m) die(`could not parse GitHub owner/repo from --repo: ${repo}`, 1);
-      const [, owner, repoName] = m;
-      const base = process.env.TEMPLATE_RAW_BASE || "https://github.com";
-      const url = `${base}/${owner}/${repoName}/archive/${ref}.tar.gz`;
-      const tarPath = join(tmpdir(), `template-fetch-${process.pid}-${Date.now()}.tar.gz`);
-      execFileSync("curl", ["-fsSL", "-o", tarPath, url]);
+      // Private-repo-capable fetch: shallow-fetch the pinned ref into a throwaway
+      // bare repo using the user's git credentials, then reuse the local branch's
+      // git-archive extraction path above. The old codeload tarball URL served
+      // nothing for private repos without a token. GitHub allows fetching pinned
+      // SHAs directly (uploadpack.allowReachableSHA1InWant); a SHA gone after a
+      // history rewrite still fails cleanly into the documented degraded mode.
+      const bare = mkdtempSync(join(tmpdir(), "tpl-fetch-"));
       try {
-        execFileSync("tar", ["-xzf", tarPath, "-C", outdir, "--strip-components=1"]);
+        execFileSync("git", ["-C", bare, "init", "-q", "--bare"], { stdio: "pipe" });
+        execFileSync("git", ["-C", bare,
+          "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=15",
+          "fetch", "-q", "--depth=1", repo, ref],
+          { stdio: "pipe", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+        const archive = execFileSync("git", ["-C", bare, "archive", "FETCH_HEAD"], {
+          maxBuffer: 1024 * 1024 * 512,
+        });
+        extractArchive(archive, outdir);
       } finally {
-        rmSync(tarPath, { force: true });
+        rmSync(bare, { recursive: true, force: true });
       }
     }
   } catch (e) {
@@ -562,10 +577,14 @@ function cmdApply(argv) {
       try {
         execFileSync("git", ["merge-file", localPath, oldPath, newPath], { stdio: "pipe" });
       } catch (e) {
-        if (typeof e.status === "number" && e.status > 0) {
+        // git merge-file: exit 1..127 = number of conflicts; a NEGATIVE exit
+        // (error, e.g. binary input) surfaces as 128..255 and must NOT be
+        // counted as conflicts — that would journal the file and bump its
+        // renderHash while the local content silently diverges.
+        if (typeof e.status === "number" && e.status >= 1 && e.status <= 127) {
           conflictCount = e.status;
         } else {
-          die(`git merge-file failed unexpectedly for ${dest}: ${e.message}`, 1);
+          die(`git merge-file failed for ${dest} (exit ${e.status ?? "?"}): ${e.message}`, 1);
         }
       }
       if (execBit) chmodSync(localPath, 0o755);
@@ -679,14 +698,21 @@ function cmdMergeSettings(argv) {
 
   const existing = readJSON(settingsPath);
 
-  const existingAllow = existing.permissions?.allow ?? [];
-  const newAllow = newSettings.permissions?.allow ?? [];
-  const unionAllow = [...existingAllow];
-  for (const perm of newAllow) if (!unionAllow.includes(perm)) unionAllow.push(perm);
-
+  // Union allow, deny AND ask. Dropping template-shipped deny/ask entries
+  // silently weakens the downstream permission posture — the one field where
+  // losing entries is worse than duplicating them.
   const merged = { ...existing };
-  if (newAllow.length > 0 || existing.permissions) {
-    merged.permissions = { ...existing.permissions, allow: unionAllow };
+  if (existing.permissions || newSettings.permissions) {
+    const mergedPerms = { ...existing.permissions };
+    for (const list of ["allow", "deny", "ask"]) {
+      const have = existing.permissions?.[list] ?? [];
+      const add = newSettings.permissions?.[list] ?? [];
+      if (have.length === 0 && add.length === 0) continue;
+      const union = [...have];
+      for (const perm of add) if (!union.includes(perm)) union.push(perm);
+      mergedPerms[list] = union;
+    }
+    merged.permissions = mergedPerms;
   }
   for (const [key, value] of Object.entries(newSettings)) {
     if (key === "permissions") continue;

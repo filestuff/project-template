@@ -140,7 +140,9 @@ Backlog table by hand).
   the identical signature. Mismatch = fix before commit.
 
 Commit all new sprints + index:
-`sprint: create S-{first}..S-{last} — [feature] (from /plan)`.
+`sprint: create S-{first}..S-{last} — [feature] (from /plan) [skip ci]`.
+(Ledger-only commit — sprint files and index carry no code; burning a CI run
+on it contradicts the push-batching policy.)
 Full tier: make this commit on `main` under the lock (`scripts/sprint/lock.sh`).
 
 Then **report a Parallelization Summary** to the user:

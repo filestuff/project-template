@@ -73,8 +73,10 @@ LABEL="land-$BRANCH"
 GENERATED=(docs/sprints/INDEX.md docs/sprints/ROADMAP.md docs/DOC_HEALTH.md)
 
 worktree_path() {
+  # substr, not $2: worktree paths may contain spaces ("Claude Code", ...).
+  # "worktree " is 9 chars, "branch " is 7.
   git worktree list --porcelain | awk -v b="refs/heads/$BRANCH" '
-    /^worktree /{wt=$2} /^branch /{if ($2==b) print wt}'
+    /^worktree /{wt=substr($0,10)} /^branch /{if (substr($0,8)==b) print wt}'
 }
 
 sprint_title() { # $1 = sprint id, $2 = absolute sprint file path
@@ -108,6 +110,16 @@ prepare)
 
   OLD_HEAD=$(git -C "$WT" rev-parse HEAD)
   if ! git -C "$WT" merge "$MAIN" -m "merge $MAIN into $BRANCH pre-land" >/dev/null 2>&1; then
+    # A merge can fail WITHOUT starting one (dirty worktree, lock, fs error).
+    # Then there is no MERGE_HEAD and no conflicts — falling through to the
+    # conflict path would end in a bogus `git commit --no-edit` and a cryptic
+    # set -e abort with the lock still held. Surface the real cause instead.
+    if ! git -C "$WT" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+      echo "git merge failed without starting a merge in $WT (lock kept) — status:" >&2
+      git -C "$WT" status --short >&2
+      exit 1
+    fi
+
     # Auto-resolve generated docs by taking main's side (their regen happens on main now);
     # anything else is a real conflict for the agent.
     conflicted=()
