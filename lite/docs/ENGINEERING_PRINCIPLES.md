@@ -45,7 +45,9 @@ no benefit until the need is real.
 ## KISS — Keep It Simple
 
 Prefer the most boring solution that works. Fewer moving parts, shallower call stacks, less
-cleverness. Optimize for the next person reading this at 2am, not for elegance.
+cleverness. Optimize for the next person reading this at 2am, not for elegance. Before
+adding anything, ask: is this solving a real problem, or one we created (essential vs
+accidental complexity)?
 
 - **Smell:** a clever one-liner that needs a comment to decode; a framework where a function
   would do; layers of indirection you have to trace to understand one behavior.

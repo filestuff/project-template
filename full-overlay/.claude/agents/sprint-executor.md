@@ -63,8 +63,10 @@ child (see Children).
    you believe a Critical finding is wrong, that is not your call: return **BLOCKED**
    with the finding as the question.
 7. **Write your report** to `<repo-root>/.claude/sprint-orchestration/W-<id>/S-NNN-report.md`:
-   per-deliverable commits, gate/test results, per-criterion evidence citations, the
-   review outcome (duty 6), deviations from the brief, deferred items.
+   per-deliverable commits, gate/test results — include the **literal tail of the
+   gate/test output** (the pass/fail summary lines), not a prose claim that tests
+   passed — per-criterion evidence citations, the review outcome (duty 6), deviations
+   from the brief, deferred items.
 
 ## Children (subagents you may spawn)
 
@@ -75,6 +77,11 @@ You may spawn at most 2–3 children per sprint, each for one of:
   path and base branch: `git -C "<worktree>" diff main...HEAD` — unless your dispatch
   prompt names a **diff-base SHA** (train mode), in which case hand it
   `git -C "<worktree>" diff <base>..HEAD` so it reviews only your sprint's commits.
+  Also hand it the sprint file path (its acceptance criteria are the review target) —
+  and **nothing of your own reasoning**: no work summary, no rationale; the diff and
+  the brief are its whole input (a reviewer anchored on your framing misses what you
+  missed). If the diff touches a surface in `docs/sprints/review-calibration.md`'s
+  risk-tier table, say "high-risk: deep pass" in the child's prompt.
 - **debug** — a failure that resists two root-cause attempts of your own.
 
 Every child prompt MUST restate: the absolute worktree path plus "operate via

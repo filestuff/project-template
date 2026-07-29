@@ -93,9 +93,10 @@ the lifecycle paths if a transaction died mid-flight; abort any in-progress merg
 Two guarantees the scripts already enforce, stated for multi-session operation: every locked
 transaction **pulls `--ff-only` before mutating and pushes before releasing the lock** —
 commit + push form one critical section, so two sessions cannot race pushes to `main` —
-unless the caller defers (`--no-push` — the wave orchestrator's mode), in which case the
-pull/push pair moves to the wave's lock-guarded checkpoint pushes
-(`scripts/sprint/push-main.sh`; see ORCHESTRATION "Push policy"); and a failed push leaves
+unless the caller defers (`--no-push` — the wave orchestrator's mode, and now the rule for
+`finish` in **every** mode: the code-bearing completion push settles after the lock via the
+deploy gate + `scripts/sprint/push-main.sh`, which takes the lock itself; see ORCHESTRATION
+"Push policy"); and a failed push leaves
 the local commit intact with printed recovery instructions. When another session's wave is
 live, pass `--wait 900` to `start.sh` and `merge-sprint.sh prepare` — the other wave's
 completion legitimately holds the lock across its prepare→land→finish window.
@@ -323,6 +324,17 @@ Run `/adr check` over this sprint's commit range. If the sprint introduced a sig
 architectural decision not in an existing ADR, draft one (`/adr create`). Record the outcome
 in the Completion Log either way ("ADR-NNN" or "none — reason").
 
+### Step 3.5: Risk-Tiered Review (solo sprints only)
+
+Check the sprint's diff against the risk-tier table in `docs/sprints/review-calibration.md`
+(auth/permissions, schema/migrations, public contracts, test deletion/loosening, secrets,
+payment/irreversible mutation, trust-boundary parsing). **High-risk** → dispatch one
+`reviewer` subagent (fresh context, diff base = the sprint branch vs `main`) before
+preparing the merge; fix Critical/Important findings and re-run `gate.sh`. **Not
+high-risk** → skip — review depth scales with blast radius; do not add a pass to every
+sprint. (Wave/train sprints skip this step entirely — the executor's mandatory `reviewer`
+child already covered it.)
+
 ### Step 4: Prepare (locked)
 
 Run `<repo-root>/scripts/sprint/merge-sprint.sh prepare S-NNN-kebab-name`. It acquires the
@@ -354,18 +366,26 @@ the sprint branch.
      header line.
    - `docs/sprints/ROADMAP.md`: narrative (Status paragraph, newly-unblocked sprints from
      this sprint's `blocks`, `_Last updated_`).
-3. `merge-sprint.sh finish S-NNN-kebab-name` — verifies the moved file kept
+3. `merge-sprint.sh finish S-NNN-kebab-name --no-push` — verifies the moved file kept
    `status: done` (commit hooks that stash unstaged changes can silently drop edits made
    around a `git mv`), guards against `" 2."` macOS sync-duplicate files, commits
-   `sprint: complete S-NNN — [name]` with explicit paths `--no-verify`, pushes, and releases
-   the lock. Other ledger-only lifecycle commits (start, claim expansions, wave reservations)
+   `sprint: complete S-NNN — [name]` with explicit paths `--no-verify`, and releases
+   the lock. **`--no-push` is now the rule in every mode** — the code-bearing push is
+   settled after the lock is released, behind the deploy gate. Other ledger-only lifecycle
+   commits (start, claim expansions, wave reservations)
    carry a trailing ` [skip ci]`; this completion commit never does — it is the HEAD of a
-   code-bearing push, and a skip marker there would skip CI for the landed code. In wave mode
-   the orchestrator passes `--no-push` and this push defers to the wave's checkpoint push
-   (ORCHESTRATION "Push policy"); solo completions push immediately as above. In train mode,
-   Steps 4–6 run once **per checkpoint segment**, not per sprint: `land`/`finish` take
-   `--sprints S-A,S-B,…` and one lock transaction lands the whole segment
-   (ORCHESTRATION "The serial train").
+   code-bearing push, and a skip marker there would skip CI for the landed code.
+   - **Solo:** ask the deploy-gate question (AskUserQuestion — pushing `main` deploys via
+     any connected platform): **Push now (deploy)** (recommended) → `bash
+     scripts/sprint/push-main.sh`, then Step 6's CI check; **Hold** → keep commits local,
+     state that main is ahead of origin (the board surfaces it; `push-main.sh` is the
+     catch-up path and Step 6 rides the eventual push). Never ask while the lock is held —
+     `finish` releases it first.
+   - **Wave mode:** the push defers to the wave's gated checkpoint push
+     (ORCHESTRATION "Push policy" / checkpoint P3).
+   - **Train mode:** Steps 4–6 run once **per checkpoint segment**, not per sprint:
+     `land`/`finish` take `--sprints S-A,S-B,…` and one lock transaction lands the whole
+     segment; the push follows the T1 push policy (ORCHESTRATION "The serial train").
 
 If anything goes wrong mid-land: `merge-sprint.sh abort S-NNN-kebab-name` rolls `main` back
 to the recorded pre-land SHA and releases the lock.
@@ -378,7 +398,9 @@ to the recorded pre-land SHA and releases the lock.
    (e.g. `gh run list --branch <main> --limit 5`, or `gh run watch <id>`). A red run
    **reopens the sprint's close**: fix on a follow-up commit (small fixes can go straight to
    `main` under the lock; anything larger reopens the worktree), then re-verify. Cite the
-   green run IDs in the close summary. (No CI? skip this step.) (Wave mode: this check runs
+   green run IDs in the close summary. (No CI? skip this step.) The check runs against the
+   **actual** push, whenever the deploy gate lets it happen — a held push carries this
+   check with it. (Wave mode: this check runs
    once, against the wave-end checkpoint push — see ORCHESTRATION Step 6 / checkpoint P3 —
    not after each sprint's `finish`.)
 2. `ExitWorktree {action: "keep"}` — returns the session to the primary checkout

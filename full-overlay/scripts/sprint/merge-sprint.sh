@@ -244,7 +244,7 @@ finish)
     git -C "$ROOT" push origin "$MAIN" ||
       { echo "push failed — local commits intact, lock kept; resolve and re-run finish" >&2; exit 1; }
   else
-    echo "push deferred — orchestrator: run scripts/sprint/push-main.sh at the wave's/train's next checkpoint and verify CI on that push (PROTOCOL Phase 3 Step 6)"
+    echo "push deferred — this push deploys via any connected platform; confirm with the user (deploy gate), then run scripts/sprint/push-main.sh and verify CI on that push (PROTOCOL Phase 3 Step 6). Waves/trains: settle at the next checkpoint per the push policy."
   fi
 
   rm -f "$LOCK_DIR/preland-sha"

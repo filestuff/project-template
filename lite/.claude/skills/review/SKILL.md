@@ -37,6 +37,13 @@ merge), `[FIX]` = **Important** (fix before proceeding), `[CONSIDER]` = **Minor*
 
 **Distrust author claims.** Commit messages and "this is safe because…" rationales are
 unverified — confirm against the diff yourself. "Tests pass" ≠ correct; read what they assert.
+"This looks fine" is not a finding and "likely handled elsewhere" is not verification —
+cite the handling code or drop the claim.
+
+**Evidence gate.** A `[BUG]`/`[FIX]` must quote the motivating line(s) — `file:line` plus
+the verbatim text. Can't quote it? Downgrade to `[CONSIDER]` tagged "unverified". Full
+calibration table, framework-meta rule, and false-positive classes:
+`docs/sprints/review-calibration.md`.
 
 ### AUTO Criteria (all must be true)
 
@@ -89,6 +96,11 @@ flagging, so the tradeoff is reviewable.
   provides? (`docs/ENGINEERING_PRINCIPLES.md`, "Before you code")
 - New file where an existing module had room?
 
+### Were the tests loosened to pass?
+- Diff the test changes against the source changes: a weakened/deleted assertion, added
+  skip/`.only`, blindly regenerated snapshot, or raised timeout that exists to make the
+  diff green is a `[BUG]`, not a style note. Tests should get stricter with new behavior.
+
 ### Bug fixes: root cause, not symptom
 - Is the fix in the shared function, or patched at one caller? Were sibling callers checked?
 - Carve-out guard: do NOT flag input validation at trust boundaries, data-loss error
@@ -135,6 +147,10 @@ Batch 1: src/api/* (3 files)
 Batch 2: src/components/* (related components)
 Batch 3: src/utils/* (2 files)
 ```
+
+Batches touching a risk-tier surface (`docs/sprints/review-calibration.md`: auth,
+migrations, public contracts, test loosening, secrets, payments, trust-boundary parsing)
+get the deep pass — trace callers of changed shared code, run the failure-modes check.
 
 **Output:** `Found X files in Y batches`
 

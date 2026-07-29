@@ -35,7 +35,11 @@ against the code — its premises are claims to check, not facts to transcribe.
    criteria that state an observable difference. Verify the Testing section names
    a real test file to follow. Changes text must be executable as written —
    "appropriate error handling", "as needed", "similar to X" are gaps to fill,
-   not instructions.
+   not instructions. For sprints with UI deliverables (or `frontend`/`design`
+   tags): apply `docs/sprints/design-checks.md` — its UI-scope test decides
+   (early-exit if no UI scope); otherwise verify interaction states are specified
+   in the file, and turn missing states or unresolved design decisions into
+   decision-ready Open Questions (they surface through the batched decision round).
 4. **Touches correction.** Recompute `touches:` from the (possibly changed) Files
    lists plus tokens from `scripts/sprint/claims-tokens.json` and likely doc-sync
    targets; edit the frontmatter to match.

@@ -94,8 +94,10 @@ Print the current kanban state:
    planning pass before dispatch (ORCHESTRATION.md Step 2) — mention which ones.
 8. **Unpushed ledger check**: run `git rev-list --count origin/<main>..<main>` (guard: skip if
    the `origin/<main>` ref doesn't exist). If the count is > 0 and no wave is currently live,
-   warn that main carries unpushed lifecycle commits and suggest
-   `bash scripts/sprint/push-main.sh`.
+   classify the range: `git diff --name-only origin/<main>..<main> | grep -vE '^(docs/|\.claude/)'`
+   — **non-empty** → "unpushed completion awaiting deploy confirmation — `push-main.sh`
+   pushes and deploys via any connected platform"; **empty** → warn that main carries
+   unpushed lifecycle commits and suggest `bash scripts/sprint/push-main.sh`.
 
 Format as a concise board view. (Ignore `.gitkeep` files when counting.)
 
@@ -124,9 +126,12 @@ evidence does not count) → doc sync via `git diff` (on the branch) → **`/adr
 **`merge-sprint.sh prepare S-NNN-…`** (locked; on exit 3 re-run `gate.sh`) →
 **`merge-sprint.sh land S-NNN-…`** (merges to main, moves the file, regenerates; exits 4) →
 author the semantic docs on main (DOC_HEALTH.md, INDEX Done-row + header, ROADMAP narrative)
-→ **`merge-sprint.sh finish S-NNN-…`** (commits, pushes, releases the lock — the completion
-commit intentionally carries no `[skip ci]`, since its push is what lands the code; solo
-completions push per-transaction like this always, unlike wave mode's deferred checkpoints) →
+→ **`merge-sprint.sh finish S-NNN-… --no-push`** (commits, releases the lock — the
+completion commit intentionally carries no `[skip ci]`, since its eventual push is what
+lands the code) → **deploy gate**: ask via AskUserQuestion — **Push now (deploy)**
+(recommended: `bash scripts/sprint/push-main.sh`, then verify CI green per Phase 3 Step 6)
+or **Hold** (keep commits local; report that main is ahead of origin — the board surfaces
+it; push later with `push-main.sh`, which carries the CI check with it) →
 exit + remove the worktree and branch (Phase 3 Step 6).
 
 ### `/sprint create [title]`
@@ -220,10 +225,13 @@ sprints one at a time** with `merge-sprint.sh finish <branch> --no-push` (Phase 
 lock-serialized and cannot be fanned out; pre-draft the semantic docs before taking the lock).
 Keep the durable ledger in `.claude/sprint-orchestration/W-<id>/`. Optional `N` caps the wave
 size. After the wave lands, dispatch a `reviewer` subagent over the merged result (adjudicate
-its findings — don't read the diffs yourself), release any leftover reservations, then run
-**checkpoint P3 (mandatory)** — `bash scripts/sprint/push-main.sh`, the wave's single
-CI-triggering push — and verify CI green against it (PROTOCOL Phase 3 Step 6, run once for the
-whole wave; see ORCHESTRATION Step 6 for red-run recovery). Recompute the next wave. Multiple
+its findings — don't read the diffs yourself; ORCHESTRATION Step 6 adds a conditional
+second "outside voice" reviewer for high-risk waves), release any leftover reservations,
+then run **checkpoint P3 (mandatory)** — ask the deploy-gate question (Push now (deploy) /
+Hold — ORCHESTRATION "Push policy"), and on confirmation `bash scripts/sprint/push-main.sh`,
+the wave's single CI-triggering push — and verify CI green against it (PROTOCOL Phase 3
+Step 6, run once for the whole wave; see ORCHESTRATION Step 6 for red-run recovery).
+Recompute the next wave. Multiple
 waves can run from different terminal sessions — see ORCHESTRATION.md "Running waves from
 multiple sessions" and "Push policy" for the full checkpoint contract.
 
@@ -235,7 +243,9 @@ landings. **Defer to `docs/sprints/ORCHESTRATION.md` "The serial train"** — it
 of truth for this command. In short: you are the master (this session, strongest model);
 subagents dispatch by agent name only (pinned `model: sonnet`). Validate the user's ordered
 chain (deps in `done/` or earlier in the chain; warn on pairs that would parallelize —
-suggest `/sprint wave`), **reserve the whole chain** (`reserve-wave.sh` — the wave id doubles
+suggest `/sprint wave`), ask the **checkpoint push policy** at T1 (ask at each checkpoint /
+auto-push / hold until train end — ORCHESTRATION "Train protocol" T1), **reserve the whole
+chain** (`reserve-wave.sh` — the wave id doubles
 as the train id; checkpoint P1, `[skip ci]`), **plan all members upfront** (wave Step 2
 verbatim: parallel `sprint-planner` fan-out in a planning worktree, then ONE batched decision
 round for the entire chain — after it the train runs unattended), create **one** train
@@ -245,14 +255,17 @@ fresh `sprint-executor` per sprint (pass the predecessor's boundary SHA as the r
 diff base), advise BLOCKED executors yourself (SendMessage continuation; decision-ladder
 auto-answers recorded as `(train, auto)`). Every K sprints (default 3, `--every K` to
 change) and at the end: a **checkpoint** — `merge-sprint.sh prepare` → `land --sprints
-S-A,S-B,…` → apply pre-drafted docs → `finish --sprints … --no-push` → `push-main.sh` (the
-segment's single CI push) → verify CI green once. Hard stops only: 2nd PLAN_GAP on one
+S-A,S-B,…` → apply pre-drafted docs → `finish --sprints … --no-push` → push **per the T1
+push policy** (`push-main.sh` is the segment's single CI push; "ask-each" pauses for the
+deploy-gate question first, "hold" skips it until the final T7 push) → verify CI green
+once. Hard stops only: 2nd PLAN_GAP on one
 sprint, red checkpoint CI not cured by one fix, a NOT_READY delta verdict, or an
 irreversible tradeoff. `--fast-gate` (opt-in) relaxes per-commit gates to the cheap static
 subset with the full gate mandatory at sprint boundaries. Ledger:
 `.claude/sprint-orchestration/W-<id>/train-progress.md` (per-sprint boundary SHAs). Close:
-post-train `reviewer` over merged main, release leftovers, final `push-main.sh` + CI verify,
-remove the train worktree/branch.
+post-train `reviewer` over merged main (plus the conditional outside-voice second reviewer,
+ORCHESTRATION Step 6/T7), release leftovers, final `push-main.sh` (gated per the T1 policy)
++ CI verify, remove the train worktree/branch.
 
 ## No Arguments
 

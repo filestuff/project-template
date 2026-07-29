@@ -42,6 +42,13 @@ split.
    - Run the decision ladder (`docs/ENGINEERING_PRINCIPLES.md`) over each major piece:
      what does the codebase / stdlib / platform / an installed dep already do? A
      deliverable that rebuilds existing capability is cut or rewritten to reuse it.
+     **Name** the existing code/flow that partially solves each major piece —
+     reuse-or-rebuild is an explicit call, never an omission.
+   - **Search check**: for each new architectural pattern or infra component the plan
+     introduces — does the framework/platform have a built-in? Is the approach current
+     best practice, and are there known footguns? (Use WebSearch when available;
+     otherwise note "in-distribution knowledge only".) A custom build where a built-in
+     exists is a scope reduction, not a sprint.
    - Flag deferrable work: anything not needed for the plan's goal goes to
      `docs/TODOS.md` with a backlink — not into a sprint. Also check `docs/TODOS.md`
      for deferred items this plan should absorb.
@@ -51,6 +58,8 @@ split.
    - **Completeness**: is this the full version or a shortcut? A new artifact (package,
      service, pipeline) includes its build/publish/deploy story as a deliverable — or
      an explicit Out of Scope entry naming who owns it.
+   - Once the user accepts or rejects a scope reduction, commit fully — don't re-argue
+     it or silently re-shrink scope in later phases.
 2. **Identify natural sprint boundaries.** Foundation/infra first; independent features
    parallelizable; DB/schema before features; integration/eval last. Each sprint completable
    in ≤ ~2 weeks. Respect any build order the source plan locks in.
@@ -102,6 +111,11 @@ For each sprint, starting at S-{highest+1}, create a file from
   **Risks**, **Open Questions** — written **decision-ready**: each question carries 2–4
   concrete options with their implications, so a later planning pass or pre-sprint round
   can resolve it in one AskUserQuestion call.
+- **Design checks (UI-scoped sprints only)**: apply `docs/sprints/design-checks.md` —
+  its UI-scope test decides; no UI scope means skip entirely. For UI sprints, the
+  interaction-states table goes into Technical Details, and unresolved design decisions
+  become decision-ready Open Questions (they ride the batched question rounds — never a
+  per-issue quiz).
 - **Leave `plan_date: null`.** Batch breakdown is not per-sprint certification: it plans
   from the source document, not from a fresh read of every referenced `file:line`, so the
   sprints it creates stay "unplanned" until a per-sprint `/sprint plan` pass (or the wave
@@ -154,9 +168,12 @@ Then **report a Parallelization Summary** to the user:
   waves up front — freshly-verified references also avoid the cross-wave staleness that
   invalidates early-planned sprints. Mention `/sprint wave` can fan the first wave out to
   parallel agents.
-- **Lite tier**: derive waves from `depends_on` only — group sprints with no unmet dependency,
-  then the next layer, and so on. Label it "(dependency-only; file conflicts not checked in lite
-  — upgrade to the full tier for claim-verified parallel safety)."
+- **Lite tier**: derive waves from `depends_on` AND module-level overlap of the sprints'
+  Files lists (directory level, not file level — plans describe intent, so file-level is
+  guesswork). Flag two same-wave sprints sharing a module directory as a merge-conflict
+  risk: same lane (sequential) or re-cut the seam. Label the result "(dependency-only;
+  file conflicts not checked in lite — upgrade to the full tier for claim-verified
+  parallel safety)."
 
 ## Arguments
 

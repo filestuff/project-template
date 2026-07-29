@@ -4,6 +4,62 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.4.0] - 2026-07-29
+
+Two themes: sprint completions now **ask before pushing main** (a push to main is a
+production deploy on any platform that auto-deploys the default branch), and review
+depth now **scales with blast radius** via a shared calibration doc. No new always-on
+agents; no migrations — all changed files are managed, and the two new docs copy in via
+`/template-upgrade`'s normal plan/apply.
+
+- **Deploy gate (both tiers).** Sprint completion no longer pushes `main` silently.
+  Lite: the close step asks (Push now (deploy) / Hold) before `git push`. Full solo:
+  `/sprint done` runs `merge-sprint.sh finish --no-push` in every mode and settles the
+  code-bearing push behind the same question via `push-main.sh`; waves ask once at
+  checkpoint P3; trains choose a policy at T1 (ask at each checkpoint / auto-push /
+  hold until train end) — the four train hard stops stay four. Held pushes are
+  board-visible (`/sprint board` classifies the unpushed range) and CI verification
+  rides the eventual push. Ledger-only `[skip ci]` pushes (start/reserve/unstart,
+  wave P1/P2) stay automatic; if your platform redeploys on those, configure it to
+  ignore `docs/` + `.claude/` watch paths. `merge-sprint.sh` behavior is unchanged
+  apart from its deferral message — `finish` without `--no-push` still pushes.
+- **New `docs/sprints/review-calibration.md` (both tiers).** Shared reference for the
+  reviewer agent and `/review`: confidence calibration, a pre-emit verification gate
+  (quote the motivating `file:line` or the finding is demoted — kills the
+  "field doesn't exist" false-positive class), anti-rationalization rules, test-gaming
+  detection (tests loosened to make a diff pass are Critical), a failure-modes check,
+  and the risk-tier table that defines "high blast radius" once for every consumer.
+- **Reviewer hardening (both tiers).** `.claude/agents/reviewer.md` gains the evidence
+  gate, confidence-scored findings with an "Unverified observations" appendix,
+  test-gaming detection, risk-tiered deep passes, a narrow mandate (correctness /
+  security / stated acceptance criteria — "could be more general" is not a finding),
+  and acceptance-criteria checking against the sprint file rather than author summaries.
+- **Risk-tiered solo review (both tiers).** New PROTOCOL Phase 3 step: solo sprints
+  whose diff hits the risk table get one fresh-context `reviewer` pass before closing;
+  low-risk sprints explicitly skip it. Wave/train sprints are unaffected (their
+  executor's mandatory reviewer child already covers it).
+- **Testing discipline (both tiers).** `docs/sprints/testing-anti-patterns.md` gains
+  three patterns: a ★/★★/★★★ test-quality rubric (a smoke test doesn't satisfy an
+  acceptance criterion), the mandatory regression rule (changed existing behavior with
+  no covering test ⇒ regression test, no asking), and interaction edge cases with a
+  unit-vs-E2E rule of thumb.
+- **Plan-time quality (both tiers).** `/plan` Phase 2 adds a search check (framework
+  built-in? known footguns? custom-where-builtin-exists is a scope reduction), requires
+  naming the existing code each major piece reuses, and locks scope decisions once
+  made; Phase 4's lite parallelization now flags module-level overlap between same-wave
+  sprints. New `docs/sprints/design-checks.md` (interaction-states table, AI-slop
+  check, design-system alignment, responsive + a11y, unresolved-decisions table) is
+  applied to UI-scoped sprints only — a hard early exit keeps backend sprints free of
+  design review. The full tier's `sprint-planner` applies the same checks when deepening.
+- **Executor evidence + reviewer independence (full tier).** `sprint-executor` hands
+  its reviewer child the diff and the sprint file only — never its own reasoning — and
+  reports must include the literal tail of gate/test output instead of prose claims.
+- **Conditional outside voice (full tier).** After a wave (or train close), a *second*
+  fresh reviewer is dispatched only when the merged diff is high-risk or the first
+  review found a Critical — prompted to find what the first review missed, never shown
+  its findings; disagreements are surfaced to the user as neutral tensions. At most one
+  extra agent per wave, never per sprint.
+
 ## [1.3.1] - 2026-07-23
 
 - **Fix (full tier): serial trains could not start their second sprint.** `start.sh

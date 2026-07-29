@@ -156,11 +156,27 @@ Run `/adr check` over this sprint's commit range. If the sprint introduced a sig
 architectural decision not in an existing ADR, draft one (`/adr create`). Record the outcome
 in the Completion Log either way ("ADR-NNN" or "none — reason").
 
+### Step 3.5: Risk-Tiered Review
+
+Check the sprint's diff against the risk-tier table in `docs/sprints/review-calibration.md`
+(auth/permissions, schema/migrations, public contracts, test deletion/loosening, secrets,
+payment/irreversible mutation, trust-boundary parsing). **High-risk** → dispatch one
+`reviewer` subagent (fresh context) over the diff before closing; fix Critical/Important
+findings and re-run the gate. **Not high-risk** → skip — do not add a review pass to every
+sprint; depth scales with blast radius.
+
 ### Step 4: Close
 
 1. `git mv` the sprint file `in-progress/ → done/`; set `status: done` and `end_date`.
 2. Update `docs/sprints/INDEX.md` by hand: move the row to Done with a one-line outcome.
 3. Commit: `sprint: complete S-NNN — [name]`.
-4. **If the project has CI**, after pushing verify the completion commit's runs are green
+4. **Deploy gate:** pushing `main` triggers any connected platform's auto-deploy
+   (Railway/Vercel/etc.), so never push the completion silently — ask first
+   (AskUserQuestion):
+   - **Push now (deploy)** — `git push`, then verify CI (item 5). *(recommended)*
+   - **Hold** — keep commits local and push later with `git push`; say explicitly that
+     main is ahead of origin so the held push isn't forgotten.
+5. **If the project has CI**, after pushing verify the completion commit's runs are green
    before declaring the sprint closed (e.g. `gh run list --limit 5`) — a red run reopens the
-   close: fix, re-push, re-verify. (No CI? skip this step.)
+   close: fix, re-push, re-verify. (No CI? skip this step.) A held push carries this check
+   with it — it runs whenever the push happens.

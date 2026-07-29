@@ -54,9 +54,26 @@ wave, every main-mutating script gets `--no-push`; only `scripts/sprint/push-mai
 - **P2 (after the last `start.sh --no-push`).** Run `push-main.sh` — a ledger-only backup push,
   zero CI (HEAD is a `[skip ci]` start commit).
 - **P3 (wave end, mandatory).** After the last `merge-sprint.sh finish <branch> --no-push` and
-  any `reserve-wave.sh --release`, run `push-main.sh` — the single CI-triggering push of the
-  wave. PROTOCOL Phase 3 Step 6's "verify CI green" check runs exactly once here, against this
-  push, covering every sprint in the wave.
+  any `reserve-wave.sh --release`, ask the deploy-gate question (below), then run
+  `push-main.sh` — the single CI-triggering push of the wave. PROTOCOL Phase 3 Step 6's
+  "verify CI green" check runs exactly once here, against this push, covering every sprint
+  in the wave.
+
+**Deploy confirmation gate.** A code-bearing push to `main` is a production deploy on any
+platform that auto-deploys the default branch (Railway, Vercel, Netlify, Render…). Never
+run a code-bearing `push-main.sh` silently — ask first (AskUserQuestion):
+
+- **Push now (deploy)** — run `push-main.sh`, then verify CI green. *(recommended)*
+- **Hold** — keep commits local; the board's unpushed-ledger check surfaces the held state,
+  and the catch-up path is `push-main.sh` (CI verification rides with the eventual push).
+
+The gate applies to code-bearing pushes only: solo `finish`, wave P3, and train checkpoints
+(per the T1 policy, below). Ledger-only `[skip ci]` pushes (P1/P2, start, reserve, unstart)
+stay automatic — gating bookkeeping would make the workflow unusable. Two platform caveats
+to note in project docs: commit-marker handling is platform-dependent (Railway honors
+`[skip ci]`; Vercel needs its own Ignored Build Step), so configure the platform to ignore
+`docs/` + `.claude/` watch paths if ledger-only pushes trigger redeploys; and `push-main.sh`
+deliberately *forces* CI on code-bearing ranges whose HEAD carries a skip marker.
 
 **The `[skip ci]` convention:** ledger-only lifecycle commits (start, claim expansions, deepen,
 decisions, reservations) carry a trailing ` [skip ci]`. The `sprint: complete` commit written by
@@ -75,12 +92,16 @@ On a long-running (multi-hour) wave, the orchestrator **may** run `push-main.sh`
 individual sprint's finish for backup, at the cost of one CI cycle per extra push — a deliberate
 tradeoff, not a violation of the checkpoint schedule.
 
-**Abandoning or pausing a wave:** always run `bash scripts/sprint/push-main.sh` before walking
-away. A deferred wave must never leave local `main` silently ahead of `origin` — this applies
-equally to abandonment (Failure handling) and to any pause longer than a session (e.g. a decision
-round parked overnight).
+**Abandoning or pausing a wave:** always **settle** the push before walking away — run
+`bash scripts/sprint/push-main.sh` (asking the deploy-gate question if the range carries
+code), or record an explicit user *hold* decision. A user-confirmed hold is a deliberate,
+board-visible state; what must never happen is local `main` left silently ahead of `origin`
+with nobody having decided that. Applies equally to abandonment (Failure handling) and to
+any pause longer than a session (e.g. a decision round parked overnight).
 
-Solo (non-wave) `/sprint start` and `/sprint done` are unaffected — they keep push-per-transaction.
+Solo (non-wave) `/sprint start` keeps its push-per-transaction (ledger-only, `[skip ci]`).
+Solo `/sprint done` runs `finish --no-push` and settles its code-bearing push through the
+same deploy gate: ask, then `push-main.sh`.
 
 ## Worktree mode: path-scoped (verified)
 
@@ -320,8 +341,20 @@ The master does **not** perform this review itself: it adjudicates the returned 
 list — fix now (small), spin a follow-up sprint, or accept — and records the disposition in
 wave-plan.md.
 
+**Outside voice (conditional — at most one extra agent per wave, never per sprint).**
+Dispatch a *second* fresh `reviewer` only if (a) the wave's merged diff touches the
+risk-tier table in `docs/sprints/review-calibration.md`, or (b) the first post-wave review
+returned any Critical. Same diff base and report paths, plus this framing: "A prior review
+of this diff exists. You have NOT seen it — do not ask for it. Your job is to find what it
+missed: logical gaps, unstated assumptions, a fundamentally simpler approach, missing
+sequencing." Never hand it the first reviewer's findings. Where the two reviews disagree,
+present the disagreement to the user as a neutral tension — both positions, batched with
+the other findings — and never auto-incorporate either side; adjudicate dispositions in
+wave-plan.md exactly as for the first review.
+
 Then close out the wave: `reserve-wave.sh --release W-<id>` if any backlog members still
-carry the reservation (deferred/split members). Then **checkpoint P3 (mandatory)**: run
+carry the reservation (deferred/split members). Then **checkpoint P3 (mandatory)**: ask
+the deploy-gate question (Push policy above), then run
 `bash scripts/sprint/push-main.sh` — the single CI-triggering push of the wave — and run
 PROTOCOL Phase 3 Step 6's "verify CI green" check against **this** push; it covers every
 sprint in the wave in one pass. On a red run: identify the offending sprint locally by
@@ -476,7 +509,9 @@ What is structurally different from a wave:
   sprints the master proceeds without asking; executor OPTIONS are run through the decision
   ladder (`docs/ENGINEERING_PRINCIPLES.md`) before any escalation, and auto-answers are
   recorded as `- YYYY-MM-DD (train, auto): [decision] — [rationale]` in Pre-Sprint Decisions
-  plus one line in train-progress.md. The **only four hard stops**: (1) a second PLAN_GAP on
+  plus one line in train-progress.md. Checkpoint pushes follow the **push policy chosen at
+  T1**; when "ask at each checkpoint" was chosen, that pause is a *scheduled* stop like the
+  decision round — not a hard stop. The **only four hard stops**: (1) a second PLAN_GAP on
   the same sprint; (2) a red checkpoint CI not cured by one targeted fix; (3) a delta-refresh
   `NOT_READY`/`SPLIT_SUGGESTED` verdict; (4) an irreversible / architectural / security /
   spend tradeoff the ladder cannot rank.
@@ -495,7 +530,14 @@ adjacent members that are dep-independent and touches-disjoint ("these would par
 consider `/sprint wave`"); ask before exceeding ~10 members. Present per member: ID, goal,
 points, plan status, open-question count — and the autonomy contract: "after the decision
 round I run unattended; planned stops are checkpoints every K sprints and the four
-hard-stop events."
+hard-stop events." In the same confirmation, ask the **checkpoint push policy**
+(AskUserQuestion — each checkpoint push deploys via any connected platform):
+
+- **Ask at each checkpoint** — pause for the deploy-gate question before every
+  `push-main.sh`. *(recommended when platforms auto-deploy main)*
+- **Auto-push** — this T1 confirmation authorizes all checkpoint pushes; no further asks.
+- **Hold until train end** — checkpoints land locally without pushing; one deploy-gate ask
+  before the final T7 push. *Caveat: no origin backup of landed code mid-train.*
 
 **T2 — Reserve the whole chain.** `bash scripts/sprint/reserve-wave.sh S-A … S-N` — the
 wave id doubles as the train id, and this is checkpoint P1 (the train's one origin-sync
@@ -545,8 +587,12 @@ in train-progress.md.
 → `merge-sprint.sh land train-W-<id> --sprints S-A,S-B,…` (one `--no-ff` merge; per-sprint
 done-moves + status/end_date flips; one regen; exit 4) → apply the segment's pre-drafted
 docs (seconds) → `merge-sprint.sh finish train-W-<id> --sprints S-A,S-B,… --no-push` →
-`bash scripts/sprint/push-main.sh` — **the checkpoint's single CI-triggering push** — →
-verify CI green once (PROTOCOL Phase 3 Step 6). Update train-progress.md (`landed@ckpt-n`).
+push **per the T1 push policy**: "ask-each" → deploy-gate question, then
+`bash scripts/sprint/push-main.sh`; "auto" → `push-main.sh` directly; "hold" → skip the
+push (the segment stays local until T7). When pushed, it is **the checkpoint's single
+CI-triggering push** — verify CI green once (PROTOCOL Phase 3 Step 6); a held segment
+carries the CI check to whichever later push lands it. Update train-progress.md
+(`landed@ckpt-n`).
 **Red CI:** the segment's boundary SHAs narrow a first-parent bisect to one sprint in ≤2
 steps; fix on `main` under the lock, `push-main.sh` again (never raw `git push`), re-verify.
 Not cured by one targeted fix → hard stop; the batched land gives a clean escape hatch —
@@ -557,8 +603,11 @@ user first).
 (hand it all report paths, plus `pre_wave_sha` from T2's reservation as the explicit diff
 base — `git diff <pre_wave_sha>...HEAD` on `main`; same rule as the wave review in Step 6, an
 implicit branch-vs-main diff on `main` is empty; small fixes on `main` under the lock ride
-the final push, larger ones become follow-up sprints) → `reserve-wave.sh --release W-<id>` for never-started
-members → final `push-main.sh` + CI verify →
+the final push, larger ones become follow-up sprints; Step 6's conditional outside-voice
+second pass applies here too, with the same `pre_wave_sha` base) →
+`reserve-wave.sh --release W-<id>` for never-started
+members → final push per the T1 policy (auto → `push-main.sh`; otherwise the deploy-gate
+question first — under "hold" this is the train's one code-bearing push) + CI verify →
 `git worktree remove .claude/worktrees/train-W-<id> && git branch -d train-W-<id>` →
 recompute `claims.mjs waves`, report the board, stop.
 

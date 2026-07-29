@@ -54,6 +54,38 @@ written, the model name that came back — not merely that the call returned).
 
 - **Gate:** name the observable difference this change creates, and assert on *that*.
 
+## 7. Rate the test you're about to write
+
+Not all green tests are equal:
+
+- ★ — smoke/existence check ("it renders", "doesn't throw", trivial assertion)
+- ★★ — asserts correct behavior, happy path only
+- ★★★ — asserts behavior plus edge cases plus error paths
+
+- **Gate:** a ★ test does not satisfy an acceptance criterion. New behavior aims for ★★★;
+  if you're stopping at ★★, name the edge/error cases you're consciously deferring.
+
+## 8. The regression rule (mandatory)
+
+When a change modifies *existing* behavior and no existing test covers the changed path, a
+regression test is mandatory — added without asking. Regressions are the highest-priority
+test class because they prove something already broke once.
+
+- **Gate:** "does this diff change what existing callers observe?" If yes and no test
+  covers that path, write the test. When uncertain whether a change is a regression, err
+  on the side of writing it.
+
+## 9. Interaction edge cases (UI / user-flow work)
+
+Users do unexpected things; each is a codepath. Consider: double-click/rapid resubmit,
+navigating away mid-operation, stale data (page open 30 minutes, session expired), a slow
+connection (what does the user see for 10 seconds?), and two tabs on the same form.
+
+- **Gate:** for each user flow, name which of these apply and where they're tested.
+  Unit-vs-E2E rule of thumb: E2E for flows spanning 3+ components and for
+  auth/payment/data-destruction flows (too important to trust unit tests alone); unit
+  tests for pure functions and single-function edge cases.
+
 ---
 
 When test-first genuinely doesn't fit (exploratory spike, pure config, visual/UI work), say so

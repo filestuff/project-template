@@ -55,7 +55,10 @@ Parse the first argument as the command, the second as the sprint ID.
    null as **unplanned** (never certified by `/sprint plan`).
 3. Glob `docs/sprints/done/*.md` (and `done/archive/*.md`) — count total, show last 3
    completed.
-4. Format as a concise board view. (Ignore `.gitkeep` files when counting.)
+4. Unpushed check: `git rev-list --count @{u}..HEAD 2>/dev/null || true` — if > 0, add a
+   board line "⚠ N unpushed commit(s) — a held completion may be awaiting the deploy gate
+   (PROTOCOL Phase 3 Step 4)."
+5. Format as a concise board view. (Ignore `.gitkeep` files when counting.)
 
 ### `/sprint start [S-NNN]`
 
@@ -72,9 +75,11 @@ Pre-Sprint Decisions section). Then begin executing deliverables sequentially pe
 
 Execute **Phase 3: Post-Sprint** from `docs/sprints/PROTOCOL.md`: acceptance-criteria
 **evidence** check (cite test/file:line/output — a checked box without evidence does not
-count) → doc sync via `git diff` → **`/adr check` (mandatory)** → move the file to `done/`,
-flip frontmatter, update INDEX.md with a one-line outcome, commit
-`sprint: complete S-NNN — [name]`.
+count) → doc sync via `git diff` → **`/adr check` (mandatory)** → risk-tiered review
+(Step 3.5 — high-risk diffs only) → move the file to `done/`, flip frontmatter, update
+INDEX.md with a one-line outcome, commit `sprint: complete S-NNN — [name]` → **deploy
+gate**: ask before `git push` (PROTOCOL Phase 3 Step 4 — pushing main triggers any
+connected auto-deploy).
 
 ### `/sprint create [title]`
 
