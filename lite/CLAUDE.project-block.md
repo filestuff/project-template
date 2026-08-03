@@ -33,9 +33,13 @@ pass before each deliverable commit.
 
 When a request matches a skill, invoke it via Skill as the FIRST action:
 
+- Explore a feature idea / draft a spec → `/proposal` (writes `docs/proposals/NNN-*.md`,
+  then hands off to `/plan <NNN>`) — do NOT plan or build from a bare idea without it
 - Start/complete/show sprints, "what's next" → `/sprint` (full tier: `/sprint wave` fans a
   parallel wave of independent sprints out to subagents)
 - Break a plan into sprints / seed the backlog → `/plan` (splits work for parallel agents)
+- Execute a started sprint (lite) → a subagent-driven execution skill if installed (e.g.
+  superpowers:subagent-driven-development), sprint file as the plan — solo only without one
 - Record an architectural decision → `/adr`
 - Root-cause a bug / failing test / unexpected behavior → `/debug` (before proposing a fix)
 
