@@ -3,8 +3,8 @@ name: sprint
 description: >
   Kanban sprint management for {{PROJECT_NAME}} — start, complete, plan, and track sprints
   with dependency checking and doc validation. Use when asked to "start a sprint",
-  "complete a sprint", "show the board", "create a sprint", "plan a sprint", or
-  "what's next".
+  "complete a sprint", "show the board", "create a sprint", "plan a sprint",
+  "reject a sprint", or "what's next".
 argument-hint: "[command] [sprint-id]"
 allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion"
 ---
@@ -121,6 +121,21 @@ failed; don't repeat those gaps.
 
 All pass → set `plan_date:` to today and commit `sprint: plan S-NNN — [name]`. Any fail →
 leave `plan_date: null`, still commit the partial progress, and report what's missing.
+
+### `/sprint reject [S-NNN] [reason]`
+
+Discard a backlog sprint while keeping the record (see PROTOCOL.md "Rejecting a sprint"):
+
+1. Only from `backlog/` — an in-progress sprint is finished or descoped, not rejected.
+2. If no reason was given, ask for a one-line reason (AskUserQuestion) — a rejection
+   without a why is unreadable in three months.
+3. Check `blocks:`/`depends_on:` of the remaining backlog: any sprint depending on this one
+   gets flagged to the user (remove the dependency or reject it too — don't leave dangling
+   edges silently).
+4. `git mv` the file `backlog/ → rejected/`; set `status: rejected`; append the reason as a
+   dated line under a `## Rejected` heading in the file.
+5. Move the INDEX.md row to the Rejected section with the one-line reason.
+6. Commit: `sprint: reject S-NNN — [reason]`.
 
 ### `/sprint next`
 
