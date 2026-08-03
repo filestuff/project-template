@@ -4,6 +4,31 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [Unreleased]
+
+Contributed from downstream fork experience (see PR); version number left to the
+maintainer per this repo's release rules.
+
+- **New `/proposal` skill + `docs/proposals/PROPOSAL_TEMPLATE.md` — the missing idea→spec
+  step (both tiers).** Turns a bare idea into a decision-ready RFC in
+  `docs/proposals/NNN-*.md` (problem, goals, 2–3 alternatives with trade-offs, decision
+  criteria — the shape is deliberately disjoint from sprint files: no deliverables, no
+  acceptance criteria). Uses an installed brainstorming skill as the method when available,
+  knows when to skip itself (finished plan handed in, or proposal already exists), and
+  always ends by offering `/plan <NNN>`. README workflow gains step 0; the CLAUDE block
+  routes bare ideas here.
+- **Lite-tier sprint execution defaults to a subagent-driven execution skill** when one is
+  installed (sprint file = plan, deliverables = tasks; Phase 2 rules bind every implementer
+  subagent as global constraints; `/sprint done` stays mandatory afterwards). Solo
+  execution remains the fallback. Full tier unaffected — its own executor machinery governs.
+- **New `/sprint reject S-NNN [reason]` (both tiers)** — the `rejected/` column gets its
+  missing transition: backlog-only move with a mandatory one-line reason,
+  dangling-dependency flagging, documented reversal. Full tier runs it as a locked
+  main-ledger transaction with a wave-reservation guard.
+- **Settings**: `Skill(proposal)`, `Skill(debug)`, `Skill(template-upgrade)` added to the
+  shipped allowlist (the latter two were shipped but not allowlisted); `gate.sh` ships with
+  its executable bit set.
+
 ## [1.4.0] - 2026-07-29
 
 Two themes: sprint completions now **ask before pushing main** (a push to main is a

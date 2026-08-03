@@ -410,6 +410,18 @@ to the recorded pre-land SHA and releases the lock.
 
 ---
 
+## Rejecting a sprint
+
+`/sprint reject S-NNN [reason]` discards a **backlog** sprint while keeping the record:
+a locked main-ledger transaction (lock → `git mv backlog/ → rejected/`, `status: rejected`,
+dated one-line reason in the file → regen → commit `sprint: reject S-NNN — [reason]
+[skip ci]`). A sprint holding a `wave:` reservation is never rejected silently — release
+the reservation first. Only backlog sprints can be rejected; in-progress work is completed,
+descoped, or unstarted (`unstart.sh`) instead. Reversal is the same transaction backwards;
+the rejection note stays in the file as history.
+
+---
+
 ## Generated Blocks & Regeneration
 
 `docs/sprints/INDEX.md` and `docs/sprints/ROADMAP.md` contain regions delimited by

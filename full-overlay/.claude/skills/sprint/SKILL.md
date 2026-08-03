@@ -4,9 +4,9 @@ description: >
   Kanban sprint management for {{PROJECT_NAME}} — start, complete, plan, and track sprints
   with dependency checking, file claims, doc validation, and lock-serialized
   lifecycle commits on main. Use when asked to "start a sprint", "complete a
-  sprint", "show the board", "create a sprint", "plan a sprint", "what's next",
-  "sprint roadmap", "run/fan out a parallel wave", or "run a serial train of
-  sprints".
+  sprint", "show the board", "create a sprint", "plan a sprint", "reject a
+  sprint", "what's next", "sprint roadmap", "run/fan out a parallel wave", or
+  "run a serial train of sprints".
 argument-hint: "[command] [sprint-id]"
 allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion EnterWorktree ExitWorktree Task"
 ---
@@ -185,6 +185,20 @@ All pass → `node scripts/sprint/frontmatter.mjs set <file> plan_date "$(date +
 fail → leave `plan_date: null` and report what's missing (still commit partial progress).
 Either way, commit on main under the lock (same pattern as `/sprint create`):
 `sprint: plan S-NNN — [name] [skip ci]`.
+
+### `/sprint reject [S-NNN] [reason]`
+
+Discard a backlog sprint while keeping the record. Only from `backlog/`; if the sprint
+carries a `wave:` reservation, stop and ask — release the reservation first, don't silently
+reject a scheduled sprint. If no reason was given, ask for a one-line reason
+(AskUserQuestion). Flag any remaining backlog sprint whose `depends_on` names this one
+(remove the dependency or reject it too — no silent dangling edges). Then, as a locked
+main-ledger transaction (same pattern as `/sprint create`):
+`lock.sh acquire reject-S-NNN` → `git mv backlog/… rejected/…`, set `status: rejected`
+(`frontmatter.mjs set`), append the dated reason under a `## Rejected` heading →
+`regen.mjs` → commit `sprint: reject S-NNN — [reason] [skip ci]` (explicit paths,
+`--no-verify`) → `lock.sh release <token>`. Reversal is the same transaction backwards
+(keep the rejection note in the file as history).
 
 ### `/sprint next`
 

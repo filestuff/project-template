@@ -85,6 +85,15 @@ the sprint up.
 
 ## Phase 2: Execution
 
+**Execution mode.** Run Phase 2 via a subagent-driven execution skill when one is installed
+(e.g. `superpowers:subagent-driven-development`) — this is the default, not an option: the
+sprint file is the plan, its numbered deliverables are the tasks, and the rules below bind
+every implementer subagent (hand them into each dispatch as global constraints — especially
+the gate before every commit and the `S-NNN:` commit grammar). The execution skill's own
+final review complements Phase 3, it does not replace it: `/sprint done` (evidence check,
+doc sync, ADR check) always runs afterwards. Only when no such skill is available, execute
+Phase 2 solo exactly as written.
+
 - **Verify the brief first.** Before deliverable 1, confirm the plan's premises against the
   actual code: the referenced files/symbols exist as described, cited APIs match the installed
   versions, and Pre-Sprint Decisions are reflected in what you're about to build. Trivial
@@ -180,3 +189,14 @@ sprint; depth scales with blast radius.
    before declaring the sprint closed (e.g. `gh run list --limit 5`) — a red run reopens the
    close: fix, re-push, re-verify. (No CI? skip this step.) A held push carries this check
    with it — it runs whenever the push happens.
+
+---
+
+## Rejecting a sprint
+
+`/sprint reject S-NNN [reason]` moves a **backlog** sprint to `rejected/` with
+`status: rejected`, a dated one-line reason in the file, and its INDEX.md row moved to
+Rejected — the record of what was deliberately NOT built, and why, stays readable. Only
+backlog sprints can be rejected; in-progress work is completed or descoped instead.
+Reversal is the same move backwards: `git mv rejected/ → backlog/`, `status: backlog`,
+INDEX row restored (keep the rejection note in the file as history).
