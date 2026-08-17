@@ -42,6 +42,11 @@ When a request matches a skill, invoke it via Skill as the FIRST action:
   superpowers:subagent-driven-development), sprint file as the plan — solo only without one
 - Record an architectural decision → `/adr`
 - Root-cause a bug / failing test / unexpected behavior → `/debug` (before proposing a fix)
+- One-shot bulk work with no durable artifact (migration sweep, codebase audit, research
+  pass) → run it directly as a goal-formulated parallel job (Workflow tool / "ultracode",
+  where available, or plain parallel subagents) instead of through the sprint machinery —
+  sprints are for work whose cards, claims, and history must outlive the session. State
+  the goal, the done-criterion, and the self-check; do not prescribe the step list.
 
 ## Context discipline
 
