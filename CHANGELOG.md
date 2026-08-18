@@ -4,10 +4,14 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
-## [Unreleased]
+## [1.5.0] - 2026-08-18
 
-Contributed from downstream fork experience (see PR); version number left to the
-maintainer per this repo's release rules.
+The idea→spec→sprint path is now complete end to end: `/proposal` fills the gap
+before `/plan`, `/sprint reject` fills the gap after it, and `/plan` cuts slices that
+are safe to run in parallel. Contributed from downstream fork experience. No
+migrations — no seeded file changed; the new skill and template copy in via
+`/template-upgrade`'s normal plan/apply, and the changed files are all managed or
+merged.
 
 - **New `/proposal` skill + `docs/proposals/PROPOSAL_TEMPLATE.md` — the missing idea→spec
   step (both tiers).** Turns a bare idea into a decision-ready RFC in
@@ -25,6 +29,24 @@ maintainer per this repo's release rules.
   missing transition: backlog-only move with a mandatory one-line reason,
   dangling-dependency flagging, documented reversal. Full tier runs it as a locked
   main-ledger transaction with a wave-reservation guard.
+- **`/plan` measures slice file-regions before cutting (both tiers).** When the repo is
+  unfamiliar, the plan spans several modules, or the breakdown heads past ~5 sprints, Phase 2
+  now dispatches one read-only `Explore` subagent per candidate slice — all in a single
+  message, so they run concurrently — each reporting the file region the slice touches, the
+  shared modules it depends on, and the contracts it crosses. The cut then happens on measured
+  regions rather than estimates, so a file claimed by two slices becomes a foundation-sprint
+  candidate up front instead of a mid-wave claims conflict (full tier) or a merge conflict
+  (lite). Skipped when the seams are already obvious — the fan-out costs tokens and its value
+  scales with uncertainty about the code.
+- **Deliverable dependencies are now marked explicitly (both tiers).** `/plan` writes, and
+  `SPRINT_TEMPLATE.md` requires, a `depends on #N` / `independent of all prior deliverables`
+  line per deliverable; PROTOCOL Phase 2 uses that marking to dispatch independent
+  deliverables in parallel instead of reading every sprint as strictly sequential.
+- **One-shot bulk work routes past the sprint machinery.** The CLAUDE block now sends
+  migration sweeps, codebase audits, and research passes — work that leaves no durable
+  artifact — to a goal-formulated parallel job (Workflow / plain parallel subagents) stating
+  goal, done-criterion, and self-check, rather than through sprint cards. Sprints stay for
+  work whose cards, claims, and history must outlive the session.
 - **Settings**: `Skill(proposal)`, `Skill(debug)`, `Skill(template-upgrade)` added to the
   shipped allowlist (the latter two were shipped but not allowlisted); `gate.sh` ships with
   its executable bit set.
