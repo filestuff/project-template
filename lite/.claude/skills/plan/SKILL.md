@@ -63,6 +63,18 @@ split.
 2. **Identify natural sprint boundaries.** Foundation/infra first; independent features
    parallelizable; DB/schema before features; integration/eval last. Each sprint completable
    in ≤ ~2 weeks. Respect any build order the source plan locks in.
+
+   **Measure before cutting (conditional).** When the repo is unfamiliar, the plan spans
+   several modules, or the breakdown is heading past ~5 sprints, do not cut on estimated
+   file regions: dispatch one read-only `Explore` subagent per candidate slice — all in a
+   single message so they run in parallel — each returning (a) the file region the slice
+   would touch (dirs/files), (b) shared modules it depends on, and (c) the contracts it
+   crosses. Cut on the measured regions. A file reported by two slices is a foundation-
+   sprint candidate NOW — far cheaper than discovering it mid-wave as a claims conflict
+   (full tier) or a merge conflict (lite). Skip this when the seams are already obvious
+   (small repo, familiar code): the fan-out costs tokens and its value is proportional
+   to uncertainty about the code.
+
 3. **Cut for parallelism.** The aim is sprints that *parallel agents* can run at the same time:
    - Prefer **vertical slices that own disjoint file regions** so two sprints never edit the
      same files — disjoint `touches:` is exactly what makes concurrent execution safe (full
@@ -103,6 +115,9 @@ For each sprint, starting at S-{highest+1}, create a file from
   source plan is invisible to it.
 - **Deliverables** (execution order): Files (new|modified), Reference implementation,
   Interface contract (file:line where code exists), Setup, Changes, Acceptance criteria.
+  Mark each deliverable's dependency explicitly — "depends on #N" or "independent of
+  all prior deliverables" (mandatory per the template comment; independence enables
+  parallel dispatch within the sprint).
   Apply YAGNI — only the deliverables the plan actually needs (`docs/ENGINEERING_PRINCIPLES.md`).
 - **Interface Contract** (Produces / Consumes): the cross-sprint signatures. For every
   `depends_on` edge, fill the dependent's **Consumes** and the blocker's **Produces** with the

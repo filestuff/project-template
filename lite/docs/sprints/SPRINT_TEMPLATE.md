@@ -34,7 +34,10 @@ touches: []
      plan's file:line premises predate landed work and need re-verification. -->
 
 <!-- Deliverables are numbered in execution order. Claude executes 1, then 2, etc.
-     If two deliverables are independent, say so in their description. -->
+     Dependency marking is MANDATORY per deliverable: state either "depends on #N"
+     or "independent of all prior deliverables" in its description. Independence is
+     what allows a subagent-driven executor to dispatch deliverables in parallel;
+     an unmarked deliverable is treated as depending on its predecessor. -->
 
 ## Context
 

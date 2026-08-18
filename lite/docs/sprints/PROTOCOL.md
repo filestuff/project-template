@@ -91,7 +91,13 @@ sprint file is the plan, its numbered deliverables are the tasks, and the rules 
 every implementer subagent (hand them into each dispatch as global constraints — especially
 the gate before every commit and the `S-NNN:` commit grammar). The execution skill's own
 final review complements Phase 3, it does not replace it: `/sprint done` (evidence check,
-doc sync, ADR check) always runs afterwards. Only when no such skill is available, execute
+doc sync, ADR check) always runs afterwards. Deliverables marked "independent of all
+prior deliverables" (see SPRINT_TEMPLATE) may be dispatched to implementer subagents
+in parallel — one message, multiple dispatches — when each implementer works in its
+own worktree/checkout; in a single shared checkout execute serially (concurrent
+implementers would gate and commit over each other's half-done changes). Dependent
+deliverables stay serial, and every implementer still obeys the gate-before-commit
+rule. Only when no such skill is available, execute
 Phase 2 solo exactly as written.
 
 - **Verify the brief first.** Before deliverable 1, confirm the plan's premises against the
@@ -101,7 +107,8 @@ Phase 2 solo exactly as written.
   (stale premise, missing referenced file, an acceptance criterion you cannot evaluate) →
   stop and ask via AskUserQuestion with concrete alternatives — do not code around a broken
   premise.
-- Read deliverables sequentially (1, 2, 3 …). The sprint file is the source of truth.
+- Read deliverables sequentially (1, 2, 3 …). The sprint file is the source of truth;
+  under parallel dispatch each implementer reads only its own deliverable.
 - For each deliverable:
   1. Read all referenced files before changing anything.
   2. **Test-first (RED).** Write the failing test for the behavior and run it — watch it fail
