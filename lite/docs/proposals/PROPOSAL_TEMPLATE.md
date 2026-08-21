@@ -12,7 +12,9 @@
 ## Problem
 
 <!-- What is broken or missing, for whom, and the evidence (bug report, metric, quote,
-     code smell with file:line). If you cannot state the problem without naming a
+     code smell with file:line). Current behavior must be verified, not assumed; quantify
+     it or mark it "unknown — measure by [method]". End with the observable signal that
+     says the problem is solved. If you cannot state the problem without naming a
      solution, the problem is not understood yet. -->
 
 ## Goals / Non-Goals
@@ -26,7 +28,9 @@
 ## Alternatives
 
 <!-- 2–3 genuinely different approaches. Recommended one FIRST, with trade-offs for each.
-     One alternative is not a comparison; describing only the favorite is advocacy. -->
+     One must be the minimal-viable cut; note reversibility and rough effort per
+     alternative. Include "do nothing" when its cost is genuinely low. One alternative
+     is not a comparison; describing only the favorite is advocacy. -->
 
 ### A — Recommended: {name}
 {How it works. Why it is favored — one line.}
@@ -44,10 +48,11 @@ Trade-offs: {why not first choice}
 
 ## Open questions
 
-<!-- Decision-ready only: each with 2–4 concrete options and a recommended one.
+<!-- Decision-ready only: each with 2–4 concrete options, a recommended one, and the
+     consequence of deferring it (what the implementer ships by default if unanswered).
      A vague question ("how should errors be handled?") is a gap, not a question. -->
 
-- [ ] {Question} — options: {A (recommended: why)}, {B}
+- [ ] {Question} — options: {A (recommended: why)}, {B} — if deferred: {what happens}
 
 ## References
 

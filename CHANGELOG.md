@@ -4,6 +4,39 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.6.0] - 2026-08-21
+
+`/proposal` grows a real interrogation method. The probing-question style stays; it is now
+the primary method (no longer hidden behind an installed brainstorming skill) and is
+structured into explicit steps, borrowing the highest-leverage mechanics from the gstack
+review skills without their infrastructure. No migrations — all changed files are managed
+and copy in via `/template-upgrade`'s normal plan/apply.
+
+- **`/proposal` method rewrite (both tiers).** The gate-1 method is now: ground in code
+  before asking (first question cites `file:line` or explicitly declares greenfield) →
+  premise interrogation (who / verified current behavior / desired behavior / why now /
+  observable success signal, plus a premise challenge: "real problem or proxy — what if we
+  do nothing?") → scope lock (non-goals early, smallest version that delivers the value,
+  settled scope calls are not re-argued) → equal-weight alternatives (minimal-viable cut
+  mandatory, ideal version when distinct, "do nothing" when cheap, dual-scale effort notes;
+  a brainstorming skill is optional input here, no longer the whole method) → a 0–10
+  self-review loop before the draft is shown → "what did I get wrong?" draft review → one
+  fresh-context reviewer subagent round (scores Completeness/Consistency/Clarity/
+  Scope-YAGNI/Feasibility, max 2 rounds, recurring issues land in Open questions instead of
+  looping, fail-soft). A short anti-patterns list replaces the optional grill-me round.
+  Quantification rule throughout: count it or write "unknown — measure by [method]".
+- **`PROPOSAL_TEMPLATE.md` guidance tightened (comments only, shape unchanged).** Problem
+  comments now require verified/quantified current behavior and an observable success
+  signal; Alternatives comments require the minimal-viable cut plus reversibility/effort
+  notes; Open questions gain a mandatory deferral consequence
+  (`— if deferred: {what happens}`).
+- `docs/proposals/README.md` updated to describe the new method.
+- **Executability fixes surfaced by a fresh-context review of the skill itself**: first
+  proposal ever numbers 001; the proposal file is written at the self-review step so later
+  steps operate on disk; a bare proposal-number argument routes to the existing-proposal
+  gate; the Output section applies only to paths that produce a file; gate-3 duplicate
+  detection checks filenames then H1 titles.
+
 ## [1.5.0] - 2026-08-18
 
 The idea→spec→sprint path is now complete end to end: `/proposal` fills the gap
