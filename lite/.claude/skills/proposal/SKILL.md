@@ -6,7 +6,7 @@ description: >
   "should we build X", or when a feature request arrives with no design document yet.
   Skips itself when a proposal already exists.
 argument-hint: "[idea, doc path, or proposal number]"
-allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill"
+allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill Agent Task"
 ---
 
 # Proposal Skill
@@ -25,36 +25,112 @@ change is the null result here: "no proposal needed — [reason]".
 ## Entry gates — pick exactly one
 
 1. **Idea only** (no document exists): run the method below.
-2. **A finished plan/spec document is handed in**: do NOT re-brainstorm. Ask ONE question via
+2. **A finished plan/spec document is handed in**: do NOT re-interrogate. Ask ONE question via
    AskUserQuestion: file it as `docs/proposals/NNN-*.md` (numbered, lightly mapped onto the
    template headings — no forced rewrite) and continue with `/plan <NNN>`, or skip filing and
    go straight to `/plan <path>`. Follow the answer.
-3. **A proposal for this topic already exists** (Glob `docs/proposals/*.md`, check titles):
-   point to it and offer `/plan <NNN>` — do not write a duplicate.
+3. **A proposal for this topic already exists** (Glob `docs/proposals/*.md`; match on
+   filenames, and Read the H1 titles of near-misses): point to it and offer `/plan <NNN>` —
+   do not write a duplicate. A bare proposal-number argument (`/proposal 003`) resolves
+   here too.
 
 ## Method (gate 1)
 
-Prefer the installed brainstorming skill: if `superpowers:brainstorming` (or another
-brainstorming skill) is available, invoke it and steer its output into the template shape and
-location below — the skill's default output directory does not apply here.
+### Step 0 — Ground in code before asking anything
 
-Fallback (no brainstorming skill installed):
-1. Explore the codebase first — answer what is answerable by reading before asking anything.
-2. Clarifying questions one at a time (AskUserQuestion), each with concrete options and a
-   recommended one. Stop when the problem statement holds without naming a solution.
-3. Draft 2–3 genuinely different alternatives with trade-offs, recommendation first.
-4. Fill the remaining template sections (decision criteria, open questions — decision-ready
-   only, references with file:line).
+Hard precondition: explore the codebase BEFORE the first question. Grep/Read whatever the
+idea touches; answer everything answerable by reading. The first question round must cite
+what you found as `file:line` — never ask "what file should I look at?" or anything the
+code already answers. If nothing relevant exists, declare greenfield explicitly:
+"I searched {X}, {Y}, {Z} — nothing exists for this yet."
 
-## Output — always the same, regardless of gate
+### Step 1 — Premise interrogation
+
+Answer these five anchors before moving on — none may rest on hand-waving:
+
+1. **Who** is affected? ("Just me, solo dev" is a fine answer — don't dwell then.)
+2. **What IS happening now?** Verified by reading code/logs/docs, not assumed.
+3. **What should happen instead?**
+4. **Why now?** Blocking work, costing money/time, correctness, or just nice-to-have?
+5. **What observable signal says the problem is solved?** A problem-level success signal
+   (a metric, a removed failure mode, a workflow that no longer needs a workaround) — not
+   acceptance criteria.
+
+Then challenge the premise itself: is this the real problem or a proxy for one? What
+actually happens if we do nothing? If the honest answer is "not much", say so — that
+becomes a real alternative in Step 3, or the null result.
+
+Question protocol: AskUserQuestion, one decision at a time, each with 2–4 concrete options
+and a recommended one. Ask highest-ambiguity first. Ask only what Step 0 could not answer.
+Quantify claims or mark them explicitly: "unknown — measure by [method]". "Several files"
+is not acceptable — find the count.
+
+### Step 2 — Scope lock
+
+State non-goals explicitly and early — locking what this is NOT prevents creep later.
+Identify the smallest version that still delivers the value. When the user asks for more
+mid-conversation, name it: "that's a separate proposal — let's finish this one." Once the
+user settles a scope call, commit to it; do not re-argue it in later steps.
+
+### Step 3 — Alternatives with equal weight
+
+Draft 2–3 genuinely different approaches. One must be the minimal-viable cut; when
+meaningfully distinct, one should be the ideal version. Give "do nothing" its own line
+when Step 1 showed the do-nothing cost is low. Weigh them EQUALLY while exploring — do not
+default to minimal just because it is smaller; if the right answer is the big version, say
+so. Once the trade-offs are on the table, designate the recommendation (the template lists
+it first) — equal weight governs the comparison, not the conclusion. Per alternative: how
+it works, the trade-off it accepts, and a rough dual-scale effort note (human-team time vs
+Claude-driven time). An installed brainstorming skill MAY be used here to generate
+candidates; it does not replace this method.
+
+### Step 4 — Self-review before showing the draft
+
+Number and write the proposal file now (Output steps 1–2) — Steps 5 and 6 operate on the
+file on disk, and edits land there, never only in conversation. Then rate the draft 0–10
+against this checklist before presenting it:
+
+- Problem stated without naming a solution.
+- Every open question decision-ready: 2–4 concrete options, one recommended, and an
+  "if deferred: {what happens}" consequence.
+- Every claim quantified or explicitly marked "unknown — measure by [method]".
+- Each decision criterion checkable against each alternative.
+
+Name the gap ("it's a 6 because the churn claim is unquantified; a 10 would cite the
+count"), fix it, re-rate. Show the draft at ≥8, or earlier when closing the gap needs the
+user's input.
+
+### Step 5 — Draft review with the user
+
+Present the draft and ask: "Does this capture what you want? **What did I get wrong?**"
+Iterate until confirmed.
+
+### Step 6 — Fresh-context reviewer
+
+After the user confirms the draft, dispatch ONE fresh-context subagent (the Agent tool —
+named Task on older harnesses; Explore or general-purpose type) with only the proposal
+file path and this brief: score it 1–10 on Completeness,
+Consistency, Clarity, Scope (YAGNI), and Feasibility; list specific issues, no compliments.
+Fix what's right, re-dispatch at most once (max 2 rounds total). If the same issues recur,
+stop and record them under Open questions instead of looping. Fail-soft: if the subagent
+cannot run, say so and continue — this is a quality bonus, not a gate. Write every accepted
+fix back into the proposal file, never leave it only in conversation.
+
+## Anti-patterns
+
+- A solution masquerading as a problem statement.
+- Only one alternative described — that is advocacy, not comparison.
+- Vague open questions ("how should errors be handled?") — a gap, not a question.
+- Unquantified impact ("improves performance", "several files").
+- Scope creep absorbed instead of split into its own proposal.
+- Deliverables, file lists, or acceptance criteria leaking into the proposal shape.
+
+## Output — whenever a proposal file is produced (gate 1, or gate 2's file-it path)
 
 1. Number: Glob `docs/proposals/*.md`, ignore `README.md` and `PROPOSAL_TEMPLATE.md`, take
-   highest NNN + 1, zero-padded to 3 digits.
+   highest NNN + 1 (001 when none exist), zero-padded to 3 digits.
 2. Write `docs/proposals/{NNN}-{kebab-title}.md` following `PROPOSAL_TEMPLATE.md`. No
    unresolved placeholder text — every section filled or explicitly marked "n/a — [why]".
 3. Commit: `docs: proposal {NNN} — {title}`.
-4. Optional hardening: offer ONE round with an interview/stress-test skill (e.g. grill-me) if
-   installed; write every answer back into the proposal (open questions → resolved), not
-   just into the conversation.
-5. **Always end by offering `/plan {NNN}`** — the proposal is not the destination, the
+4. **Always end by offering `/plan {NNN}`** — the proposal is not the destination, the
    sprint backlog is. If the user declines, leave Status: draft and stop.
