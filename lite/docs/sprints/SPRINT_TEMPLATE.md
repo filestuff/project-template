@@ -4,6 +4,8 @@ status: backlog
 goal: One sentence describing what "done" looks like
 short: Concise label for INDEX tables (~30 chars)
 tasks: null
+proposal: null
+stage: null
 depends_on: []
 blocks: []
 tags: []
@@ -33,6 +35,11 @@ touches: []
      dependency's end_date renders as "stale plan" in the waves output — the
      plan's file:line premises predate landed work and need re-verification. -->
 
+<!-- proposal:/stage: are informational backlinks, ignored by scripts — set by /plan
+     when the source is a proposal (proposal: NNN, stage: k; stage: 1 for un-staged
+     proposals). Sprint close (PROTOCOL Step 3.6) uses them, together with the Context
+     Source citation, to detect when a proposal stage's last sprint lands. -->
+
 <!-- Deliverables are numbered in execution order. Claude executes 1, then 2, etc.
      Dependency marking is MANDATORY per deliverable: state either "depends on #N"
      or "independent of all prior deliverables" in its description. Independence is
@@ -45,9 +52,11 @@ touches: []
      originating task IDs, and the source plan's GLOBAL constraints that bind this
      sprint — copied verbatim, not paraphrased. This file is the executor's entire
      brief; a constraint living only in the source plan is invisible to it.
-     "— none" is a valid entry for standalone sprints. -->
+     "— none" is a valid entry for standalone sprints. For staged proposals /plan
+     writes the citation form below verbatim — sprint close greps it to detect stage
+     completion. -->
 
-- Source: `path/to/plan.md` (tasks: T-x, T-y) | — none
+- Source: `path/to/plan.md` (tasks: T-x, T-y) | `docs/proposals/NNN-{kebab}.md` (stage k/N — gate on completion: [one-line gate question]) | — none
 - Binding constraints: …
 
 ## Scope

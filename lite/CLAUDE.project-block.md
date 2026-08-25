@@ -34,7 +34,9 @@ pass before each deliverable commit.
 When a request matches a skill, invoke it via Skill as the FIRST action:
 
 - Explore a feature idea / draft a spec → `/proposal` (writes `docs/proposals/NNN-*.md`,
-  then hands off to `/plan <NNN>`) — do NOT plan or build from a bare idea without it
+  then hands off to `/plan <NNN>`; when a staged proposal's stage completes,
+  `/proposal <NNN>` decides its gate) — do NOT plan or build from a bare idea without it,
+  and do NOT plan past an undecided stage gate
 - Start/complete/show sprints, "what's next" → `/sprint` (full tier: `/sprint wave` fans a
   parallel wave of independent sprints out to subagents)
 - Break a plan into sprints / seed the backlog → `/plan` (splits work for parallel agents)

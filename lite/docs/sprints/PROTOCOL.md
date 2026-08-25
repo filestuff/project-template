@@ -181,6 +181,23 @@ payment/irreversible mutation, trust-boundary parsing). **High-risk** → dispat
 findings and re-run the gate. **Not high-risk** → skip — do not add a review pass to every
 sprint; depth scales with blast radius.
 
+### Step 3.6: Proposal Stage Check
+
+If the sprint cites a proposal (frontmatter `proposal:`, or a Context
+`Source: docs/proposals/NNN-…` line), check whether this was the LAST open sprint for that
+proposal + stage: Grep `backlog/` and `in-progress/` for the same citation (same
+`stage k/` when staged). Others remain → note "stage still in progress" and continue to
+Step 4.
+
+If this was the last:
+- **Staged proposal** → set that stage's status line to `delivered YYYY-MM-DD` in the
+  proposal file (stage the edit; it rides Step 4's close commit). Then tell the user:
+  "Stage k of proposal NNN is complete — the proposal defines a gate here:
+  [gate question]." Offer `/proposal NNN` to decide it. Do NOT decide the gate inline at
+  sprint close, and do not plan the next stage without it.
+- **Un-staged proposal** → flip its `**Status**:` to `delivered YYYY-MM-DD` (rides the
+  close commit) and say so.
+
 ### Step 4: Close
 
 1. `git mv` the sprint file `in-progress/ → done/`; set `status: done` and `end_date`.
