@@ -352,6 +352,16 @@ present the disagreement to the user as a neutral tension — both positions, ba
 the other findings — and never auto-incorporate either side; adjudicate dispositions in
 wave-plan.md exactly as for the first review.
 
+**Proposal stage check (master, once per wave).** Grep the landed sprints' frontmatter
+`proposal:` fields / Context `Source: docs/proposals/NNN-…` lines for proposal citations.
+For each cited stage with no remaining open sprints (`backlog/` + `in-progress/` on
+`main`), mark the stage `delivered YYYY-MM-DD` in the proposal file (commit on `main`
+under the lock, `[skip ci]`; un-staged proposals: flip `**Status**:` to `delivered`), and
+report: the stage's gate is now due — offer `/proposal NNN`. Never fold the gate decision
+into the wave close; it needs the proposal's evidence spec, not the wave report.
+(Executors skip PROTOCOL Step 3.6 — this master-side check replaces it, so simultaneous
+finishers can't each see a sibling in-progress and silently drop the gate offer.)
+
 Then close out the wave: `reserve-wave.sh --release W-<id>` if any backlog members still
 carry the reservation (deferred/split members). Then **checkpoint P3 (mandatory)**: ask
 the deploy-gate question (Push policy above), then run
@@ -604,7 +614,8 @@ user first).
 base — `git diff <pre_wave_sha>...HEAD` on `main`; same rule as the wave review in Step 6, an
 implicit branch-vs-main diff on `main` is empty; small fixes on `main` under the lock ride
 the final push, larger ones become follow-up sprints; Step 6's conditional outside-voice
-second pass applies here too, with the same `pre_wave_sha` base) →
+second pass applies here too, with the same `pre_wave_sha` base) → run wave Step 6's
+**proposal stage check** over the whole train's landed sprints →
 `reserve-wave.sh --release W-<id>` for never-started
 members → final push per the T1 policy (auto → `push-main.sh`; otherwise the deploy-gate
 question first — under "hold" this is the train's one code-bearing push) + CI verify →

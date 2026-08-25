@@ -23,11 +23,14 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
 
 ## Workflow at a glance
 
-0. **Spec** — when all you have is an idea: `/proposal` explores the problem and 2–3
-   alternatives (using an installed brainstorming skill as the method when one is available)
-   and writes a decision-ready RFC to `docs/proposals/NNN-*.md`, optionally stress-tested by
-   an interview skill. It skips itself when a finished plan is handed in or a proposal
-   already exists — then continue directly below.
+0. **Spec** — when all you have is an idea: `/proposal` grounds itself in the code first,
+   interrogates the premise, weighs 2–3 alternatives equally, and routes every decision —
+   scope calls, the direction itself — through explicit option questions before writing a
+   decision-ready RFC to `docs/proposals/NNN-*.md` (self-reviewed, then scored by a
+   fresh-context reviewer). Sequential directions become **Stages** with measurable gates:
+   `/plan` consumes one stage at a time, and when a stage's sprints land, `/proposal NNN`
+   runs the gate decision before the next stage is planned. It skips itself when a finished
+   plan is handed in or a proposal already exists — then continue directly below.
 1. **Plan** a feature however you like (design doc, proposal, conversation), ideally review it
    (e.g. an external plan-review skill), then run `/plan` — it challenges scope against the
    decision ladder, cuts the plan into sprint files in `docs/sprints/backlog/` with

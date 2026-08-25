@@ -4,6 +4,41 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.7.0] - 2026-08-25
+
+Multi-stage proposals close the loop between an RFC and the sprints it spawns, and
+`/proposal` now routes every user decision through AskUserQuestion instead of prose. No
+migrations — all changed files are managed and merge via `/template-upgrade`'s normal
+plan/apply.
+
+- **`/proposal` question protocol generalized (both tiers).** A skill-wide rule replaces
+  Step 1's local one: every decision the user must make arrives as an AskUserQuestion
+  (2–4 options, recommended first) — contested scope calls in Step 2, and, new, the
+  **direction itself in Step 3**: the model recommends, the user picks the alternative.
+  Step 5's draft review is a structured confirm ("Looks right — proceed to reviewer" /
+  "Needs changes"). New anti-pattern: a decision asked in prose is a gap.
+- **Multi-stage proposals.** `PROPOSAL_TEMPLATE.md` gains an optional `## Stages` section:
+  per stage an outcome plus a Gate spec (question, options, measurable evidence) — never
+  deliverables. The Status grammar becomes `draft | active (stage k/N) [→ ADR-NNN] |
+  delivered | stopped | rejected`; existing proposals with legacy statuses
+  (`accepted → ADR-NNN`) stay valid history and are left untouched. A new Gate flow in
+  `/proposal` (also reached by `/proposal NNN` when a stage is delivered but ungated)
+  re-grounds in the changed code, reads the landed sprints' Completion Logs, decides the
+  gate via AskUserQuestion, records it, and offers `/plan NNN` for the next stage.
+- **`/plan` is stage-scoped and writes back.** On a staged proposal it plans ONLY the
+  current stage — planning past an undecided gate stops and routes to `/proposal NNN`
+  (an explicit override is recorded as `gate: skipped by user`). It stamps each sprint
+  with `proposal:`/`stage:` frontmatter backlinks (new SPRINT_TEMPLATE fields, ignored by
+  scripts) plus a greppable Context citation, and flips the proposal `draft → active` /
+  the stage to `planned (S-…)` in the same commit — closing the "Status: draft forever"
+  gap for all proposals, staged or not.
+- **Sprint close points back to the proposal.** New PROTOCOL Step 3.6 (both tiers): when
+  the last open sprint of a proposal stage closes, the stage is marked `delivered` (rides
+  the close commit) and the user is routed to `/proposal NNN` for the gate decision —
+  never decided inline. Un-staged proposals flip straight to `delivered`. Wave/train
+  executors skip the step; the master runs it once at wave close (ORCHESTRATION Step 6)
+  and train close (T7), avoiding the simultaneous-finishers race.
+
 ## [1.6.0] - 2026-08-21
 
 `/proposal` grows a real interrogation method. The probing-question style stays; it is now

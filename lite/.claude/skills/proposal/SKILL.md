@@ -4,7 +4,8 @@ description: >
   Turn an idea into a decision-ready proposal (RFC) in docs/proposals/ — the SPEC step
   before /plan. Use when asked to "explore an idea", "draft a spec/proposal/RFC",
   "should we build X", or when a feature request arrives with no design document yet.
-  Skips itself when a proposal already exists.
+  Also decides stage gates of active multi-stage proposals ("decide the gate for
+  proposal NNN"). Skips itself when a proposal already exists.
 argument-hint: "[idea, doc path, or proposal number]"
 allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill Agent Task"
 ---
@@ -22,6 +23,13 @@ recording the final decision (`/adr`), and plan execution. If the request is alr
 decision-free ("rename this function"), say so and route directly — a proposal for a trivial
 change is the null result here: "no proposal needed — [reason]".
 
+## Question protocol (all steps)
+
+Every decision the user must make routes through AskUserQuestion — one decision per call,
+2–4 concrete options, a recommended one first, highest-ambiguity first. Prose questions are
+reserved for open-ended critique, never for choices: a wall-of-text question the user must
+parse for options is a protocol violation, not a style choice.
+
 ## Entry gates — pick exactly one
 
 1. **Idea only** (no document exists): run the method below.
@@ -32,7 +40,10 @@ change is the null result here: "no proposal needed — [reason]".
 3. **A proposal for this topic already exists** (Glob `docs/proposals/*.md`; match on
    filenames, and Read the H1 titles of near-misses): point to it and offer `/plan <NNN>` —
    do not write a duplicate. A bare proposal-number argument (`/proposal 003`) resolves
-   here too.
+   here too. Exception — **gate due**: if the proposal's Status is `active` and its current
+   stage's status line reads `delivered …` with no `gate:` entry, run the Gate flow (below)
+   instead of just pointing. Unknown or legacy statuses (e.g. `accepted → ADR-NNN`) get the
+   plain pointer.
 
 ## Method (gate 1)
 
@@ -60,14 +71,16 @@ Then challenge the premise itself: is this the real problem or a proxy for one? 
 actually happens if we do nothing? If the honest answer is "not much", say so — that
 becomes a real alternative in Step 3, or the null result.
 
-Question protocol: AskUserQuestion, one decision at a time, each with 2–4 concrete options
-and a recommended one. Ask highest-ambiguity first. Ask only what Step 0 could not answer.
+Ask per the Question protocol; ask only what Step 0 could not answer.
 Quantify claims or mark them explicitly: "unknown — measure by [method]". "Several files"
 is not acceptable — find the count.
 
 ### Step 2 — Scope lock
 
 State non-goals explicitly and early — locking what this is NOT prevents creep later.
+Genuinely contested scope calls — an in/out boundary the user could reasonably want either
+way, or competing smallest-versions — are decisions: route each through AskUserQuestion.
+Uncontested non-goals are simply stated.
 Identify the smallest version that still delivers the value. When the user asks for more
 mid-conversation, name it: "that's a separate proposal — let's finish this one." Once the
 user settles a scope call, commit to it; do not re-argue it in later steps.
@@ -78,11 +91,23 @@ Draft 2–3 genuinely different approaches. One must be the minimal-viable cut; 
 meaningfully distinct, one should be the ideal version. Give "do nothing" its own line
 when Step 1 showed the do-nothing cost is low. Weigh them EQUALLY while exploring — do not
 default to minimal just because it is smaller; if the right answer is the big version, say
-so. Once the trade-offs are on the table, designate the recommendation (the template lists
-it first) — equal weight governs the comparison, not the conclusion. Per alternative: how
-it works, the trade-off it accepts, and a rough dual-scale effort note (human-team time vs
-Claude-driven time). An installed brainstorming skill MAY be used here to generate
-candidates; it does not replace this method.
+so. Per alternative: how it works, the trade-off it accepts, and a rough dual-scale effort
+note (human-team time vs Claude-driven time). An installed brainstorming skill MAY be used
+here to generate candidates; it does not replace this method.
+
+Once the trade-offs are on the table, designate your recommendation — then put the
+direction to the USER via one AskUserQuestion: one option per alternative, recommended
+first, "do nothing" included when it was listed, multi-select off. The recommendation is
+yours; the decision is theirs — equal weight governs the comparison, not the conclusion.
+Record the chosen direction (the template lists it first).
+
+**Staged directions.** When alternatives are sequential rather than exclusive — a minimal
+cut now that a bigger version builds on ("build stage 1, measure, then decide") — offer
+that as its own option in the same direction question ("Staged: A now, gate, then decide
+B"). If chosen, fill the proposal's `## Stages` section: per stage, the outcome it delivers
+and a Gate spec (question, 2–4 options, and the measurable evidence that decides it).
+Stages describe outcomes and gates, never deliverables or file lists — that stays /plan
+territory.
 
 ### Step 4 — Self-review before showing the draft
 
@@ -102,8 +127,10 @@ user's input.
 
 ### Step 5 — Draft review with the user
 
-Present the draft and ask: "Does this capture what you want? **What did I get wrong?**"
-Iterate until confirmed.
+Present the draft, then confirm via AskUserQuestion — "Does this capture what you want?
+**What did I get wrong?**" — options: **"Looks right — proceed to reviewer"** (recommended)
+/ **"Needs changes"** (the tool's built-in Other carries free-text critique). Iterate until
+confirmed.
 
 ### Step 6 — Fresh-context reviewer
 
@@ -124,6 +151,26 @@ fix back into the proposal file, never leave it only in conversation.
 - Unquantified impact ("improves performance", "several files").
 - Scope creep absorbed instead of split into its own proposal.
 - Deliverables, file lists, or acceptance criteria leaking into the proposal shape.
+- A decision asked in prose instead of AskUserQuestion — options the user must extract
+  from a paragraph are a gap.
+
+## Gate flow (staged proposals)
+
+Runs when a stage's sprints have all landed and its gate is undecided (entry gate 3's
+exception, or the sprint-close protocol routed here).
+
+1. **Re-ground** (mini Step 0): re-verify the next stage's premises against the now-changed
+   code; Grep `docs/sprints/done/` for this proposal's citations and read those sprints'
+   Completion Logs — landed evidence, not the original plan, feeds the decision.
+2. **Decide via AskUserQuestion** using the stage's Gate spec verbatim (its question and
+   options; add "stop here" if absent), with the gathered evidence quoted against the
+   Gate's evidence line. If the evidence the Gate named was never collected, say so — that
+   is itself an input, not a reason to guess.
+3. **Record** in the proposal: the stage's status line gains `gate: [chosen option]
+   YYYY-MM-DD`, plus a dated decision line under the stage. Last stage or "stop here" →
+   flip Status to `delivered`/`stopped`. Otherwise Status becomes `active (stage k+1/N)`.
+4. Commit: `docs: proposal {NNN} — stage {k} gate: [choice]`. Then offer `/plan {NNN}` for
+   the next stage (it re-grounds against the recorded decision), or stop.
 
 ## Output — whenever a proposal file is produced (gate 1, or gate 2's file-it path)
 
@@ -134,3 +181,7 @@ fix back into the proposal file, never leave it only in conversation.
 3. Commit: `docs: proposal {NNN} — {title}`.
 4. **Always end by offering `/plan {NNN}`** — the proposal is not the destination, the
    sprint backlog is. If the user declines, leave Status: draft and stop.
+5. Status lifecycle (defined here, written mostly by other skills): `/plan` flips
+   `draft → active (stage k/N)` when it consumes the proposal; sprint close marks stages
+   `delivered`; the Gate flow records gate decisions and the terminal `delivered`/
+   `stopped`. `/proposal` itself never sets `active`.

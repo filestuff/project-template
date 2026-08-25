@@ -335,6 +335,25 @@ high-risk** → skip — review depth scales with blast radius; do not add a pas
 sprint. (Wave/train sprints skip this step entirely — the executor's mandatory `reviewer`
 child already covered it.)
 
+### Step 3.6: Proposal Stage Check (solo sprints only)
+
+If the sprint cites a proposal (frontmatter `proposal:`, or a Context
+`Source: docs/proposals/NNN-…` line), check whether this was the LAST open sprint for that
+proposal + stage: Grep `backlog/` and `in-progress/` on `main` for the same citation (same
+`stage k/` when staged). Others remain → note "stage still in progress" and continue to
+Step 4. (Wave/train sprints skip this step — the master runs the check once at wave close /
+train close; see ORCHESTRATION.md.)
+
+If this was the last:
+- **Staged proposal** → set that stage's status line to `delivered YYYY-MM-DD` in the
+  proposal file — stage the edit in the worktree; it lands with the sprint via Steps 4–5's
+  normal merge (no separate main-lock commit). Then tell the user: "Stage k of proposal
+  NNN is complete — the proposal defines a gate here: [gate question]." Offer
+  `/proposal NNN` to decide it. Do NOT decide the gate inline at sprint close, and do not
+  plan the next stage without it.
+- **Un-staged proposal** → flip its `**Status**:` to `delivered YYYY-MM-DD` the same way
+  and say so.
+
 ### Step 4: Prepare (locked)
 
 Run `<repo-root>/scripts/sprint/merge-sprint.sh prepare S-NNN-kebab-name`. It acquires the

@@ -28,7 +28,15 @@ split.
    highest existing S-NNN).
 2. Read the plan source:
    - A path → that document.
-   - A number → treat as a proposal: read `docs/proposals/NNN-*.md`.
+   - A number → treat as a proposal: read `docs/proposals/NNN-*.md`. **Staged proposals**
+     (a `## Stages` section exists): plan ONLY the current stage — the first stage whose
+     status is `pending`, or the stage the last recorded gate chose. Never pre-plan a stage
+     whose entry gate is undecided: the gate exists so that plan is made with post-stage
+     evidence. If the previous stage is `delivered` but carries no `gate:` line, the gate
+     is due — stop and ask via AskUserQuestion: **"Decide the gate first — run
+     `/proposal NNN`"** (recommended) / **"Plan the next stage anyway"**. On override,
+     record `gate: skipped by user YYYY-MM-DD` on that stage before planning — a skipped
+     gate is a recorded decision, not an invisible one.
    - Free text → treat as a feature description; supplement from existing planning docs.
    - No argument → if `docs/execution-plan.md` exists, default to it; otherwise ask the user
      what to break down.
@@ -90,7 +98,9 @@ split.
    with goals + the dependency chain, calling out which sprints are meant to run in parallel;
    ask whether to merge/split/reorder. A breakdown of more than ~10 sprints is a scope
    smell — offer a phased split (a ship-first tranche now; later tranches seeded as
-   backlog with `depends_on`).
+   backlog with `depends_on`) — or, when the tranches deserve a real decision point
+   between them, suggest restructuring the proposal itself into Stages with a gate
+   (`/proposal`).
 5. **Assign story points** (Fibonacci 1/2/3/5/8/13; 13 → consider splitting).
 6. **Determine dependencies** between new sprints and against existing backlog items.
 
@@ -107,10 +117,15 @@ split.
 For each sprint, starting at S-{highest+1}, create a file from
 `docs/sprints/SPRINT_TEMPLATE.md` in `docs/sprints/backlog/` and populate:
 - **Frontmatter**: sprint ID, `status: backlog`, goal, a concise `short:` label,
-  `depends_on`, `blocks`, `tags`, `story_points`.
+  `depends_on`, `blocks`, `tags`, `story_points`. When the source is a proposal, also set
+  `proposal: NNN` and `stage: k` (`stage: 1` for un-staged proposals; both stay `null`
+  otherwise) — informational backlinks, ignored by scripts.
 - **Context** (top of body): the source plan's path + this sprint's originating task
   IDs, and every global constraint from the source plan that binds this sprint (stack
   pins, perf budgets, compatibility promises) — copied **verbatim**, not paraphrased.
+  For a staged proposal, the Source line is exactly
+  `Source: docs/proposals/NNN-{kebab}.md (stage k/N — gate on completion: [one-line gate
+  question])` — the sprint-close protocol greps this citation to detect stage completion.
   The sprint file is the executor's entire brief; a constraint that lives only in the
   source plan is invisible to it.
 - **Deliverables** (execution order): Files (new|modified), Reference implementation,
@@ -167,6 +182,11 @@ Backlog table by hand).
   shape it into a decision-ready Open Question.
 - **Contract consistency**: every Consumes entry cites its dependency's Produces with
   the identical signature. Mismatch = fix before commit.
+
+When the source is a proposal, include its status write-back in the same commit: flip
+`**Status**: draft` → `active (stage k/N)` on first consumption (`1/1` for un-staged
+proposals), and set the consumed stage's status line to `planned (S-{first}..S-{last})`
+(staged proposals only).
 
 Commit all new sprints + index:
 `sprint: create S-{first}..S-{last} — [feature] (from /plan) [skip ci]`.
