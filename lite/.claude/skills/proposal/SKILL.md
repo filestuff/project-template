@@ -7,7 +7,7 @@ description: >
   Also decides stage gates of active multi-stage proposals ("decide the gate for
   proposal NNN"). Skips itself when a proposal already exists.
 argument-hint: "[idea, doc path, or proposal number]"
-allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill Agent Task"
+allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill Agent Task WebSearch WebFetch"
 ---
 
 # Proposal Skill
@@ -27,8 +27,16 @@ change is the null result here: "no proposal needed — [reason]".
 
 Every decision the user must make routes through AskUserQuestion — one decision per call,
 2–4 concrete options, a recommended one first, highest-ambiguity first. Prose questions are
-reserved for open-ended critique, never for choices: a wall-of-text question the user must
-parse for options is a protocol violation, not a style choice.
+reserved for open-ended critique and factual gaps, never for choices: a wall-of-text
+question the user must parse for options is a protocol violation, not a style choice.
+
+Questions carrying a real trade-off are decision briefs: name the stakes in one line (what
+breaks or is lost if we pick wrong) and give each option a one-line consequence —
+effort/risk, or "if deferred: {what happens}". Simple confirms need no stakes line. With
+5+ real options, never drop or merge one to fit the 4-option cap. Independent items (scope
+candidates): split into sequential per-item calls (include / defer / cut), then one final
+call confirming the set. Mutually exclusive choices (a direction): two rounds — first
+narrow to the top 3 plus an explicit "none of these — show the rest", then decide.
 
 ## Entry gates — pick exactly one
 
@@ -55,6 +63,14 @@ what you found as `file:line` — never ask "what file should I look at?" or any
 code already answers. If nothing relevant exists, declare greenfield explicitly:
 "I searched {X}, {Y}, {Z} — nothing exists for this yet."
 
+When the idea spans several modules, the repo is unfamiliar, or grounding needs more than a
+few greps, dispatch 1–3 read-only subagents (the Agent tool — named Task on older
+harnesses; Explore type) — all in a single message so they run in parallel — each with one
+specific question, each returning conclusions with `file:line` evidence, never file dumps.
+Their findings carry the same citation obligation as your own. Skip the fan-out when the
+answers are already obvious (small scope in familiar code): in-context Grep/Read stays the
+default, and the fan-out's value is proportional to uncertainty.
+
 ### Step 1 — Premise interrogation
 
 Answer these five anchors before moving on — none may rest on hand-waving:
@@ -75,6 +91,18 @@ Ask per the Question protocol; ask only what Step 0 could not answer.
 Quantify claims or mark them explicitly: "unknown — measure by [method]". "Several files"
 is not acceptable — find the count.
 
+### Step 1.5 — Scope appetite
+
+One AskUserQuestion before scope lock: is the appetite a minimal cut, the complete version,
+or staged (minimal now, gate, then decide)? Recommend one based on Step 1's "why now"
+answer. Skip the question when the user already stated their appetite unprompted — that
+counts as answered. The appetite sets the defaults for Steps 2–3 (scope lock, recommended
+direction); it is a prior, not a cage. Alternatives are still drafted and weighed equally,
+and if exploration shows the appetite is wrong, flag it exactly once — in the Step 3
+direction question, where the user's choice supersedes. When the appetite is staged, Step 3
+frames alternatives as stage-1 candidates rather than re-offering "staged" as a new option.
+Outside that one flag, the appetite is not re-litigated.
+
 ### Step 2 — Scope lock
 
 State non-goals explicitly and early — locking what this is NOT prevents creep later.
@@ -83,7 +111,18 @@ way, or competing smallest-versions — are decisions: route each through AskUse
 Uncontested non-goals are simply stated.
 Identify the smallest version that still delivers the value. When the user asks for more
 mid-conversation, name it: "that's a separate proposal — let's finish this one." Once the
-user settles a scope call, commit to it; do not re-argue it in later steps.
+user settles a scope call, commit to it; do not re-argue it in later steps (the Step 1.5
+appetite keeps its own one-flag rule).
+
+### Step 2.5 — Landscape check
+
+Before drafting alternatives, for each new pattern, component, or capability the idea
+introduces, WebSearch: does the framework/platform have a built-in? Is there a maintained
+off-the-shelf solution? Is the approach current best practice, and what are the known
+footguns? A found existing solution becomes an explicit alternative in Step 3 (adopt/wrap
+vs build), not a footnote. Research only what the idea introduces, not the whole domain —
+this is a proposal skill, not a research skill. Fail-soft, never a gate: if WebSearch is
+unavailable, note "search unavailable — in-distribution knowledge only" and continue.
 
 ### Step 3 — Alternatives with equal weight
 
@@ -96,15 +135,19 @@ note (human-team time vs Claude-driven time). An installed brainstorming skill M
 here to generate candidates; it does not replace this method.
 
 Once the trade-offs are on the table, designate your recommendation — then put the
-direction to the USER via one AskUserQuestion: one option per alternative, recommended
-first, "do nothing" included when it was listed, multi-select off. The recommendation is
+direction to the USER via AskUserQuestion: one option per alternative, recommended
+first, "do nothing" included when it was listed, multi-select off. With 5+ options this is
+the protocol's mutually-exclusive case (two-round narrowing), and "do nothing" survives
+into the first round when it was listed. The recommendation is
 yours; the decision is theirs — equal weight governs the comparison, not the conclusion.
 Record the chosen direction (the template lists it first).
 
 **Staged directions.** When alternatives are sequential rather than exclusive — a minimal
 cut now that a bigger version builds on ("build stage 1, measure, then decide") — offer
-that as its own option in the same direction question ("Staged: A now, gate, then decide
-B"). If chosen, fill the proposal's `## Stages` section: per stage, the outcome it delivers
+that as its own option in the direction question ("Staged: A now, gate, then decide B") —
+unless the Step 1.5 appetite is already staged, in which case the direction question picks
+stage 1. Either way, when the direction ends up staged, fill the proposal's `## Stages`
+section: per stage, the outcome it delivers
 and a Gate spec (question, 2–4 options, and the measurable evidence that decides it).
 Stages describe outcomes and gates, never deliverables or file lists — that stays /plan
 territory.
@@ -135,13 +178,26 @@ confirmed.
 ### Step 6 — Fresh-context reviewer
 
 After the user confirms the draft, dispatch ONE fresh-context subagent (the Agent tool —
-named Task on older harnesses; Explore or general-purpose type) with only the proposal
-file path and this brief: score it 1–10 on Completeness,
-Consistency, Clarity, Scope (YAGNI), and Feasibility; list specific issues, no compliments.
+named Task on older harnesses; Explore or general-purpose type, read-only) with the
+proposal file path, repo access, and this brief: verify the proposal's factual claims
+against the code; score it 1–10 on Completeness, Consistency, Clarity, Scope (YAGNI), and
+Feasibility; list specific issues, no compliments. Verification gate: issues asserting
+facts about the code (feasibility, disputed claims) must quote the motivating `file:line`
+(or name the search that came up empty); issues about the proposal's own text
+(completeness, consistency, clarity, scope) name the section or line they concern. A
+factual issue the reviewer cannot ground is labeled `unverified`: record it under Open
+questions as a decision-ready question (per the Step 4 checklist) rather than editing the
+claim.
 Fix what's right, re-dispatch at most once (max 2 rounds total). If the same issues recur,
 stop and record them under Open questions instead of looping. Fail-soft: if the subagent
 cannot run, say so and continue — this is a quality bonus, not a gate. Write every accepted
 fix back into the proposal file, never leave it only in conversation.
+
+Anti-shortcut clause: apply mechanical fixes (typos, clarity, quantification the code
+answers) directly; material changes — direction, a scope boundary, alternative ranking,
+stage or gate specs — route back to the user after the reviewer rounds finish, one
+AskUserQuestion per change, before landing in the file. Never silently mutate what the
+user confirmed in Step 5.
 
 ## Anti-patterns
 
@@ -153,6 +209,9 @@ fix back into the proposal file, never leave it only in conversation.
 - Deliverables, file lists, or acceptance criteria leaking into the proposal shape.
 - A decision asked in prose instead of AskUserQuestion — options the user must extract
   from a paragraph are a gap.
+- An option silently dropped or merged to fit the 4-option cap — use the Question
+  protocol's 5+ option shapes instead.
+- Reviewer findings applied to a confirmed draft without user approval of material changes.
 
 ## Gate flow (staged proposals)
 
@@ -161,7 +220,8 @@ exception, or the sprint-close protocol routed here).
 
 1. **Re-ground** (mini Step 0): re-verify the next stage's premises against the now-changed
    code; Grep `docs/sprints/done/` for this proposal's citations and read those sprints'
-   Completion Logs — landed evidence, not the original plan, feeds the decision.
+   Completion Logs — landed evidence, not the original plan, feeds the decision. When the
+   delivered stage touched several modules, the Step 0 Explore fan-out applies here too.
 2. **Decide via AskUserQuestion** using the stage's Gate spec verbatim (its question and
    options; add "stop here" if absent), with the gathered evidence quoted against the
    Gate's evidence line. If the evidence the Gate named was never collected, say so — that
