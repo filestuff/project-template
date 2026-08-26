@@ -4,6 +4,38 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.8.0] - 2026-08-25
+
+`/proposal` learns to look outward — parallel codebase exploration, an online landscape
+check before alternatives — and tightens its Q&A rigor with patterns ported from gstack's
+plan-review skills (plan-ceo-review / plan-eng-review / plan-design-review). Single file
+changed (`proposal/SKILL.md`, both tiers via lite); no migrations.
+
+- **Step 0 Explore fan-out (conditional).** When the idea spans several modules, the repo
+  is unfamiliar, or grounding needs more than a few greps, Step 0 dispatches 1–3 parallel
+  read-only `Explore` subagents, each answering one specific question with `file:line`
+  evidence — mirroring `/plan`'s measure-before-cutting rule. Small/known scope keeps the
+  in-context Grep/Read default. The Gate flow's re-ground step may use the same fan-out.
+- **Step 2.5 landscape check (new).** Before drafting alternatives, WebSearch what the
+  idea introduces: built-ins, maintained off-the-shelf solutions, current best practice,
+  known footguns. A found existing solution becomes an explicit alternative (adopt/wrap vs
+  build). Fail-soft: without WebSearch, note "search unavailable — in-distribution
+  knowledge only" and continue. `allowed-tools` gains WebSearch/WebFetch.
+- **Question protocol → decision briefs.** Every AskUserQuestion now names the stakes
+  (one line on what breaks if we pick wrong) and gives each option a one-line consequence.
+  New split rule: 5+ real options are never dropped to fit the 4-option cap — split into
+  sequential per-item calls, then one final confirm of the assembled set.
+- **Step 1.5 scope appetite (new).** One early question — minimal cut / complete version /
+  staged — recommended from Step 1's "why now", skipped when the user already stated it.
+  Steps 2–3 commit to the chosen posture instead of re-arguing it later.
+- **Step 6 reviewer is code-grounded.** The fresh-context reviewer now gets repo access
+  and verifies the proposal's claims against the code: every issue quotes its motivating
+  `file:line` (or names the empty search); ungroundable issues are labeled `unverified`
+  and recorded, not acted on. New anti-shortcut clause: after the user confirms the draft,
+  mechanical fixes apply directly, but material changes (direction, scope boundary,
+  alternative ranking, stage/gate specs) route back through AskUserQuestion — the reviewer
+  never silently mutates a confirmed draft.
+
 ## [1.7.0] - 2026-08-25
 
 Multi-stage proposals close the loop between an RFC and the sprints it spawns, and
