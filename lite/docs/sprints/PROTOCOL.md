@@ -190,11 +190,14 @@ proposal + stage: Grep `backlog/` and `in-progress/` for the same citation (same
 Step 4.
 
 If this was the last:
-- **Staged proposal** → set that stage's status line to `delivered YYYY-MM-DD` in the
-  proposal file (stage the edit; it rides Step 4's close commit). Then tell the user:
-  "Stage k of proposal NNN is complete — the proposal defines a gate here:
-  [gate question]." Offer `/proposal NNN` to decide it. Do NOT decide the gate inline at
-  sprint close, and do not plan the next stage without it.
+- **Staged proposal, non-final stage** → set that stage's status line to
+  `delivered YYYY-MM-DD` in the proposal file (stage the edit; it rides Step 4's close
+  commit). Then tell the user: "Stage k of proposal NNN is complete — the proposal defines
+  a gate here: [gate question]." Offer `/proposal NNN` to decide it. Do NOT decide the
+  gate inline at sprint close, and do not plan the next stage without it.
+- **Staged proposal, final stage** (no gate by design) → set the stage line to
+  `delivered YYYY-MM-DD` AND flip the proposal's `**Status**:` to `delivered YYYY-MM-DD`
+  (both ride the close commit) and say so — there is no gate to decide.
 - **Un-staged proposal** → flip its `**Status**:` to `delivered YYYY-MM-DD` (rides the
   close commit) and say so.
 

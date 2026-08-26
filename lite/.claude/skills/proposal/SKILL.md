@@ -50,8 +50,10 @@ narrow to the top 3 plus an explicit "none of these — show the rest", then dec
    do not write a duplicate. A bare proposal-number argument (`/proposal 003`) resolves
    here too. Exception — **gate due**: if the proposal's Status is `active` and its current
    stage's status line reads `delivered …` with no `gate:` entry, run the Gate flow (below)
-   instead of just pointing. Unknown or legacy statuses (e.g. `accepted → ADR-NNN`) get the
-   plain pointer.
+   instead of just pointing — unless it is the LAST stage, which has no gate by design:
+   there, flip `**Status**:` to `delivered YYYY-MM-DD`, commit
+   (`docs: proposal {NNN} — delivered`), and say so. Unknown or legacy statuses (e.g.
+   `accepted → ADR-NNN`) get the plain pointer.
 
 ## Method (gate 1)
 
@@ -216,7 +218,9 @@ user confirmed in Step 5.
 ## Gate flow (staged proposals)
 
 Runs when a stage's sprints have all landed and its gate is undecided (entry gate 3's
-exception, or the sprint-close protocol routed here).
+exception, or the sprint-close protocol routed here). Never runs for the LAST stage — it
+has no gate; its completion flips the proposal to `delivered YYYY-MM-DD` at sprint close
+(or via entry gate 3's fallback).
 
 1. **Re-ground** (mini Step 0): re-verify the next stage's premises against the now-changed
    code; Grep `docs/sprints/done/` for this proposal's citations and read those sprints'
@@ -226,9 +230,9 @@ exception, or the sprint-close protocol routed here).
    options; add "stop here" if absent), with the gathered evidence quoted against the
    Gate's evidence line. If the evidence the Gate named was never collected, say so — that
    is itself an input, not a reason to guess.
-3. **Record** in the proposal: the stage's status line gains `gate: [chosen option]
-   YYYY-MM-DD`, plus a dated decision line under the stage. Last stage or "stop here" →
-   flip Status to `delivered`/`stopped`. Otherwise Status becomes `active (stage k+1/N)`.
+3. **Record** in the proposal: the stage's status line becomes `gate: [chosen option]
+   YYYY-MM-DD`, plus a dated decision line under the stage. "Stop here" → flip Status to
+   `stopped YYYY-MM-DD — [reason]`. Otherwise Status becomes `active (stage k+1/N)`.
 4. Commit: `docs: proposal {NNN} — stage {k} gate: [choice]`. Then offer `/plan {NNN}` for
    the next stage (it re-grounds against the recorded decision), or stop.
 
@@ -243,5 +247,6 @@ exception, or the sprint-close protocol routed here).
    sprint backlog is. If the user declines, leave Status: draft and stop.
 5. Status lifecycle (defined here, written mostly by other skills): `/plan` flips
    `draft → active (stage k/N)` when it consumes the proposal; sprint close marks stages
-   `delivered`; the Gate flow records gate decisions and the terminal `delivered`/
-   `stopped`. `/proposal` itself never sets `active`.
+   `delivered` and, when the LAST stage lands, flips the proposal to `delivered
+   YYYY-MM-DD`; the Gate flow records gate decisions and the terminal `stopped
+   YYYY-MM-DD — [reason]`. `/proposal` itself never sets `active`.
