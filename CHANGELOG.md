@@ -4,6 +4,29 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.8.1] - 2026-08-26
+
+Fixes the multi-stage gate machinery for a proposal's LAST stage, which by design has no
+Gate spec (PROPOSAL_TEMPLATE.md said so since 1.7.0, but no skill implemented it — the
+Gate flow would fire anyway and land on an unanswerable one-option question). No
+migrations; existing proposals are unaffected until their final stage closes.
+
+- **`/proposal` gate-due exception skips the final stage.** A delivered final stage with
+  Status still `active` now flips `**Status**:` to `delivered YYYY-MM-DD` directly
+  (commit: `docs: proposal {NNN} — delivered`) instead of entering the Gate flow. The
+  Gate flow header states it never runs for the last stage.
+- **PROTOCOL Step 3.6 distinguishes final from non-final stages.** Non-final: unchanged
+  (mark stage delivered, quote the gate question, route to `/proposal NNN`). Final: mark
+  the stage AND the proposal `delivered YYYY-MM-DD` in the close commit — no gate message
+  fabricated for a stage that has none. The full tier's master-side stage check
+  (ORCHESTRATION wave close, reused at train close) gets the same branch.
+- **Terminal statuses match the template grammar.** The Gate flow writes
+  `stopped YYYY-MM-DD — [reason]` (was bare `stopped`); terminal `delivered YYYY-MM-DD` is
+  written at sprint close, not by the Gate flow. A decided stage's status line *becomes*
+  `gate: [chosen option] YYYY-MM-DD` (was "gains"), matching the template's
+  alternative-values grammar and keeping the gate-due detection (`delivered …` with no
+  `gate:`) unambiguous.
+
 ## [1.8.0] - 2026-08-25
 
 `/proposal` learns to look outward — parallel codebase exploration, an online landscape
