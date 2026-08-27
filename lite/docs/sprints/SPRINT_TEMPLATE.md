@@ -63,6 +63,14 @@ touches: []
 
 ### Deliverables
 
+<!-- Acceptance criteria are classified Automated or Manual. Automated: the exact
+     runnable command plus the observable difference it demonstrates — the executor
+     checks the box only by citing that command's output. Manual: verifiable only by a
+     human (visual look, real-device feel, third-party dashboard); the executor REPORTS
+     what to check but never checks the box — the user confirms it at sprint close
+     (PROTOCOL Phase 3 Step 1). A criterion that can't name its command is Manual by
+     definition. Omit whichever list is empty. -->
+
 1. **[Feature/Task Name]**
    - Files: `path/to/file` (new | modified)
    - Reference: `path/to/similar_file` — follow this for code style, error handling, structure
@@ -70,8 +78,10 @@ touches: []
    - Setup: install commands, env vars, or config needed before implementation
    - Changes: what exactly needs to happen
    - Acceptance criteria:
-     - [ ] Criterion 1
-     - [ ] Criterion 2
+     - Automated:
+       - [ ] `command to run` → the observable difference it must show
+     - Manual (user-confirmed at close):
+       - [ ] What the user verifies by hand, and where
 
 2. **[Feature/Task Name]**
    - Files: `path/to/file` (new | modified)
@@ -80,7 +90,8 @@ touches: []
    - Setup: pre-requisites if any
    - Changes: what exactly needs to happen
    - Acceptance criteria:
-     - [ ] Criterion 1
+     - Automated:
+       - [ ] `command to run` → expected observable
 
 ### Out of Scope
 

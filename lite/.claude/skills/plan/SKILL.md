@@ -3,8 +3,9 @@ name: plan
 description: >
   Breaks a reviewed plan into sprint files with dependencies and story points. Invoke when
   asked to "break this down into sprints", "create sprints from the plan", "convert to
-  sprints", or "seed the backlog".
-argument-hint: "[feature description | proposal number | plan document path]"
+  sprints", or "seed the backlog" — and, as "/plan recut", when execution has invalidated
+  un-started backlog sprints ("recut the plan", "replan the backlog").
+argument-hint: "[feature description | proposal number | plan document path | recut <NNN | S-A S-B …>]"
 allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill"
 ---
 
@@ -14,11 +15,25 @@ Takes a reviewed plan and breaks it into sprint files in `docs/sprints/backlog/`
 
 ## Boundaries
 
-In scope: breaking a reviewed plan into backlog sprint files. Out of scope: plan reviews
-(those run separately first if used), per-sprint certification (`/sprint plan` — this skill
-leaves `plan_date: null`), starting execution (`/sprint start`). Null result: if the plan
+In scope: breaking a reviewed plan into backlog sprint files, and re-cutting un-started
+backlog sprints when execution invalidates their premises (Recut flow, below). Out of
+scope: plan reviews (those run separately first if used — this skill *consumes* their
+reports, Phase 1), per-sprint certification (`/sprint plan` — this skill leaves
+`plan_date: null`), starting execution (`/sprint start`). Null result: if the plan
 genuinely fits one sprint, create one sprint and say so — do not manufacture a multi-sprint
 split.
+
+## Question protocol (all phases)
+
+Every decision the user must make routes through AskUserQuestion — one decision per call,
+2–4 concrete options, a recommended one first. Questions carrying a real trade-off are
+decision briefs: name the stakes in one line (what breaks or is lost if we pick wrong) and
+give each option a one-line consequence. Simple confirms need no stakes line. With 5+ real
+options, never drop or merge one to fit the 4-option cap: independent items (scope cuts,
+boundary adjustments) split into sequential per-item calls, then one final call confirming
+the assembled set; mutually exclusive choices narrow to the top 3 plus an explicit "none
+of these — show the rest", then decide. A wall-of-text question the user must parse for
+options is a protocol violation, not a style choice.
 
 ## Pipeline
 
@@ -40,9 +55,19 @@ split.
    - Free text → treat as a feature description; supplement from existing planning docs.
    - No argument → if `docs/execution-plan.md` exists, default to it; otherwise ask the user
      what to break down.
-3. If a plan-review output is in the conversation, fold it in. If the user implies a review
-   exists but none is visible, ask them to paste/summarize it.
+3. **Review inputs.** Scan the source document for appended review sections (a terminal
+   `## GSTACK REVIEW REPORT` or similar `## … REVIEW` heading written by a plan-review
+   skill) — the file, not the conversation, is where review skills persist their output —
+   and fold their findings in. If a report ends with an `UNRESOLVED DECISIONS:` list,
+   those decisions **block the breakdown**: resolve each via AskUserQuestion before
+   cutting sprints, and record the answers in the Plan record (Phase 4) and the affected
+   sprint files. A review that lives only in the conversation still counts; if the user
+   implies a review exists but none is visible in either place, ask them to
+   paste/summarize it.
 4. Read the design-system doc (if one exists) when the work is UI/visual.
+5. Read `docs/sprints/PLANNING_LEARNINGS.md` when present — it lists how past briefs
+   failed; don't seed those gaps into new sprints (`/sprint plan` and the wave planners
+   already read it; batch breakdown must not reintroduce what they'd have to fix).
 
 ### Phase 2: Sprint Breakdown
 
@@ -96,7 +121,9 @@ split.
      neighbor. If rejecting sprint B necessarily reopens sprint A, the seam is wrong.
 4. **Confirm boundaries via AskUserQuestion** — present the proposed split as a numbered list
    with goals + the dependency chain, calling out which sprints are meant to run in parallel;
-   ask whether to merge/split/reorder. A breakdown of more than ~10 sprints is a scope
+   then decide per the Question protocol: "accept as proposed" (recommended) plus the
+   concrete adjustments as options — 5+ contested boundaries go through the per-item split
+   rule, never one question the user must decompose. A breakdown of more than ~10 sprints is a scope
    smell — offer a phased split (a ship-first tranche now; later tranches seeded as
    backlog with `depends_on`) — or, when the tranches deserve a real decision point
    between them, suggest restructuring the proposal itself into Stages with a gate
@@ -129,7 +156,11 @@ For each sprint, starting at S-{highest+1}, create a file from
   The sprint file is the executor's entire brief; a constraint that lives only in the
   source plan is invisible to it.
 - **Deliverables** (execution order): Files (new|modified), Reference implementation,
-  Interface contract (file:line where code exists), Setup, Changes, Acceptance criteria.
+  Interface contract (file:line where code exists), Setup, Changes, Acceptance criteria —
+  each criterion classified **Automated** (the exact command that demonstrates the
+  observable difference) or **Manual** (human-confirmed only; the executor reports but
+  never checks it — see SPRINT_TEMPLATE). A criterion that can't name its command is
+  Manual by definition.
   Mark each deliverable's dependency explicitly — "depends on #N" or "independent of
   all prior deliverables" (mandatory per the template comment; independence enables
   parallel dispatch within the sprint).
@@ -182,11 +213,39 @@ Backlog table by hand).
   shape it into a decision-ready Open Question.
 - **Contract consistency**: every Consumes entry cites its dependency's Produces with
   the identical signature. Mismatch = fix before commit.
+- **Proposal lints** (proposal sources only): no sprint delivers a declared Non-Goal; no
+  sprint builds a distinctive feature of a rejected alternative; no sprint pre-builds a
+  later stage (its gate exists so that plan is made with post-stage evidence). A hit is
+  a cut or an explicit AskUserQuestion decision — never silently absorbed.
+
+Report the gate explicitly: for each check, state what you examined and what you found —
+a zero-findings check says so in one line ("coverage: 9/9 requirements mapped, no
+orphans"), never a bare pass. An issue with an obvious fix is still an issue: fix it in
+the sprint file before the commit, don't wave it through.
 
 When the source is a proposal, include its status write-back in the same commit: flip
 `**Status**: draft` → `active (stage k/N)` on first consumption (`1/1` for un-staged
 proposals), and set the consumed stage's status line to `planned (S-{first}..S-{last})`
 (staged proposals only).
+
+**Plan record (durable).** When the source is a document (proposal or plan doc), append a
+dated entry to its terminal `## Plan record` section (create the section at the end of the
+file if absent) in the same commit:
+
+- Heading: `### YYYY-MM-DD — stage k breakdown (S-{first}..S-{last})` (or `— recut …`,
+  see Recut flow).
+- The coverage map table from the exit gate (requirement/task → sprint ID).
+- A scope-decisions table: `# | item | ACCEPTED / DEFERRED / CUT | one-line reasoning` —
+  every Phase 2 scope-gate outcome, DEFERRED rows carrying their `docs/TODOS.md` backlink.
+- Review inputs consumed (the report section's name, or "none").
+- Last line, machine-checkable: exactly `NO UNRESOLVED DECISIONS`, or `UNRESOLVED
+  DECISIONS:` followed by one bullet per open item (each also lives as a decision-ready
+  Open Question in the sprint that owns it).
+
+The conversation's Parallelization Summary is a view; this section is the record — the
+proposal's gate flow and any later recut read it. Free-text sources get no plan record
+(there is no document to carry it): the sprint files' Context sections are the only
+durable record — say so in the summary.
 
 Commit all new sprints + index:
 `sprint: create S-{first}..S-{last} — [feature] (from /plan) [skip ci]`.
@@ -210,9 +269,49 @@ Then **report a Parallelization Summary** to the user:
   file conflicts not checked in lite — upgrade to the full tier for claim-verified
   parallel safety)."
 
+## Recut flow (`/plan recut <NNN | S-A S-B …>`)
+
+For when execution invalidates the premises of **un-started backlog sprints** — a
+mid-sprint stop-and-ask or a 2nd PLAN_GAP (full tier) revealed a wrong premise that spans
+more than the current brief, a dependency landed differently than its Produces contract
+promised, or the codebase moved under a long-lived backlog. PROTOCOL/ORCHESTRATION route
+premise-level failures here; direction changes are NOT recuts — those go through
+`/proposal` (a gate decision or a new proposal) and then a normal `/plan` pass.
+
+1. **Structured mismatch first.** The recut's input is: **Expected** (what the plan
+   assumed, with the sprint/plan citation) / **Found** (what the code or execution
+   actually showed, `file:line` or landed-sprint evidence) / **Why it matters** (which
+   backlog sprints' premises die). If the caller didn't provide all three, elicit them —
+   a recut without a named mismatch is just second-guessing the plan.
+2. **Scope guard.** Only `backlog/` sprints are recut — in-progress work is finished,
+   descoped, or unstarted first (full tier: `unstart.sh`; never touch a sprint reserved
+   by a live wave without releasing the reservation). Argument forms: a proposal number
+   recuts that proposal's un-started sprints; an explicit `S-A S-B …` list recuts exactly
+   those.
+3. **Re-ground against current code** — the Phase 2 measure-before-cutting rule applies
+   (Explore fan-out when the mismatch spans modules). Sort the in-scope sprints into
+   *invalidated* (a premise the mismatch kills) and *intact* (untouched — leave them
+   alone, including their S-NNNs and plan_date).
+4. **Re-cut the invalidated set** per Phases 2–3 (scope-gate quick pass over the changed
+   ground only; the Question protocol governs the boundary confirm). Replacements get
+   fresh S-NNNs and `plan_date: null`; re-wire `depends_on`/`blocks` edges of intact
+   sprints that referenced a rejected one — never leave dangling edges.
+5. **Reject, don't delete.** Each invalidated sprint moves to `rejected/` per the
+   `/sprint reject` procedure with reason
+   `superseded by recut YYYY-MM-DD — [one-line mismatch]`, its INDEX row moved
+   accordingly.
+6. **Exit gate + record.** Run the Phase 4 exit gate over the recut subset (coverage map
+   spans the replaced requirements). Append a `### YYYY-MM-DD — recut (S-A..S-B →
+   S-X..S-Y)` entry to the source doc's `## Plan record`: the Expected/Found/Why
+   mismatch, the rejected → replacement mapping, and the sentinel last line.
+   Commit everything together:
+   `sprint: recut S-X..S-Y — [reason] (from /plan recut) [skip ci]`
+   (full tier: on `main` under the lock, like Phase 4).
+
 ## Arguments
 
 - Number → proposal number (`docs/proposals/NNN-*.md`).
 - Path → plan document.
 - Text → feature description.
+- `recut <NNN | S-A S-B …>` → Recut flow (above).
 - None → `docs/execution-plan.md` if present, else ask.
