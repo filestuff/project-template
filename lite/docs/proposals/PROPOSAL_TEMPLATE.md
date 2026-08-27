@@ -85,3 +85,10 @@ Trade-offs: {why not first choice}
 ## References
 
 <!-- Code locations (file:line), prior art, related proposals/ADRs, external docs. -->
+
+<!-- ## Plan record — appended by /plan when it consumes this proposal (never drafted by
+     hand). One dated entry per breakdown or recut: the sprints created, a
+     requirement→sprint coverage map, a scope-decisions table (ACCEPTED/DEFERRED/CUT with
+     reasoning), review inputs consumed, and a machine-checkable last line — exactly
+     `NO UNRESOLVED DECISIONS`, or an `UNRESOLVED DECISIONS:` bullet list. The gate flow
+     and /plan recut read this section as evidence of what each stage actually promised. -->

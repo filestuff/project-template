@@ -699,7 +699,12 @@ carries the full duties; the prompt carries only the per-sprint variables:
 - **PLAN_GAP:** the brief is wrong — fix the brief, don't abandon the sprint. Before
   re-dispatching, append one line to `docs/sprints/PLANNING_LEARNINGS.md` (create with a
   one-line header if absent): `- YYYY-MM-DD S-NNN PLAN_GAP: <gap class> — <root cause in
-  one line>`; cap the file at the newest 20 entries. Then re-dispatch a
+  one line>`; cap the file at the newest 20 entries. A gap that invalidates the premises
+  of **other un-started members or backlog sprints** — not just this brief — escalates
+  past in-place repair: drop or finish the affected in-flight work, then route to
+  `/plan recut` for the un-started remainder rather than hand-editing the backlog
+  (a 2nd PLAN_GAP on the same sprint is the hard-stop signal to consider it). Then
+  re-dispatch a
   `sprint-planner` in post-start mode against the **worktree copy** of the in-progress file
   (edits commit on the sprint branch); run `claims.mjs add` under the lock for any touches
   growth it reports (mirror in the branch copy); run a mini decision round if it raises

@@ -53,8 +53,9 @@ child (see Children).
 4. **Stay within your `touches:`.** If you must edit a file outside it, STOP and
    return **NEEDS_CLAIM** with the path — do not edit it.
 5. **Gather acceptance-criteria evidence** (cite test/file:line/output — the
-   observable difference, not just "it ran"). Do NOT run the completion/land — that
-   is the orchestrator's job.
+   observable difference, not just "it ran"). Manual criteria are never yours to
+   check: report what to verify and leave their boxes unchecked — the user confirms
+   them at close. Do NOT run the completion/land — that is the orchestrator's job.
 6. **Pre-completion review.** After every deliverable passes the gate, spawn one
    `reviewer` child on your branch diff (see Children below). Fix all **Critical**
    and **Important** findings: re-run the gate, commit as

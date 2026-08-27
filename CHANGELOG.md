@@ -4,6 +4,52 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.9.0] - 2026-08-27
+
+`/plan` closes its seams with `/proposal` (upstream) and `/sprint` (downstream): its
+decisions become durable, execution failures route back into a re-cut, and acceptance
+criteria learn the difference between what a command can prove and what only a human can.
+Patterns ported from gstack's plan-review skills (review-report interop, decision-record
+sentinels, exit-gate armor) and current plan-stage research (HumanLayer ACE-FCA dual
+verification, OpenAI ExecPlans living records, Spec Kit cross-artifact analyze). No
+migrations; existing sprint files with unclassified acceptance criteria stay valid — the
+split applies to newly planned/certified sprints.
+
+- **Plan record (durable).** `/plan`'s exit-gate outputs stop living only in conversation:
+  each breakdown appends a dated entry to a terminal `## Plan record` section of the source
+  document — sprints created, the requirement→sprint coverage map, a scope-decisions table
+  (ACCEPTED/DEFERRED/CUT with reasoning and TODOS backlinks), review inputs consumed, and a
+  machine-checkable last line (`NO UNRESOLVED DECISIONS` or an `UNRESOLVED DECISIONS:`
+  list). The gate flow and recuts read it as evidence. PROPOSAL_TEMPLATE documents the
+  section; free-text sources (no document) are exempt and say so.
+- **Review-report interop.** Phase 1 now scans the source document for appended review
+  sections (e.g. gstack's terminal `## GSTACK REVIEW REPORT`) instead of relying on
+  review output being in the conversation; a report's `UNRESOLVED DECISIONS:` list blocks
+  the breakdown until each item is resolved via AskUserQuestion.
+- **`/plan recut` — the divergence protocol.** New flow for when execution invalidates
+  un-started backlog sprints: structured mismatch first (Expected / Found / Why it
+  matters), re-ground against current code, re-cut only the invalidated backlog subset,
+  reject stale sprints with `superseded by recut YYYY-MM-DD — [mismatch]` (edges
+  re-wired, never dangling), fresh S-NNNs for replacements, a dated recut entry in the
+  Plan record. PROTOCOL Phase 2 (both tiers) and ORCHESTRATION's PLAN_GAP handling route
+  premise-level failures that span sprints here instead of hand-editing the backlog;
+  direction changes still go through `/proposal`.
+- **Question protocol + exit-gate armor in `/plan`.** The skill adopts `/proposal`'s
+  question protocol (decision briefs with stakes lines, one decision per call, the
+  5+-option split rule) — applied to the Phase 2 boundary confirm — and the exit gate
+  reports explicitly per check ("state what you examined"; a zero-findings check says so
+  in one line, never a bare pass; an issue with an obvious fix is still an issue).
+- **Automated vs Manual acceptance criteria.** SPRINT_TEMPLATE splits criteria:
+  Automated (the exact command + the observable difference it must show) vs Manual
+  (human-confirmed only — executors and `/plan`/`/sprint plan` may never check those
+  boxes; PROTOCOL Phase 3 Step 1 confirms each with the user at close). `/sprint plan`'s
+  readiness checklist and the sprint-executor agent enforce the classification.
+- **Cross-artifact lints + learnings parity.** `/plan`'s exit gate gains three proposal
+  lints — no sprint delivers a declared Non-Goal, builds a rejected alternative's
+  distinctive feature, or pre-builds a later stage — and Phase 1 now reads
+  `docs/sprints/PLANNING_LEARNINGS.md` (previously only `/sprint plan` and the wave
+  planners did).
+
 ## [1.8.1] - 2026-08-26
 
 Fixes the multi-stage gate machinery for a proposal's LAST stage, which by design has no

@@ -255,7 +255,8 @@ already done by the planning pass — see `ORCHESTRATION.md` Step 2.)
      deliverable-relevant tests not covered by the gate. Fix failures before committing — do
      NOT commit broken code and defer.
   5. Check off acceptance criteria only when you can point to the file/test/output that
-     proves each.
+     proves each. Automated criteria only — Manual criteria stay unchecked: report what
+     to verify and leave the box for the user at close (Phase 3 Step 1).
   6. Commit atomically per deliverable (not per file): `S-NNN: [deliverable description]`.
 - **Blockers/ambiguity:** do NOT guess or skip — ask via AskUserQuestion with concrete
   alternatives. If a deliverable turns out unnecessary, ask whether to skip and update the
@@ -263,6 +264,9 @@ already done by the planning pass — see `ORCHESTRATION.md` Step 2.)
   If the stop was caused by a brief gap (stale premise, missing file, unevaluable criterion),
   log one line in `docs/sprints/PLANNING_LEARNINGS.md` after resolving it (create if absent;
   newest 20 entries — a doc-sync target: claim the file if editing it mid-sprint, full tier).
+  A gap that invalidates the premises of **other un-started backlog sprints** — not just
+  this brief — escalates past in-place repair: finish or descope the current sprint, then
+  route to `/plan recut` rather than hand-editing the backlog.
 - **Deferred work:** anything descoped or discovered-but-not-done goes to `docs/TODOS.md`
   with a backlink to this sprint — not into a comment, not into thin air. (`docs/TODOS.md`
   edits are doc-sync targets; claim the file if editing it mid-sprint.)
@@ -294,7 +298,10 @@ For each criterion, cite one of: a test name that asserts it, a file path + line
 implements it, or command output that demonstrates it. A checked box without evidence does
 not count. **Verify the observable difference** the criterion describes — the value in the
 response, the row actually written, the model that answered — not merely that the operation
-returned without error. For any unevidenced criterion, ask via AskUserQuestion:
+returned without error. An **Automated** criterion's evidence is the output of the exact
+command it names. A **Manual** criterion is never self-checked: present each to the user
+via AskUserQuestion — confirmed / needs work / descope — and check its box only on their
+confirmation. For any unevidenced automated criterion, ask via AskUserQuestion:
 - A: "Implement the missing piece now"
 - B: "Descope — remove it and note why in the Completion Log (and `docs/TODOS.md`)"
 - C: "Spin out into a follow-up sprint"

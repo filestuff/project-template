@@ -168,7 +168,10 @@ failed; don't repeat those gaps.
 3. Zero unresolved Open Questions: resolve each via AskUserQuestion during this pass
    (recording answers as dated Pre-Sprint Decisions entries), or explicitly rewrite it as
    an ask-at-start question with 2–4 concrete options.
-4. Every acceptance criterion states an observable difference — not "works correctly".
+4. Every acceptance criterion states an observable difference — not "works correctly" —
+   and is classified **Automated** (with the exact command that demonstrates it) or
+   **Manual** (human-confirmed only, per SPRINT_TEMPLATE). A criterion that can't name
+   its command is Manual by definition.
 5. Testing names an existing test file to follow, or states why test-first doesn't fit and
    how the deliverable is verified instead.
 6. `touches:` is populated per the Required rule above.
