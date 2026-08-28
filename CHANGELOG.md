@@ -4,6 +4,29 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.9.1] - 2026-08-28
+
+Fixes two `merge-sprint.sh` defects found in production wave use (ai-todo TODOS #440/#441),
+both of the displaced-in-time kind: the script reports success and the damage surfaces
+later, somewhere else, looking like something unrelated. No migrations; the fixes apply on
+your next sprint completion.
+
+- **`finish` no longer strands doc-sync edits.** It previously staged a fixed path list
+  (INDEX, ROADMAP, DOC_HEALTH, the sprint file), so any other doc the completion pass
+  touched (TODOS rows, architecture notes) stayed uncommitted — and resurfaced as the NEXT
+  sprint's `prepare` refusing with "primary checkout has tracked changes", where it reads
+  exactly like a concurrent session's mess. `finish` now stages every dirty tracked file
+  under `docs/`, and after the completion commit prints a WARNING naming any tracked
+  leftovers that would still dirty-stop the next `prepare`.
+- **`land` no longer orphans INDEX.md links on archive rotation.** Rotating a sprint file
+  past the 10-file `done/` boundary into `done/archive/` left its hand-authored Done-table
+  link pointing at `done/X.md`, which 404s — always a *sibling's* file, never the sprint
+  being landed, so any self-scoped check comes back clean and the broken links compound
+  silently (13 had accumulated in one downstream repo). `land` now rewrites any
+  `(done/X.md)` link whose target exists only under `done/archive/`, echoing each relink.
+  The sweep checks all links, so it also repairs previously accumulated orphans on the
+  next land.
+
 ## [1.9.0] - 2026-08-27
 
 `/plan` closes its seams with `/proposal` (upstream) and `/sprint` (downstream): its
