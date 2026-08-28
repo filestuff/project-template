@@ -191,6 +191,18 @@ land)
     done
   fi
 
+  # Rotation moves sibling sprint files past the 10-file done/ boundary,
+  # orphaning their hand-authored INDEX.md Done-table links. Rewrite any
+  # (done/X.md) link whose target now exists only under done/archive/.
+  INDEX_MD="$ROOT/docs/sprints/INDEX.md"
+  while IFS= read -r rel; do
+    base=${rel#done/}
+    if [[ ! -f "$ROOT/docs/sprints/done/$base" && -f "$ROOT/docs/sprints/done/archive/$base" ]]; then
+      perl -pi -e "s{\(\Qdone/$base\E\)}{(done/archive/$base)}g" "$INDEX_MD"
+      echo "INDEX.md: relinked done/$base -> done/archive/$base"
+    fi
+  done < <(grep -o '(done/[A-Za-z0-9_.-]*\.md)' "$INDEX_MD" | tr -d '()' | sort -u)
+
   node "$SELF_DIR/regen.mjs" >/dev/null
 
   echo "landed $CSV onto main (uncommitted lifecycle changes staged)."
@@ -219,7 +231,11 @@ finish)
     TITLES+=("$(sprint_title "$s" "${files[0]}")")
   done
 
-  git -C "$ROOT" add -u -- docs/sprints docs/DOC_HEALTH.md
+  # Stage every dirty tracked file under docs/, not a fixed list — the
+  # completion pass routinely edits docs beyond the lifecycle set (e.g.
+  # TODOS.md, architecture notes), and stranded leftovers dirty-stop the
+  # NEXT sprint's prepare, where they masquerade as a foreign session's mess.
+  git -C "$ROOT" add -u -- docs
   if git -C "$ROOT" diff --cached --name-only | grep -q ' 2\.'; then
     echo 'staged a " 2." sync-duplicate file — unstage it before re-running finish' >&2
     exit 1
@@ -239,6 +255,16 @@ finish)
     git -C "$ROOT" show "HEAD:$rel" | grep '^status: done' >/dev/null ||
       { echo "FATAL: committed sprint file $rel is not status: done — inspect HEAD" >&2; exit 1; }
   done
+
+  # Name any tracked leftovers NOW, while the cause is obvious — otherwise
+  # they resurface as the next prepare's "primary checkout has tracked
+  # changes" refusal, misdiagnosed as a concurrent session's mess.
+  LEFTOVER=$(git -C "$ROOT" status --porcelain --untracked-files=no)
+  if [[ -n $LEFTOVER ]]; then
+    echo "WARNING: uncommitted doc-sync leftovers remain after the completion commit:" >&2
+    echo "$LEFTOVER" >&2
+    echo "these will dirty-stop the NEXT sprint's prepare — commit or restore them before then." >&2
+  fi
 
   if [[ $NO_PUSH -eq 0 ]]; then
     git -C "$ROOT" push origin "$MAIN" ||
