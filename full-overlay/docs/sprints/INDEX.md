@@ -32,7 +32,8 @@ _(empty)_
 ## Done
 
 <!-- LLM-maintained: one row per completed sprint, newest first. The Outcome
-     column is the one-line narrative of what actually shipped. -->
+     column is ONE sentence (≤200 chars) — the narrative lives in the sprint file's
+     `### Outcome`; `finish` warns past 300 chars. -->
 
 | Sprint | Goal | Pts | Completed | Outcome |
 |--------|------|-----|-----------|---------|

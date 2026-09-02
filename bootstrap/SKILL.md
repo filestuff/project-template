@@ -172,7 +172,9 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
 ## Step 9: Validate
 
 - Lite: `bash -n scripts/sprint/gate.sh` and `bash -n scripts/sprint/pre-push-gate.sh`; the
-  four sprint dirs + `.gitkeep`s exist.
+  four sprint dirs + `docs/sprints/evidence/` + their `.gitkeep`s exist;
+  `node scripts/sprint/close-check.mjs docs/sprints/SPRINT_TEMPLATE.md` exits 5 (the lint
+  reads the shipped grammar — it must reject the unfilled template).
 - Manifest (all tiers):
   - `.claude/template-manifest.json` parses
     (`node -e 'JSON.parse(require("fs").readFileSync(".claude/template-manifest.json","utf8"))'`)

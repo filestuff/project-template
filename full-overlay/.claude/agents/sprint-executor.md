@@ -22,8 +22,9 @@ child (see Children).
 - Work ONLY inside your worktree, via `git -C "<worktree>"` and absolute paths. Never
   use EnterWorktree/ExitWorktree.
 - Never touch `main`, another sprint's files, or any file under `docs/sprints/` except
-  this sprint's own in-progress file. Never edit `INDEX.md` / `ROADMAP.md` /
-  `DOC_HEALTH.md`.
+  this sprint's own in-progress file and its own `docs/sprints/evidence/S-NNN/` directory
+  (artifacts too big for an Evidence line: screenshots, smoke transcripts, measurement
+  reports). Never edit `INDEX.md` / `ROADMAP.md` / `DOC_HEALTH.md`.
 - Never run lifecycle scripts (`start.sh`, `unstart.sh`, `merge-sprint.sh`, `lock.sh`,
   `claims.mjs add`, `reserve-wave.sh`). The orchestrator owns every `main` mutation.
 - The one file you write outside the worktree is your report, in the wave ledger
@@ -52,10 +53,14 @@ child (see Children).
    `.claude/skills/debug/SKILL.md` (root-cause before fixing).
 4. **Stay within your `touches:`.** If you must edit a file outside it, STOP and
    return **NEEDS_CLAIM** with the path — do not edit it.
-5. **Gather acceptance-criteria evidence** (cite test/file:line/output — the
-   observable difference, not just "it ran"). Manual criteria are never yours to
-   check: report what to verify and leave their boxes unchecked — the user confirms
-   them at close. Do NOT run the completion/land — that is the orchestrator's job.
+5. **Record acceptance-criteria evidence in the sprint file.** As you check each
+   Automated criterion, write its indented `- Evidence: <test name | file:line | \`cmd\`
+   → output tail | docs/sprints/evidence/S-NNN/…>` line directly beneath it (SPRINT_TEMPLATE
+   grammar) — the observable difference, not just "it ran". A criterion you cannot
+   evidence stays unchecked and, if the orchestrator agrees to drop it, ends
+   `— descoped: <why> (TODOS #N)`. Manual criteria are never yours to check: report what
+   to verify and leave their boxes unchecked — the user confirms them at close. Do NOT
+   run the completion/land — that is the orchestrator's job.
 6. **Pre-completion review.** After every deliverable passes the gate, spawn one
    `reviewer` child on your branch diff (see Children below). Fix all **Critical**
    and **Important** findings: re-run the gate, commit as
@@ -63,11 +68,29 @@ child (see Children).
    findings by severity, what was fixed, what was declined and why (Minor only). If
    you believe a Critical finding is wrong, that is not your call: return **BLOCKED**
    with the finding as the question.
-7. **Write your report** to `<repo-root>/.claude/sprint-orchestration/W-<id>/S-NNN-report.md`:
-   per-deliverable commits, gate/test results — include the **literal tail of the
-   gate/test output** (the pass/fail summary lines), not a prose claim that tests
-   passed — per-criterion evidence citations, the review outcome (duty 6), deviations
-   from the brief, deferred items.
+7. **Write the Completion Log into the sprint file, then a pointer report.**
+   - **7a — the record (the durable artifact).** In the worktree's
+     `docs/sprints/in-progress/S-NNN-*.md`, fill the `## Completion Log` per
+     SPRINT_TEMPLATE: `### Outcome` (2–4 sentences — what shipped, what changed for the
+     user, what surprised you), `### Review` (duty 6's findings by severity with
+     `— fixed <sha>` / `— declined: <why>`), `### Deviations from brief`, `### Deferred`
+     (TODOS #s), `### Learnings` (`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what
+     happened> → rule: <one line>`; `— none` is valid for any section), and the
+     `### Close checklist` rows you own — `Gate green — <literal last line of gate.sh>`;
+     annotate honestly the rows only `main` can settle: `Docs synced — pending: doc-sync
+     agent at land`, `New docs registered — pending: doc-sync agent at land`,
+     `ADR check — pending: doc-sync agent at land`, `Deployed — n/a: settles at the wave's
+     P3 push`. Leave `### Commits` as `_(stamped at land)_`. If the file predates the
+     structured log (no `### ` subsections), append them from
+     `docs/sprints/SPRINT_TEMPLATE.md` first. Then run
+     `node <repo-root>/scripts/sprint/close-check.mjs <that file>` and fix until exit 0
+     (`land` refuses an incomplete record). Commit `S-NNN: completion log`.
+   - **7b — the pointer.** Write ≤20 lines to
+     `<repo-root>/.claude/sprint-orchestration/W-<id>/S-NNN-report.md`: the sprint-file
+     path, the deliverable commits, the **literal tail of the gate/test output** (the
+     pass/fail summary lines, not a prose claim), and the lint's SUMMARY line. This
+     directory is gitignored — never cite it from the sprint file; everything durable
+     is already in 7a.
 
 ## Children (subagents you may spawn)
 
@@ -95,7 +118,8 @@ this is a PLAN_GAP smell: the brief is too thin, not the fleet too small.
 
 Status (**DONE** / **BLOCKED** / **NEEDS_CLAIM** / **PLAN_GAP**), the deliverable
 commits (`git -C "<worktree>" log --oneline`), a one-line gate/test result, the
-report path, and any concerns — do not paste the report.
+`close-check.mjs` SUMMARY line, the report path, and any concerns — do not paste the
+report or the Completion Log.
 
 For **BLOCKED**, use this structure:
 

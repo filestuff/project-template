@@ -69,7 +69,16 @@ touches: []
      human (visual look, real-device feel, third-party dashboard); the executor REPORTS
      what to check but never checks the box — the user confirms it at sprint close
      (PROTOCOL Phase 3 Step 1). A criterion that can't name its command is Manual by
-     definition. Omit whichever list is empty. -->
+     definition. Omit whichever list is empty.
+
+     Evidence grammar (linted by scripts/sprint/close-check.mjs at close):
+       - A checked Automated criterion is followed by an indented
+         `- Evidence: <test name | file:line | \`cmd\` → output tail | docs/sprints/evidence/S-NNN/…>`
+         line — the proof, written at the same keystroke as the `[x]`.
+       - A criterion left unchecked at close ends `— descoped: <why> (TODOS #N)`.
+       - A Manual criterion is checked ONLY by the user and ends `— confirmed YYYY-MM-DD`.
+     Evidence lives in THIS file (or under docs/sprints/evidence/S-NNN/ for artifacts that
+     don't fit a line) — never in the conversation and never in the gitignored wave ledger. -->
 
 1. **[Feature/Task Name]**
    - Files: `path/to/file` (new | modified)
@@ -202,14 +211,55 @@ _(none yet)_
 
 ## Completion Log
 
-_Fill in as work progresses:_
+<!-- Written INTO this file by whoever executes (solo Claude or the sprint-executor) before
+     close, committed `S-NNN: completion log`. This file is the durable record — not the
+     conversation, not the wave ledger (`.claude/sprint-orchestration/` is gitignored).
+     `node scripts/sprint/close-check.mjs <this file>` lints it: every Automated criterion
+     above is `[x]` + `- Evidence:` or `— descoped: …`, every Manual one is user-confirmed
+     or descoped, every section below is filled (or `— none`), and every checklist row
+     carries an annotation. Artifacts too big for a line (screenshots, smoke transcripts,
+     measurement reports) go in `docs/sprints/evidence/S-NNN/` and are cited by path. -->
 
-- [ ] Implementation complete
-- [ ] Tests passing (gate: `scripts/sprint/gate.sh`)
-- [ ] Reviewed / self-reviewed
-- [ ] Docs synced (post-sprint validation)
-- [ ] New docs registered (DOC_HEALTH row + PROTOCOL tag→doc row, or "none")
-- [ ] ADR check run (ADR-NNN or "none — reason")
-- [ ] Deferred work logged in `docs/TODOS.md` (or "none")
-- [ ] Deployed (if applicable)
-- [ ] Move file to `done/` folder
+### Outcome
+
+_(2–4 sentences at close: what actually shipped, what changed for the user, what surprised
+you. This is the narrative — INDEX.md's Outcome cell is ONE sentence pointing here.)_
+
+### Commits
+
+_(stamped at land)_
+
+<!-- Full tier: merge-sprint.sh land replaces the line above with the `S-NNN:` deliverable
+     commits + the merge SHA. Lite: paste `git log --reverse --oneline <start-sha>..HEAD
+     --grep '^S-NNN:'` here at close (start-sha = the `sprint: start S-NNN` commit). -->
+
+### Review
+
+_(fill at close: findings by severity with disposition — `Critical/Important/Minor: <finding>
+— fixed <sha>` or `— declined: <why>` — or the literal `— not run: low risk (Step 3.5)`)_
+
+### Deviations from brief
+
+_(fill at close: what was built differently from the deliverable text, and why; `— none`)_
+
+### Deferred
+
+_(fill at close: `TODOS #N — <item>` per line; `— none`)_
+
+### Learnings
+
+_(fill at close: `- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what happened> → rule:
+<one line>`; `— none`. Same grammar as docs/sprints/PLANNING_LEARNINGS.md — a `plan`-class
+line that would have changed another sprint's brief is also prepended there.)_
+
+### Close checklist
+
+<!-- Every row is `- [x] <label> — <annotation>`. A bare "done"/"yes"/"ok" fails the lint;
+     `n/a` and `descoped` need `: reason`. -->
+
+- [ ] Gate green — <last line of `scripts/sprint/gate.sh` output>
+- [ ] Docs synced — <docs updated | none: reason>
+- [ ] New docs registered — <DOC_HEALTH row + PROTOCOL tag→doc row for `<doc>` | none: no new docs>
+- [ ] ADR check — <ADR-NNN | none: reason>
+- [ ] Deferred work logged — <TODOS #N, … | none: nothing deferred>
+- [ ] Deployed — <where / when / run id | n/a: reason>

@@ -121,15 +121,18 @@ Phase 2 solo exactly as written.
   4. **Gate before commit** — run `scripts/sprint/gate.sh`; all commands must pass. Fix
      failures before committing — do NOT commit broken code and defer.
   5. Check off acceptance criteria only when you can point to the file/test/output that
-     proves each. Automated criteria only — Manual criteria stay unchecked: report what
-     to verify and leave the box for the user at close (Phase 3 Step 1).
+     proves each — and write that proof into the sprint file as the criterion's
+     `- Evidence:` line (SPRINT_TEMPLATE grammar) in the same edit as the `[x]`. Automated
+     criteria only — Manual criteria stay unchecked: report what to verify and leave the
+     box for the user at close (Phase 3 Step 1).
   6. Commit atomically per deliverable (not per file): `S-NNN: [deliverable description]`.
 - **Blockers/ambiguity:** do NOT guess or skip — ask via AskUserQuestion with concrete
   alternatives. If a deliverable turns out unnecessary, ask whether to skip and update the
   sprint file. Hit an unexpected bug or failing test? Use `/debug` — root-cause before fixing.
   If the stop was caused by a brief gap (stale premise, missing file, unevaluable criterion),
   log one line in `docs/sprints/PLANNING_LEARNINGS.md` after resolving it (create if absent;
-  newest 20 entries). A gap that invalidates the premises of **other un-started backlog
+  newest first — readers read the newest 20, older entries are never deleted: they are the
+  archive). A gap that invalidates the premises of **other un-started backlog
   sprints** — not just this brief — escalates past in-place repair: finish or descope the
   current sprint, then route to `/plan recut` rather than hand-editing the backlog.
 - **Deferred work:** anything descoped or discovered-but-not-done goes to `docs/TODOS.md`
@@ -152,16 +155,34 @@ Phase 2 solo exactly as written.
 ### Step 1: Acceptance Criteria Evidence Check
 
 For each criterion, cite one of: a test name that asserts it, a file path + line range that
-implements it, or command output that demonstrates it. A checked box without evidence does
-not count. **Verify the observable difference** the criterion describes — the value in the
-response, the row actually written, the model that answered — not merely that the operation
-returned without error. An **Automated** criterion's evidence is the output of the exact
-command it names. A **Manual** criterion is never self-checked: present each to the user
-via AskUserQuestion — confirmed / needs work / descope — and check its box only on their
-confirmation. For any unevidenced automated criterion, ask via AskUserQuestion:
+implements it, or command output that demonstrates it — **written into the sprint file** as
+the criterion's indented `- Evidence:` line (SPRINT_TEMPLATE grammar). A checked box without
+an Evidence line does not count; evidence that lives only in this conversation is lost.
+**Verify the observable difference** the criterion describes — the value in the response,
+the row actually written, the model that answered — not merely that the operation returned
+without error. An **Automated** criterion's evidence is the output of the exact command it
+names. A **Manual** criterion is never self-checked: present each to the user via
+AskUserQuestion — confirmed / needs work / descope — and on confirmation check its box and
+append `— confirmed YYYY-MM-DD`. For any unevidenced automated criterion, ask via
+AskUserQuestion:
 - A: "Implement the missing piece now"
-- B: "Descope — remove it and note why in the Completion Log (and `docs/TODOS.md`)"
+- B: "Descope — leave the box unchecked, append `— descoped: <why> (TODOS #N)` to the
+  criterion, and add the TODOS row"
 - C: "Spin out into a follow-up sprint"
+
+Artifacts that don't fit a line — screenshots, smoke transcripts, measurement or
+investigation reports, operator runbooks — go in
+`docs/sprints/evidence/S-NNN/<YYYY-MM-DD>-<kind>-<slug>.<ext>` (`kind` ∈ smoke, screenshot,
+measure, transcript, runbook; reports are verdict-first) and are cited by path from the
+Evidence line. A later sprint that proves an older sprint's deferred criterion may
+back-annotate that older file the same way (`— verified by S-MMM on YYYY-MM-DD`, Evidence
+path).
+
+Then fill the **Completion Log** (SPRINT_TEMPLATE): `### Outcome` (2–4 sentences — the
+narrative), `### Review`, `### Deviations from brief`, `### Deferred`, `### Learnings`
+(`— none` is valid for each), and annotate every `### Close checklist` row as its step
+completes below. If the file predates the structured log (no `### ` subsections), append
+them from SPRINT_TEMPLATE first. The sprint file is the record; the lint in Step 4 checks it.
 
 ### Step 2: Doc Sync
 
@@ -176,7 +197,7 @@ Commit: `docs: sync documentation after S-NNN`.
 
 Run `/adr check` over this sprint's commit range. If the sprint introduced a significant
 architectural decision not in an existing ADR, draft one (`/adr create`). Record the outcome
-in the Completion Log either way ("ADR-NNN" or "none — reason").
+on the Close checklist's `ADR check` row either way (`— ADR-NNN` or `— none: reason`).
 
 ### Step 3.5: Risk-Tiered Review
 
@@ -185,7 +206,9 @@ Check the sprint's diff against the risk-tier table in `docs/sprints/review-cali
 payment/irreversible mutation, trust-boundary parsing). **High-risk** → dispatch one
 `reviewer` subagent (fresh context) over the diff before closing; fix Critical/Important
 findings and re-run the gate. **Not high-risk** → skip — do not add a review pass to every
-sprint; depth scales with blast radius.
+sprint; depth scales with blast radius. Record the outcome under `### Review`: findings by
+severity with disposition (`— fixed <sha>` / `— declined: <why>`), or the literal
+`— not run: low risk (Step 3.5)`.
 
 ### Step 3.6: Proposal Stage Check
 
@@ -207,10 +230,28 @@ If this was the last:
 - **Un-staged proposal** → flip its `**Status**:` to `delivered YYYY-MM-DD` (rides the
   close commit) and say so.
 
+### Step 3.7: Learnings
+
+Fill `### Learnings` — one line per lesson in the SPRINT_TEMPLATE grammar
+(`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what happened> → rule: <one line>`),
+or `— none`. A `plan`-class line — a gap that would have changed another sprint's brief —
+is also prepended to `docs/sprints/PLANNING_LEARNINGS.md` (create if absent; never delete
+older entries). Other classes stay in the sprint file, greppable across `done/` via
+`### Learnings`.
+
 ### Step 4: Close
 
+0. Paste the deliverable commits under `### Commits` (replace `_(stamped at land)_`):
+   `git log --reverse --oneline <start-sha>..HEAD --grep '^S-NNN:'` (start-sha = the
+   `sprint: start S-NNN` commit). Then lint the record:
+   `node scripts/sprint/close-check.mjs docs/sprints/in-progress/S-NNN-*.md` — exit 5 lists
+   what is missing (unevidenced criteria, unannotated checklist rows, placeholders); fix the
+   file and re-run until exit 0. There is no override in lite: if something genuinely cannot
+   be recorded, say so under `### Deviations from brief` and in the close summary.
 1. `git mv` the sprint file `in-progress/ → done/`; set `status: done` and `end_date`.
-2. Update `docs/sprints/INDEX.md` by hand: move the row to Done with a one-line outcome.
+2. Update `docs/sprints/INDEX.md` by hand: move the row to Done. The Outcome cell is **one
+   sentence (≤200 chars)** — the narrative lives in the sprint file's `### Outcome`. The
+   `_Last updated_` header is one line, overwritten, never appended to.
 3. Commit: `sprint: complete S-NNN — [name]`.
 4. **Deploy gate:** pushing `main` triggers any connected platform's auto-deploy
    (Railway/Vercel/etc.), so never push the completion silently — ask first

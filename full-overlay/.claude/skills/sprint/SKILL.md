@@ -120,12 +120,18 @@ per deliverable, run `scripts/sprint/gate.sh` before each commit, and respect th
 ### `/sprint done [S-NNN]`
 
 Execute the full **Phase 3: Post-Sprint** procedure from `docs/sprints/PROTOCOL.md`:
-acceptance-criteria **evidence** check (cite test/file:line/output — a checked box without
-evidence does not count) → doc sync via `git diff` (on the branch) → **`/adr check`
-(mandatory; record outcome in the Completion Log)** →
+acceptance-criteria **evidence** check — write each criterion's `- Evidence:` line into the
+worktree's sprint file (a checked box without an Evidence line does not count; Manual
+criteria are user-confirmed) → fill the **Completion Log** (Outcome / Review / Deviations /
+Deferred / Learnings + Close checklist), commit `S-NNN: completion log`, lint it with
+`node scripts/sprint/close-check.mjs <file>` → doc sync via `git diff` (on the branch) →
+**`/adr check` (mandatory; `ADR check` checklist row)** →
 **`merge-sprint.sh prepare S-NNN-…`** (locked; on exit 3 re-run `gate.sh`) →
-**`merge-sprint.sh land S-NNN-…`** (merges to main, moves the file, regenerates; exits 4) →
-author the semantic docs on main (DOC_HEALTH.md, INDEX Done-row + header, ROADMAP narrative)
+**`merge-sprint.sh land S-NNN-…`** (re-lints the branch copy — exit 5 = incomplete record,
+main untouched, fix and re-run; merges to main, moves the file, stamps `### Commits`,
+regenerates; exits 4) →
+author the semantic docs on main (DOC_HEALTH.md, INDEX Done-row — one sentence — + header,
+ROADMAP narrative, the done-file's `Docs synced`/`New docs`/`ADR check` rows)
 → **`merge-sprint.sh finish S-NNN-… --no-push`** (commits, releases the lock — the
 completion commit intentionally carries no `[skip ci]`, since its eventual push is what
 lands the code) → **deploy gate**: ask via AskUserQuestion — **Push now (deploy)**
@@ -156,8 +162,8 @@ Details, Testing (pattern reference), Dependencies, Risks, Open Questions; updat
 `story_points` if scope reveals different complexity. **Required**: populate `touches:`
 from the Files lists you just wrote (plus tokens from `claims-tokens.json` and likely
 doc-sync targets) — `/sprint start` verifies rather than re-derives it. If
-`docs/sprints/PLANNING_LEARNINGS.md` exists, read it first — it lists how past briefs
-failed; don't repeat those gaps.
+`docs/sprints/PLANNING_LEARNINGS.md` exists, read its newest 20 entries first — it lists how
+past briefs failed; don't repeat those gaps.
 
 **Readiness checklist** — all must hold before certifying:
 
@@ -235,7 +241,9 @@ Pre-Sprint Decisions — two short locked commits, both `[skip ci]`, neither pus
 start, checkpoint P2 — `bash scripts/sprint/push-main.sh`, a ledger-only push, zero CI),
 **dispatch one `sprint-executor` subagent per sprint** (single message = parallel) to run
 **Phase 2 only** in its worktree via `git -C` — each runs a `reviewer` child over its branch
-before returning (DONE / BLOCKED / NEEDS_CLAIM / **PLAN_GAP** + a report file). **Advise
+and writes the Completion Log into its sprint file before returning (DONE / BLOCKED /
+NEEDS_CLAIM / **PLAN_GAP** + a pointer report; the master checks the record with
+`close-check.mjs --json`, never by reading the file). **Advise
 blocked executors yourself** (answer from plan/repo context and continue the same agent via
 SendMessage; escalate to the user only for genuine tradeoffs), then **complete finished
 sprints one at a time** with `merge-sprint.sh finish <branch> --no-push` (Phase 3 is

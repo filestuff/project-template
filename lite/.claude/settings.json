@@ -6,6 +6,7 @@
       "Bash({{PACKAGE_MANAGER}} test *)",
       "Bash({{PACKAGE_MANAGER}} lint *)",
       "Bash(scripts/sprint/*)",
+      "Bash(node scripts/sprint/*)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",

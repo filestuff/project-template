@@ -7,11 +7,18 @@
 #       main into the sprint branch. Exit 0 = branch already up to date;
 #       exit 3 = merge brought changes — re-run the commit gate in the
 #       worktree, then call `land`.
-#   merge-sprint.sh land <branch> [--sprints S-A,S-B,…]
-#       Merge --no-ff into main, move the sprint file(s) in-progress/ → done/,
-#       flip status/end_date, rotate the archive, regenerate. Exits 4: author
-#       the semantic docs on main (docs/DOC_HEALTH.md row + History; INDEX.md
-#       Done-table row + header narrative; ROADMAP.md narrative), then `finish`.
+#   merge-sprint.sh land <branch> [--sprints S-A,S-B,…] [--allow-incomplete <reason>]
+#       FIRST lint every roster member's Completion Log on the branch
+#       (close-check.mjs, before anything mutates): exit 5 lists what is missing
+#       — fix the record on the branch and re-run `land` (no new `prepare`
+#       needed), or pass --allow-incomplete "<reason>" to land anyway with the
+#       reason written into the file's Deviations. Then merge --no-ff into main,
+#       move the sprint file(s) in-progress/ → done/, flip status/end_date, stamp
+#       the `S-NNN:` deliverable commits + merge SHA under `### Commits`, rotate
+#       the archive, regenerate. Exits 4: author the semantic docs on main
+#       (docs/DOC_HEALTH.md row + History; INDEX.md Done-table row — ONE sentence,
+#       the narrative lives in the sprint file's ### Outcome — + header line;
+#       ROADMAP.md narrative), then `finish`.
 #   merge-sprint.sh finish <branch> [--sprints S-A,S-B,…] [--no-push]
 #       Verify, commit `sprint: complete S-NNN`, push, release the lock.
 #
@@ -23,7 +30,8 @@
 #       Roll main back to the pre-land SHA, abort in-progress merges, release.
 #
 # Exit codes: 0 ok · 1 error (lock kept — fix and re-run, or abort) ·
-# 3 gate re-run needed · 4 paused for doc authoring · 75 lock busy
+# 3 gate re-run needed · 4 paused for doc authoring · 5 completion log incomplete
+# (lock kept, main untouched) · 75 lock busy
 #
 # Must run under macOS /bin/bash 3.2: no mapfile/readarray/associative arrays,
 # and empty-array "${arr[@]}" expansion is an unbound-variable error under set -u.
@@ -38,12 +46,13 @@ MAIN=${SPRINT_MAIN_BRANCH:-main}
 CMD=${1:?usage: merge-sprint.sh prepare|land|finish|abort <branch>}
 BRANCH=${2:?usage: merge-sprint.sh $CMD <branch>}
 shift 2
-NO_PUSH=0 WAIT=300 SPRINTS_CSV=""
+NO_PUSH=0 WAIT=300 SPRINTS_CSV="" ALLOW_INCOMPLETE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --no-push) NO_PUSH=1; shift ;;
   --wait) WAIT=$2; shift 2 ;;
   --sprints) SPRINTS_CSV=$2; shift 2 ;;
+  --allow-incomplete) ALLOW_INCOMPLETE=${2:?--allow-incomplete needs a reason}; shift 2 ;;
   *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
 done
@@ -83,6 +92,39 @@ sprint_title() { # $1 = sprint id, $2 = absolute sprint file path
   local t
   t=$(sed -n "s/^# $1: //p" "$2" | head -1)
   echo "${t:-$1}"
+}
+
+# Replace the sprint file's `_(stamped at land)_` marker with the sprint's
+# deliverable commits (the `S-NNN:` commits between the merge's two parents) and
+# the merge SHA — mechanical facts, zero LLM cost, and the file stays
+# self-contained after archive rotation. Never fatal: the merge has happened.
+stamp_commits() { # $1 = sprint id, $2 = absolute done-file path
+  local s=$1 file=$2 merge commits
+  merge=$(git -C "$ROOT" rev-parse HEAD)
+  commits=$(git -C "$ROOT" log --reverse --format='- %h %s' "$merge^1..$merge^2" --grep="^$s:" 2>/dev/null || true)
+  [[ -n $commits ]] || commits="- (no commits matched \`$s:\` — see \`git log $merge^1..$merge^2\`)"
+  STAMP=$(printf '%s\n- merge: %s' "$commits" "$merge")
+  export STAMP
+  if grep -q '^_(stamped at land)_$' "$file"; then
+    perl -pi -e 's/^_\(stamped at land\)_$/$ENV{STAMP}/' "$file"
+  elif grep -q '^### Commits' "$file"; then
+    perl -pi -e 's/^### Commits$/### Commits\n\n$ENV{STAMP}/' "$file"
+  else
+    echo "WARNING: $s has no \`### Commits\` section (pre-1.10.0 file) — commits not stamped; see \`git log $merge^1..$merge^2\`" >&2
+  fi
+}
+
+# --allow-incomplete: record the override in the file itself, under Deviations.
+note_incomplete() { # $1 = absolute done-file path
+  local file=$1
+  NOTE="- $(date +%F) landed incomplete — $ALLOW_INCOMPLETE"
+  export NOTE
+  if grep -q '^### Deviations from brief' "$file"; then
+    # drop a `— none` directly under the heading, then insert the note after the heading
+    perl -0pi -e 's/(### Deviations from brief\n)(\n*)(— none\n)?/$1\n$ENV{NOTE}\n\n/' "$file"
+  else
+    printf '\n### Deviations from brief\n\n%s\n' "$NOTE" >>"$file"
+  fi
 }
 
 case "$CMD" in
@@ -166,6 +208,32 @@ land)
     TITLES+=("$(sprint_title "$s" "${files[0]}")")
   done
 
+  # Completion-log lint — the branch's copy of each sprint file is the record
+  # (the executor / solo close writes it there). Runs BEFORE any mutation so a
+  # failure leaves main untouched and needs no rollback; `prepare` still holds.
+  INCOMPLETE=()
+  for ((i = 0; i < ${#SPRINTS[@]}; i++)); do
+    s=${SPRINTS[i]}
+    CHECK_COPY="$LOCK_DIR/close-check-$s.md"
+    if ! git -C "$ROOT" show "$BRANCH:docs/sprints/in-progress/${BASENAMES[i]}" >"$CHECK_COPY" 2>/dev/null; then
+      echo "$s: docs/sprints/in-progress/${BASENAMES[i]} is not on branch $BRANCH — merge $MAIN into the branch (re-run prepare)" >&2
+      exit 1
+    fi
+    if ! node "$SELF_DIR/close-check.mjs" "$CHECK_COPY"; then
+      INCOMPLETE+=("$s")
+    fi
+  done
+  if [[ ${#INCOMPLETE[@]} -gt 0 ]]; then
+    if [[ -z $ALLOW_INCOMPLETE ]]; then
+      echo "completion log incomplete for: ${INCOMPLETE[*]} (lock kept, $MAIN untouched)." >&2
+      echo "fix the record on the branch (fill docs/sprints/in-progress/<file> per SPRINT_TEMPLATE ## Completion Log," >&2
+      echo "commit \`S-NNN: completion log\`), then re-run: merge-sprint.sh land $BRANCH$FINISH_ARGS" >&2
+      echo "— or land anyway with: --allow-incomplete \"<reason>\" (the reason is written into the file's Deviations)" >&2
+      exit 5
+    fi
+    echo "WARNING: landing with an incomplete completion log for ${INCOMPLETE[*]} — reason recorded in each file: $ALLOW_INCOMPLETE" >&2
+  fi
+
   if [[ ${#SPRINTS[@]} -eq 1 ]]; then
     git -C "$ROOT" merge --no-ff "$BRANCH" -m "sprint: merge ${SPRINTS[0]} — ${TITLES[0]}"
   else
@@ -178,6 +246,10 @@ land)
     DONE_FILE="$ROOT/docs/sprints/done/$BASENAME"
     node "$SELF_DIR/frontmatter.mjs" set "$DONE_FILE" status done
     node "$SELF_DIR/frontmatter.mjs" set "$DONE_FILE" end_date "$(date +%F)"
+    stamp_commits "$s" "$DONE_FILE"
+    if [[ -n $ALLOW_INCOMPLETE ]] && printf '%s\n' ${INCOMPLETE[@]+"${INCOMPLETE[@]}"} | grep -qx "$s"; then
+      note_incomplete "$DONE_FILE"
+    fi
   done
 
   # Archive rotation: keep the 10 most recent (highest-numbered) in done/.
@@ -229,6 +301,13 @@ finish)
     grep -q '^status: done' "${files[0]}" || { echo "${files[0]} is not status: done" >&2; exit 1; }
     REL_FILES+=("${files[0]#"$ROOT"/}")
     TITLES+=("$(sprint_title "$s" "${files[0]}")")
+    grep -q '^## Completion Log' "${files[0]}" ||
+      echo "WARNING: ${files[0]#"$ROOT"/} has no ## Completion Log — the sprint leaves no durable record" >&2
+    # The Done-row Outcome is ONE sentence; the narrative belongs in the file's ### Outcome.
+    OUTCOME_LEN=$(awk -F'|' -v key="[$s](" 'index($0, key) { n = NF; while (n > 1 && $n ~ /^[ \t]*$/) n--; print length($n); exit }' "$ROOT/docs/sprints/INDEX.md")
+    if [[ -n $OUTCOME_LEN && $OUTCOME_LEN -gt 300 ]]; then
+      echo "WARNING: INDEX.md Done-row Outcome for $s is $OUTCOME_LEN chars — keep it to one sentence (≤200); move the narrative into the sprint file's ### Outcome" >&2
+    fi
   done
 
   # Stage every dirty tracked file under docs/, not a fixed list — the

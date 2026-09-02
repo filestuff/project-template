@@ -65,8 +65,8 @@ options is a protocol violation, not a style choice.
    implies a review exists but none is visible in either place, ask them to
    paste/summarize it.
 4. Read the design-system doc (if one exists) when the work is UI/visual.
-5. Read `docs/sprints/PLANNING_LEARNINGS.md` when present — it lists how past briefs
-   failed; don't seed those gaps into new sprints (`/sprint plan` and the wave planners
+5. Read the newest 20 entries of `docs/sprints/PLANNING_LEARNINGS.md` when present — it
+   lists how past briefs failed; don't seed those gaps into new sprints (`/sprint plan` and the wave planners
    already read it; batch breakdown must not reintroduce what they'd have to fix).
 
 ### Phase 2: Sprint Breakdown
