@@ -224,7 +224,8 @@ has no gate; its completion flips the proposal to `delivered YYYY-MM-DD` at spri
 
 1. **Re-ground** (mini Step 0): re-verify the next stage's premises against the now-changed
    code; Grep `docs/sprints/done/` for this proposal's citations and read those sprints'
-   Completion Logs — landed evidence, not the original plan, feeds the decision. When the
+   Completion Logs (`### Outcome`, the criteria's `- Evidence:` lines, `### Deviations from
+   brief`) — landed evidence, not the original plan, feeds the decision. When the
    delivered stage touched several modules, the Step 0 Explore fan-out applies here too.
 2. **Decide via AskUserQuestion** using the stage's Gate spec verbatim (its question and
    options; add "stop here" if absent), with the gathered evidence quoted against the

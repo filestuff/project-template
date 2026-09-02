@@ -72,7 +72,8 @@ touches:
   hidden conflict) and a `schema` token if the project has one (two parallel migrations
   conflict structurally even in different files).
 - **What to claim:** files the sprint will *modify*, plus its likely doc-sync targets.
-  Always exempt: the sprint's own file and the three generated docs.
+  Always exempt: the sprint's own file, its own `docs/sprints/evidence/S-NNN/` directory,
+  and the three generated docs.
 - Claims are **advisory but protocol-enforced**: nothing technically blocks an edit — the
   Phase 2 claims-discipline rule is the enforcement, and `claims.mjs check` makes compliance
   a one-command habit.
@@ -187,7 +188,7 @@ Two gates keep this cheap.
 
 **Gate 2 — Tag-scoped reads.** Among docs that need review, only read those relevant to this
 sprint's `tags`. Expand this table as project docs are created — registering a new doc here
-is a Completion Log checkbox.
+is a Close checklist row in the sprint file's Completion Log.
 
 <!-- BOOTSTRAP: seed this table from a scan of the repo's existing docs -->
 | Sprint Tag | Docs to validate |
@@ -255,15 +256,19 @@ already done by the planning pass — see `ORCHESTRATION.md` Step 2.)
      deliverable-relevant tests not covered by the gate. Fix failures before committing — do
      NOT commit broken code and defer.
   5. Check off acceptance criteria only when you can point to the file/test/output that
-     proves each. Automated criteria only — Manual criteria stay unchecked: report what
-     to verify and leave the box for the user at close (Phase 3 Step 1).
+     proves each — and write that proof into the sprint file as the criterion's
+     `- Evidence:` line (SPRINT_TEMPLATE grammar) in the same edit as the `[x]`; the
+     branch may edit its own sprint file in place (invariant 3). Automated criteria only —
+     Manual criteria stay unchecked: report what to verify and leave the box for the user
+     at close (Phase 3 Step 1).
   6. Commit atomically per deliverable (not per file): `S-NNN: [deliverable description]`.
 - **Blockers/ambiguity:** do NOT guess or skip — ask via AskUserQuestion with concrete
   alternatives. If a deliverable turns out unnecessary, ask whether to skip and update the
   sprint file. Hit an unexpected bug or failing test? Use `/debug` — root-cause before fixing.
   If the stop was caused by a brief gap (stale premise, missing file, unevaluable criterion),
   log one line in `docs/sprints/PLANNING_LEARNINGS.md` after resolving it (create if absent;
-  newest 20 entries — a doc-sync target: claim the file if editing it mid-sprint, full tier).
+  newest first — readers read the newest 20, older entries are never deleted; a doc-sync
+  target: claim the file if editing it mid-sprint, full tier).
   A gap that invalidates the premises of **other un-started backlog sprints** — not just
   this brief — escalates past in-place repair: finish or descope the current sprint, then
   route to `/plan recut` rather than hand-editing the backlog.
@@ -295,19 +300,40 @@ already done by the planning pass — see `ORCHESTRATION.md` Step 2.)
 ### Step 1: Acceptance Criteria Evidence Check
 
 For each criterion, cite one of: a test name that asserts it, a file path + line range that
-implements it, or command output that demonstrates it. A checked box without evidence does
-not count. **Verify the observable difference** the criterion describes — the value in the
-response, the row actually written, the model that answered — not merely that the operation
-returned without error. An **Automated** criterion's evidence is the output of the exact
-command it names. A **Manual** criterion is never self-checked: present each to the user
-via AskUserQuestion — confirmed / needs work / descope — and check its box only on their
-confirmation. For any unevidenced automated criterion, ask via AskUserQuestion:
+implements it, or command output that demonstrates it — **written into the sprint file** as
+the criterion's indented `- Evidence:` line (SPRINT_TEMPLATE grammar). A checked box without
+an Evidence line does not count; evidence that lives only in a conversation or in the
+gitignored wave ledger is lost. **Verify the observable difference** the criterion
+describes — the value in the response, the row actually written, the model that answered —
+not merely that the operation returned without error. An **Automated** criterion's evidence
+is the output of the exact command it names. A **Manual** criterion is never self-checked:
+present each to the user via AskUserQuestion — confirmed / needs work / descope — and on
+confirmation check its box and append `— confirmed YYYY-MM-DD`. For any unevidenced
+automated criterion, ask via AskUserQuestion:
 - A: "Implement the missing piece now"
-- B: "Descope — remove it and note why in the Completion Log (and `docs/TODOS.md`)"
+- B: "Descope — leave the box unchecked, append `— descoped: <why> (TODOS #N)` to the
+  criterion, and add the TODOS row"
 - C: "Spin out into a follow-up sprint"
 
-Do not proceed to doc sync until every remaining criterion has evidence. Then check off the
-Completion Log.
+Artifacts that don't fit a line — screenshots, smoke transcripts, measurement or
+investigation reports, operator runbooks — go in
+`docs/sprints/evidence/S-NNN/<YYYY-MM-DD>-<kind>-<slug>.<ext>` (`kind` ∈ smoke, screenshot,
+measure, transcript, runbook; reports are verdict-first), committed on the sprint branch
+(the own-sprint evidence dir is claim-exempt) and cited by path from the Evidence line.
+Never cite `.claude/sprint-orchestration/` — it is gitignored. A later sprint that proves an
+older sprint's deferred criterion back-annotates that older `done/` file on `main` under the
+lock at its own close (`— verified by S-MMM on YYYY-MM-DD`, Evidence path).
+
+Then fill the **Completion Log** in the worktree's copy of the sprint file (SPRINT_TEMPLATE):
+`### Outcome` (2–4 sentences — the narrative), `### Review`, `### Deviations from brief`,
+`### Deferred`, `### Learnings` (`— none` is valid for each), and annotate the
+`### Close checklist` rows you can answer now; `Docs synced` / `New docs` / `ADR check` /
+`Deployed` are finalized on `main` at Step 5. If the file predates the structured log (no
+`### ` subsections), append them from SPRINT_TEMPLATE first. Commit
+`S-NNN: completion log`. Lint it before preparing:
+`node <repo-root>/scripts/sprint/close-check.mjs <worktree>/docs/sprints/in-progress/S-NNN-*.md`
+— `land` runs the same check and refuses (exit 5) on an incomplete record. Do not proceed to
+doc sync until every remaining criterion has an Evidence line or a descope annotation.
 
 ### Step 2: Doc Sync
 
@@ -321,7 +347,7 @@ Apply Claude-readability rules: full paths for every file/service/table mentione
 links between docs; add `<!-- last-verified: YYYY-MM-DD by S-NNN -->` to updated sections.
 
 **If the sprint created a new doc, register it**: add a `DOC_HEALTH.md` row and a tag→doc
-row in Phase 1 Step 5 — that's the "New docs registered" Completion Log checkbox.
+row in Phase 1 Step 5 — that's the `New docs registered` Close checklist row.
 
 Commit: `docs: sync documentation after S-NNN`.
 
@@ -329,7 +355,7 @@ Commit: `docs: sync documentation after S-NNN`.
 
 Run `/adr check` over this sprint's commit range. If the sprint introduced a significant
 architectural decision not in an existing ADR, draft one (`/adr create`). Record the outcome
-in the Completion Log either way ("ADR-NNN" or "none — reason").
+on the Close checklist's `ADR check` row either way (`— ADR-NNN` or `— none: reason`).
 
 ### Step 3.5: Risk-Tiered Review (solo sprints only)
 
@@ -339,8 +365,10 @@ payment/irreversible mutation, trust-boundary parsing). **High-risk** → dispat
 `reviewer` subagent (fresh context, diff base = the sprint branch vs `main`) before
 preparing the merge; fix Critical/Important findings and re-run `gate.sh`. **Not
 high-risk** → skip — review depth scales with blast radius; do not add a pass to every
-sprint. (Wave/train sprints skip this step entirely — the executor's mandatory `reviewer`
-child already covered it.)
+sprint. Record the outcome under `### Review`: findings by severity with disposition
+(`— fixed <sha>` / `— declined: <why>`), or the literal `— not run: low risk (Step 3.5)`.
+(Wave/train sprints skip this step entirely — the executor's mandatory `reviewer` child
+already covered it and recorded its outcome there.)
 
 ### Step 3.6: Proposal Stage Check (solo sprints only)
 
@@ -361,6 +389,15 @@ If this was the last:
 - **Un-staged proposal** → flip its `**Status**:` to `delivered YYYY-MM-DD` the same way
   and say so.
 
+### Step 3.7: Learnings
+
+Fill `### Learnings` in the worktree copy — one line per lesson in the SPRINT_TEMPLATE
+grammar (`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what happened> → rule: <one
+line>`), or `— none`. A `plan`-class line — a gap that would have changed another sprint's
+brief — is also prepended to `docs/sprints/PLANNING_LEARNINGS.md` (a doc-sync target: on
+`main` during Step 5's pause, or claim the file; never delete older entries). Other classes
+stay in the sprint file, greppable across `done/` via `### Learnings`.
+
 ### Step 4: Prepare (locked)
 
 Run `<repo-root>/scripts/sprint/merge-sprint.sh prepare S-NNN-kebab-name`. It acquires the
@@ -379,19 +416,31 @@ the sprint branch.
 
 ### Step 5: Land (locked)
 
-1. `merge-sprint.sh land S-NNN-kebab-name` — merges `--no-ff` into `main`, moves the sprint
-   file `in-progress/ → done/`, flips `status: done` + `end_date`, rotates the archive (keeps
-   the 10 most recent in `done/`; archived sprints stay in INDEX.md and dependency checks
-   read `done/archive/` too), and regenerates the generated blocks. It exits 4, pausing for
-   the semantic docs.
+1. `merge-sprint.sh land S-NNN-kebab-name` — **first lints the branch's copy of the sprint
+   file with `close-check.mjs`**: exit 5 means the Completion Log is incomplete (unevidenced
+   criteria, placeholders, unannotated checklist rows) — `main` is untouched and the lock is
+   kept; fix the record on the branch (commit `S-NNN: completion log`) and re-run `land`
+   without a new `prepare`. `--allow-incomplete "<reason>"` lands anyway and writes the
+   reason under the file's `### Deviations from brief` — an auditable exception, not a
+   habit. Then it merges `--no-ff` into `main`, moves the sprint file
+   `in-progress/ → done/`, flips `status: done` + `end_date`, **stamps the sprint's `S-NNN:`
+   deliverable commits + merge SHA under `### Commits`**, rotates the archive (keeps the 10
+   most recent in `done/`; archived sprints stay in INDEX.md and dependency checks read
+   `done/archive/` too), and regenerates the generated blocks. It exits 4, pausing for the
+   semantic docs.
 2. **Author the semantic docs** — editing by absolute path in the **primary checkout** (the
    lock is yours; do not commit):
    - `docs/DOC_HEALTH.md`: "Last Verified" / "By Sprint" rows for docs this sprint checked,
      status updates, a History entry.
-   - `docs/sprints/INDEX.md`: the Done-table row (goal/outcome) + the `_Last updated_`
-     header line.
+   - `docs/sprints/INDEX.md`: the Done-table row — Outcome is **one sentence (≤200 chars)**;
+     the narrative lives in the sprint file's `### Outcome` (`finish` warns past 300) — plus
+     the `_Last updated_` header line (one line, overwritten, never appended to).
    - `docs/sprints/ROADMAP.md`: narrative (Status paragraph, newly-unblocked sprints from
      this sprint's `blocks`, `_Last updated_`).
+   - The landed `docs/sprints/done/S-NNN-*.md`: finalize the Close checklist rows that only
+     `main` can answer — `Docs synced`, `New docs registered`, `ADR check` (from Steps 2–3
+     or the doc-sync agent's return) — and, when the deploy gate decides, `Deployed`.
+     Prepend any `plan`-class `### Learnings` line to `docs/sprints/PLANNING_LEARNINGS.md`.
 3. `merge-sprint.sh finish S-NNN-kebab-name --no-push` — verifies the moved file kept
    `status: done` (commit hooks that stash unstaged changes can silently drop edits made
    around a `git mv`), guards against `" 2."` macOS sync-duplicate files, commits

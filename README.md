@@ -67,6 +67,7 @@ single file sufficient for an agent (or developer) with zero conversation contex
 | Commit gate (`scripts/sprint/gate.sh`, single source of truth) | ✅ | ✅ |
 | Update checks + `/template-upgrade` (three-way merge, migrations) | ✅ | ✅ |
 | Planning gates (scope challenge, coverage map, readiness checklist, `PLANNING_LEARNINGS.md` loop) | ✅ | ✅ |
+| Completion record (structured Completion Log, inline `Evidence:` lines, `close-check.mjs` lint, `docs/sprints/evidence/`) | ✅ (lint before the `done/` move) | ✅ (lint gates `merge-sprint.sh land`; commits stamped at land) |
 | Concurrent sprints | one at a time | many, in parallel agents |
 | Wave orchestration (`/sprint wave` + `sprint-planner`/`sprint-executor`/`wave-planner` agents) | — | ✅ |
 | Serial-train orchestration (`/sprint train`: shared worktree, batched CI checkpoints) | — | ✅ |
@@ -75,7 +76,7 @@ single file sufficient for an agent (or developer) with zero conversation contex
 | Per-sprint git worktrees | — | ✅ |
 | Generated INDEX/ROADMAP blocks (`regen.mjs`, Mermaid dep graph) | — | ✅ |
 | INDEX.md maintenance | by hand (tiny) | regenerated |
-| PROTOCOL.md size | ~165 lines | ~400 lines |
+| PROTOCOL.md size | ~270 lines | ~490 lines |
 
 Start lite. Upgrade later with `/bootstrap-project --upgrade` (requires an empty
 `in-progress/`); the tiers share frontmatter shape, so the full tooling picks up existing

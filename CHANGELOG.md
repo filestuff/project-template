@@ -4,6 +4,77 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.10.0] - 2026-09-01
+
+The sprint file becomes the **durable completion record**. Measured across three downstream
+repos (856 done sprints): in the wave-heavy repo 57% of done sprints had a Completion Log
+with zero checked boxes and 73% had zero checked acceptance criteria (fill rate decayed
+84% → 21% over 670 sprints); the mandatory ADR-check outcome appeared in 0 files; and the
+per-deliverable narrative had migrated into INDEX.md Outcome cells (median 1,941 chars,
+INDEX.md 1.4 MB). Root cause was a role gap, not discipline: PROTOCOL demanded evidence in
+five places but the file had no slot for it, the wave executor stopped at Phase 2 and wrote
+evidence/review/deviations to the **gitignored** wave ledger (every committed citation of
+`.claude/sprint-orchestration/…` is dead), and `land` flipped two frontmatter fields. No
+migrations; the change applies to sprints closed after the upgrade.
+
+- **Structured Completion Log** (`SPRINT_TEMPLATE.md`, heading unchanged): `### Outcome`
+  (2–4 sentences — the narrative), `### Commits` (stamped at land), `### Review` (findings
+  by severity with `— fixed <sha>` / `— declined: <why>`, or `— not run: low risk`),
+  `### Deviations from brief`, `### Deferred`, `### Learnings`, and a `### Close checklist`
+  whose every row carries an annotation (`— ADR-NNN` / `— none: reason` / `— n/a: reason`;
+  bare "done" fails the lint). The boolean-only rows are gone.
+- **Inline evidence grammar.** A checked Automated criterion is followed by
+  `- Evidence: <test name | file:line | \`cmd\` → output tail | evidence/ path>`; a criterion
+  left open ends `— descoped: <why> (TODOS #N)`; a Manual criterion is checked only by the
+  user and ends `— confirmed YYYY-MM-DD`. PROTOCOL Phase 2 step 5 and Phase 3 Step 1 (both
+  tiers) now *write* the evidence into the file instead of merely citing it in conversation.
+- **The executor writes the record** (`sprint-executor.md` duties 5/7): Evidence lines as
+  criteria are checked; at DONE, the Completion Log is filled in the worktree's sprint file,
+  self-linted, and committed `S-NNN: completion log`. The ledger report shrinks to a
+  ≤20-line pointer. The wave master checks the record through `close-check.mjs --json`
+  (`ok`, `failures[]`, `counts`, `review[]`, `deviations[]`, `learnings[]`) — it still never
+  reads sprint bodies or diffs. `doc-sync` spot-checks two Evidence citations and returns the
+  `Docs synced` / `New docs` / `ADR check` row annotations for the master to paste at land.
+- **`scripts/sprint/close-check.mjs`** (new, lite + full, zero-dep): lints a sprint file's
+  record — unevidenced/unchecked criteria, unconfirmed Manual criteria, missing or empty
+  sections, surviving template placeholders, unannotated or vacuous checklist rows. Exit 0
+  pass · 5 incomplete · 1 usage. Pre-1.10.0 files (a Completion Log with no subsections) get
+  a `legacy-log` WARNING and exit 0 — history is not a lint failure, and in-flight sprints
+  started before the upgrade still land.
+- **`merge-sprint.sh land` gates on the record.** Before merging it lints the *branch's*
+  copy of each roster member's sprint file: exit 5 lists what is missing with `main`
+  untouched and the lock kept — fix on the branch and re-run `land` (no new `prepare`).
+  `--allow-incomplete "<reason>"` lands anyway and writes
+  `- YYYY-MM-DD landed incomplete — <reason>` under the file's Deviations. After the merge
+  it **stamps the sprint's `S-NNN:` deliverable commits + merge SHA under `### Commits`**
+  (derived from the merge's parents; zero LLM cost), so a done file stays self-contained
+  after archive rotation. `finish` warns when a done file has no Completion Log and when
+  the INDEX Done-row Outcome exceeds 300 chars.
+- **INDEX diet.** The Done-row Outcome is one sentence (≤200 chars) pointing at the file's
+  `### Outcome`; the `_Last updated_` header is one line, overwritten, never appended to
+  (PROTOCOL both tiers; INDEX comments for fresh installs).
+- **Learnings.** Every sprint records `### Learnings` in a grammar shared with
+  `PLANNING_LEARNINGS.md` (`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what> → rule:
+  <one line>`; `— none` is valid); `plan`-class lines are also prepended there (new PROTOCOL
+  Step 3.7). The "cap at newest 20" rule becomes "readers read the newest 20; never delete
+  older entries" — the downstream file that had silently evicted everything after 20 lines
+  stops losing knowledge.
+- **`docs/sprints/evidence/S-NNN/`** is the official home for artifacts too big for an
+  Evidence line — screenshots, smoke transcripts, measurement/investigation reports,
+  runbooks — named `<YYYY-MM-DD>-<kind>-<slug>.<ext>`, committed on the sprint branch
+  (claim-exempt for the owning sprint), cited by path from the Evidence line. Later sprints
+  may back-annotate an older sprint's deferred criterion (`— verified by S-MMM on …`).
+- **Tests**: `tests/test-close-check.mjs` (the lint grammar) and
+  `tests/test-merge-sprint-land.sh` — the first coverage of `merge-sprint.sh` (exit-5 refusal
+  with `main` untouched, re-run without `prepare`, commit stamping, `--allow-incomplete`,
+  the oversized-Outcome warning).
+- **Upgrade notes.** Downstream repos whose local `SPRINT_TEMPLATE.md` carries a hand-diverged
+  Completion Log (two were found with a stale 6-row list) will see a three-way conflict on
+  that section — take the template's side. In-flight sprints at upgrade time either get the
+  subsections appended by their executor/solo close or land as legacy (warning only).
+  Add `Bash(node scripts/sprint/*)` to `.claude/settings.json` allow (the settings-union
+  merge does this for you).
+
 ## [1.9.1] - 2026-08-28
 
 Fixes two `merge-sprint.sh` defects found in production wave use (ai-todo TODOS #440/#441),

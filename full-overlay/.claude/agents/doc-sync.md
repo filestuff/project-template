@@ -19,6 +19,10 @@ hold) `S-NNN-docs-draft.md`.
    architectural decision not covered by an existing ADR.
 3. Check the pre-drafted `S-NNN-docs-draft.md` against the diff and report gaps in the
    return signal — no file writes.
+4. Spot-check **two** `- Evidence:` citations from the sprint file's Completion Log
+   (`<worktree>/docs/sprints/in-progress/S-NNN-*.md`) against the diff: a cited test
+   exists and asserts the criterion above it; a cited `file:line` exists and implements
+   it. Pick the two whose criteria carry the most risk.
 
 ## Hard limits
 
@@ -26,6 +30,10 @@ Operate via `git -C` and absolute paths only: never EnterWorktree, never edit an
 worktree, never edit generated docs (INDEX.md / ROADMAP.md / DOC_HEALTH.md) directly, never
 commit. The orchestrator applies the draft and owns every `main` mutation.
 
-## Return (≤10 lines)
+## Return (≤12 lines)
 
-Docs drafted yes/no, ADR needed yes/no + one-line why.
+Docs drafted yes/no; ADR needed yes/no + one-line why; `evidence: ok` or
+`evidence: gap: <criterion> — <what the citation actually shows>`; and the three Close
+checklist annotations verbatim for the master to paste into the landed file:
+`Docs synced — <docs updated | none: reason>`, `New docs registered — <row(s) | none: no new
+docs>`, `ADR check — <ADR-NNN | none: reason>`.

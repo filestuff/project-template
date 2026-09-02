@@ -97,7 +97,7 @@ This ADR supersedes [ADR-{NNN}: {original title}](./{NNN}-original-title.md).
 3. Cross-reference existing ADRs.
 4. If any are undocumented, list them and ask whether to draft ADRs.
 5. **Report the outcome explicitly** — "ADR-NNN drafted" or "none — [reason]" — so the sprint
-   Completion Log can record it.
+   file's Close checklist `ADR check` row can record it (`— ADR-NNN` / `— none: reason`).
 
 ## No Arguments
 

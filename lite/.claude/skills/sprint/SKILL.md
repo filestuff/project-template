@@ -74,10 +74,14 @@ Pre-Sprint Decisions section). Then begin executing deliverables sequentially pe
 ### `/sprint done [S-NNN]`
 
 Execute **Phase 3: Post-Sprint** from `docs/sprints/PROTOCOL.md`: acceptance-criteria
-**evidence** check (cite test/file:line/output — a checked box without evidence does not
-count) → doc sync via `git diff` → **`/adr check` (mandatory)** → risk-tiered review
-(Step 3.5 — high-risk diffs only) → move the file to `done/`, flip frontmatter, update
-INDEX.md with a one-line outcome, commit `sprint: complete S-NNN — [name]` → **deploy
+**evidence** check — write each criterion's `- Evidence:` line into the sprint file (a
+checked box without an Evidence line does not count; Manual criteria are user-confirmed) →
+fill the **Completion Log** (Outcome / Review / Deviations / Deferred / Learnings + annotated
+Close checklist) → doc sync via `git diff` → **`/adr check` (mandatory; `ADR check` row)** →
+risk-tiered review (Step 3.5 — high-risk diffs only; `### Review`) → Step 3.7 learnings →
+paste commits under `### Commits`, **`node scripts/sprint/close-check.mjs <file>` until exit
+0** → move the file to `done/`, flip frontmatter, update INDEX.md with a **one-sentence**
+outcome (the narrative is in the file), commit `sprint: complete S-NNN — [name]` → **deploy
 gate**: ask before `git push` (PROTOCOL Phase 3 Step 4 — pushing main triggers any
 connected auto-deploy).
 
@@ -97,8 +101,8 @@ Populate a backlog sprint with implementation-ready detail (Files w/ new|modifie
 Changes, testable Acceptance criteria), ordered in execution sequence; populate Technical
 Details, Testing (pattern reference), Dependencies, Risks, Open Questions; update
 `story_points` if scope reveals different complexity. If
-`docs/sprints/PLANNING_LEARNINGS.md` exists, read it first — it lists how past briefs
-failed; don't repeat those gaps.
+`docs/sprints/PLANNING_LEARNINGS.md` exists, read its newest 20 entries first — it lists how
+past briefs failed; don't repeat those gaps.
 
 **Readiness checklist** — all must hold before certifying:
 

@@ -305,21 +305,32 @@ racing completions make all but one hit the lock ceiling (exit 75). Complete fin
    live, recommended always): write the DOC_HEALTH rows/History entry, INDEX Done-row, and
    ROADMAP narrative into `.claude/sprint-orchestration/W-<id>/S-NNN-docs-draft.md`. The
    exit-4 pause then becomes "apply the draft" — seconds of lock-held time, not minutes.
-2. Run PROTOCOL **Phase 3 through `finish`**: acceptance-evidence check — work from the
-   sprint's report file in `.claude/sprint-orchestration/W-<id>/`, spot-checking citations,
-   instead of re-interrogating the worktree. The check now also covers the report's **review
-   section**: the reviewer child ran, Critical/Important findings were fixed or escalated,
-   declined findings have recorded reasons — adjudicate that from the report; do not read the
-   diff. Then dispatch a short-lived **doc-sync subagent** (fresh context) with the sprint's
-   worktree path: it resolves its own diff base (`git -C <worktree> merge-base HEAD main` —
-   the branch's fork point; the report contract carries no start-SHA field), runs the PROTOCOL
-   Phase 3 doc-sync pass and `/adr check` over `git diff <base>..HEAD`, and returns ≤10 lines
-   (docs drafted yes/no, ADR needed yes/no + one-line why). The master adjudicates that
-   return — it still never reads the diff itself. Then `prepare` (add `--wait 900` when
-   another wave is live)
-   → `land` → apply the docs draft → `finish <branch> --no-push`. Phase 3 Step 6's CI check
-   does **not** run here — `finish` deferred its push, so there is nothing to poll yet; it
-   defers to checkpoint P3 in Step 6 below, which covers every sprint in the wave at once.
+2. Run PROTOCOL **Phase 3 through `finish`**: the acceptance-evidence check is now
+   **structural** — the executor wrote the Completion Log (Evidence lines, Outcome, Review,
+   Deviations, Deferred, Learnings, checklist rows) into the sprint file in its worktree
+   (executor duty 7a). Run
+   `node scripts/sprint/close-check.mjs --json <worktree>/docs/sprints/in-progress/S-NNN-*.md`
+   and adjudicate the JSON — `ok`, `failures[]`, `counts` (evidenced/total per class),
+   `review[]` (the reviewer child ran; Critical/Important fixed or escalated; declined
+   findings carry reasons), `deviations[]`, `learnings[]` — never the sprint body or the
+   diff. `ok:false` → the record is incomplete: continue the executor via SendMessage with
+   the failure list (the advisor loop); never fill the record yourself. Then dispatch a
+   short-lived **doc-sync subagent** (fresh context) with the sprint's worktree path: it
+   resolves its own diff base (`git -C <worktree> merge-base HEAD main` — the branch's fork
+   point), runs the PROTOCOL Phase 3 doc-sync pass and `/adr check` over
+   `git diff <base>..HEAD`, spot-checks two Evidence citations against the diff, and returns
+   ≤12 lines (docs drafted yes/no, ADR needed yes/no + why, `evidence: ok | gap: <criterion>`,
+   and the verbatim annotations for the `Docs synced` / `New docs registered` / `ADR check`
+   checklist rows). The master adjudicates that return — it still never reads the diff
+   itself. Then `prepare` (add `--wait 900` when another wave is live) → `land` (it re-runs
+   the lint on the branch copy and exits 5 on an incomplete record — `main` untouched, no
+   new `prepare` needed; `--allow-incomplete "<reason>"` is the audited escape when the
+   executor is gone and the gap is cosmetic) → apply the docs draft **and** finalize the
+   landed done-file's `Docs synced` / `New docs` / `ADR check` rows from the doc-sync
+   return, prepend any `plan`-class `learnings[]` line to `docs/sprints/PLANNING_LEARNINGS.md`
+   → `finish <branch> --no-push`. Phase 3 Step 6's CI check does **not** run here — `finish`
+   deferred its push, so there is nothing to poll yet; it defers to checkpoint P3 in Step 6
+   below, which covers every sprint in the wave at once.
 3. Remove the sprint's worktree, then move to the next.
 
 A sprint that lands changes (`prepare` exit 3) re-runs the gate in its worktree before
@@ -329,8 +340,9 @@ A sprint that lands changes (`prepare` exit 3) re-runs the gate in its worktree 
 
 After the wave's sprints have all landed on `main`, dispatch one **`reviewer`** subagent
 (fresh context) over the merged wave result on `main` — a fresh reviewer catches cross-sprint
-integration issues per-sprint review can't. Hand it the wave's report-file paths as a starting
-map. Hand it the diff base explicitly, too: `pre_wave_sha`, recorded at Step 1.5 from
+integration issues per-sprint review can't. Hand it the landed `docs/sprints/done/S-NNN-*.md`
+paths as a starting map (their Completion Logs carry the evidence, review dispositions and
+deviations; the ledger reports are pointers). Hand it the diff base explicitly, too: `pre_wave_sha`, recorded at Step 1.5 from
 `reserve-wave.sh`'s output and committed as a trailer on the wave's reservation commit — the
 reviewer runs `git diff <pre_wave_sha>...HEAD` on `main`. Without an explicit base the
 "merged result on main" is an empty diff and the review silently approves nothing. The same
@@ -397,10 +409,13 @@ re-dispatched already-landed sprints — the most expensive failure mode. Keep a
   constraint findings, contract edges checked, pending decisions, dispatch checklist,
   review dispositions. This is where planning-pass state survives compaction — including
   the planning-worktree path while Step 2 is in flight.
-- Execution subagents write `W-<id>/S-NNN-report.md` (per-deliverable commits, gate/test
-  results, acceptance-criteria evidence citations, review outcome, deviations from brief,
-  deferred items) — it outlives the worktree and feeds Step 5's evidence check and Step 6's
-  review. Step 5 adds `W-<id>/S-NNN-docs-draft.md`.
+- Execution subagents write the **Completion Log into the sprint file** in their worktree
+  (evidence citations, outcome, review outcome, deviations, deferred, learnings — committed
+  on the branch, so it lands with the code and outlives everything here) and a ≤20-line
+  pointer `W-<id>/S-NNN-report.md` (sprint-file path, commit list, literal gate tail, the
+  lint SUMMARY line). Step 5 reads the sprint file through `close-check.mjs --json`, never
+  the body, and adds `W-<id>/S-NNN-docs-draft.md`. Nothing in this directory is ever cited
+  from a committed file — it is gitignored.
 - After a compaction, trust this ledger + `git log` + `/sprint board` (the `in-progress/`
   set and `wave:` reservations on `main` are authoritative), never recollection. Your wave
   id is in the ledger dir name and in the reservation commit. Never start or land a sprint
@@ -576,9 +591,9 @@ in train-progress.md.
 1. **Start + sync** (i > 1): `start.sh S-i --wave W-<id> --no-push`, then the ledger-sync
    merge into the branch.
 2. **Delta refresh (mechanical, master-only — no code reads).** `planStatus` is blind
-   mid-train (dep `end_date`s flip only at checkpoints), so screen staleness yourself: read
-   the predecessor's report's *deviations-from-brief* and Produces lines, and grep S-i's
-   brief citations against the predecessor's `touches:`. Clean → dispatch. Dirty → one
+   mid-train (dep `end_date`s flip only at checkpoints), so screen staleness yourself: take
+   the predecessor's `deviations[]` from its `close-check.mjs --json` output and its
+   Produces lines, and grep S-i's brief citations against the predecessor's `touches:`. Clean → dispatch. Dirty → one
    `sprint-planner` in **post-start mode against the worktree copy** (commits
    `S-i: revise plan — train delta` on the branch); auto-decide its new questions via the
    ladder where an option is recommended + reversible + small-blast-radius, else hard stop.
@@ -588,9 +603,10 @@ in train-progress.md.
 4. **Advise** BLOCKED / NEEDS_CLAIM via the advisor loop (SendMessage continuation;
    `claims.mjs add S-i <path> --no-push` under the lock — S-i is in `in-progress/`, so the
    precondition holds).
-5. **On DONE:** evidence check from the report (citations only — never the diff); record the
-   boundary SHA + status line in train-progress.md; pre-draft S-i's semantic docs into
-   `W-<id>/S-i-docs-draft.md`.
+5. **On DONE:** evidence check via `close-check.mjs --json` on the worktree's in-progress
+   file (wave Step 5.2 — structured output only, never the diff; `ok:false` → continue the
+   executor with the failure list); record the boundary SHA + status line in
+   train-progress.md; pre-draft S-i's semantic docs into `W-<id>/S-i-docs-draft.md`.
 6. **Checkpoint due** (i ≡ 0 mod K, last member, or any pause/abort)? → T6, then continue
    the loop.
 
@@ -612,7 +628,7 @@ Not cured by one targeted fix → hard stop; the batched land gives a clean esca
 user first).
 
 **T7 — Close the train.** After the final segment: one fresh `reviewer` over merged `main`
-(hand it all report paths, plus `pre_wave_sha` from T2's reservation as the explicit diff
+(hand it the landed `done/` file paths, plus `pre_wave_sha` from T2's reservation as the explicit diff
 base — `git diff <pre_wave_sha>...HEAD` on `main`; same rule as the wave review in Step 6, an
 implicit branch-vs-main diff on `main` is empty; small fixes on `main` under the lock ride
 the final push, larger ones become follow-up sprints; Step 6's conditional outside-voice
@@ -697,9 +713,10 @@ carries the full duties; the prompt carries only the per-sprint variables:
   only if the agent died (its committed work persists on the branch; tell the fresh agent to
   read `git -C <worktree> log` first).
 - **PLAN_GAP:** the brief is wrong — fix the brief, don't abandon the sprint. Before
-  re-dispatching, append one line to `docs/sprints/PLANNING_LEARNINGS.md` (create with a
+  re-dispatching, prepend one line to `docs/sprints/PLANNING_LEARNINGS.md` (create with a
   one-line header if absent): `- YYYY-MM-DD S-NNN PLAN_GAP: <gap class> — <root cause in
-  one line>`; cap the file at the newest 20 entries. A gap that invalidates the premises
+  one line>`; readers read the newest 20 entries — never delete older ones, they are the
+  archive. A gap that invalidates the premises
   of **other un-started members or backlog sprints** — not just this brief — escalates
   past in-place repair: drop or finish the affected in-flight work, then route to
   `/plan recut` for the un-started remainder rather than hand-editing the backlog

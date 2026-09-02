@@ -7,7 +7,9 @@ Kanban board for {{PROJECT_NAME}}. Sprint files live in
 `docs/sprints/PROTOCOL.md`.
 
 <!-- Lite tier: this file is maintained by hand via /sprint — no generator.
-     Keep the tables small; the sprint files are the source of truth. -->
+     Keep the tables small; the sprint files are the source of truth. The Done-table
+     Outcome is ONE sentence (≤200 chars) — the narrative lives in the sprint file's
+     `### Outcome`. -->
 
 ## In Progress
 

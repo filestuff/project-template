@@ -23,7 +23,7 @@ against the code — its premises are claims to check, not facts to transcribe.
    any cited API/library usage matches the version actually installed (check the
    dependency manifest/lockfile when a versioned API is cited). Fix drifted
    citations in place. If `docs/sprints/PLANNING_LEARNINGS.md` exists in the repo
-   root, read it — don't repeat past brief gaps.
+   root, read its newest 20 entries — don't repeat past brief gaps.
 2. **Contract drift.** For each `depends_on` sprint that landed after this sprint's
    `plan_date`: compare this sprint's **Consumes** entries against the dependency's
    landed code and its done-file's **Produces** section. Update Consumes and any

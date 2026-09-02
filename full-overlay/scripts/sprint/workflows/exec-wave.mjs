@@ -30,6 +30,7 @@ const STATUS_SCHEMA = {
     commits: { type: 'array', items: { type: 'string' }, description: 'git log --oneline lines for deliverable commits' },
     gate: { type: 'string', description: 'one-line gate/test result' },
     report_path: { type: 'string', description: 'the report file written in the wave ledger dir (or "" if not written)' },
+    close_check: { type: 'string', description: 'DONE: the SUMMARY line from close-check.mjs on the sprint file ("" if not run)' },
     concerns: { type: 'string', description: 'anything the orchestrator should know; "" if none' },
     question: {
       type: 'object',
