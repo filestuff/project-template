@@ -73,10 +73,12 @@ single file sufficient for an agent (or developer) with zero conversation contex
 | Serial-train orchestration (`/sprint train`: shared worktree, batched CI checkpoints) | — | ✅ |
 | File claims (`touches:` + `claims.mjs`) | — | ✅ |
 | Main-branch mutex (`lock.sh`) | — | ✅ |
-| Per-sprint git worktrees | — | ✅ |
-| Generated INDEX/ROADMAP blocks (`regen.mjs`, Mermaid dep graph) | — | ✅ |
+| Push safety (`push-main.sh --expect` refuses another sprint's code; `ledger-push.sh` ledger-only pushes; `finish` never pushes) | — | ✅ |
+| Fail-closed CI verification (`verify-ci.sh` + `ci-gates.json`) | manual `gh run list` | ✅ |
+| Per-sprint git worktrees (`worktree-link.sh`: env-file copy; optional shared-install link mode) | — | ✅ |
+| Generated INDEX/ROADMAP blocks (`regen.mjs`, Mermaid dep graph; `check-ledger-links.mjs`) | — | ✅ |
 | INDEX.md maintenance | by hand (tiny) | regenerated |
-| PROTOCOL.md size | ~270 lines | ~490 lines |
+| PROTOCOL.md size | ~280 lines | ~580 lines |
 
 Start lite. Upgrade later with `/bootstrap-project --upgrade` (requires an empty
 `in-progress/`); the tiers share frontmatter shape, so the full tooling picks up existing
@@ -144,9 +146,12 @@ funnel: conventions that keep coming up in review graduate into per-project skil
 |---|---|---|
 | `{{PROJECT_NAME}}` | CLAUDE block, PROTOCOL, DOC_HEALTH, INDEX, skills | `acme-app` |
 | `{{PROJECT_DESCRIPTION}}` | CLAUDE block | "B2B invoicing SaaS" |
-| `{{GATE_COMMANDS}}` | `scripts/sprint/gate.sh` only | `pnpm lint && pnpm test` |
+| `{{GATE_COMMANDS}}` | `scripts/sprint/gate.sh` only (one `&&`-chained line, or one command per line — never an `a && b` line followed by more lines: under `set -e` a failing `&&` list does not stop the script, so the next line's success masks it) | `pnpm lint && pnpm test` |
 | `{{PREPUSH_GATE_COMMANDS}}` | `scripts/sprint/pre-push-gate.sh` only | `pnpm test:e2e` |
+| `{{WORKTREE_GATE_COMMANDS}}` / `{{WORKTREE_PREPUSH_GATE_COMMANDS}}` | `gate.sh` / `pre-push-gate.sh`; reduced gate inside a linked worktree (link mode only; blank = normal gate) | `./node_modules/.bin/eslint .` |
 | `{{PACKAGE_MANAGER}}` | PROTOCOL worktree setup, settings.json | `pnpm` |
 | `SPRINT_MAIN_BRANCH` env | `.claude/settings.json` `env` block (full scripts read it) | `master` |
 | `scripts/sprint/claims-tokens.json` | full tier; claim-token definitions | see file |
+| `scripts/sprint/ci-gates.json` | full tier; required CI workflows + optional deploy environment for `verify-ci.sh` | `{"workflows":[{"name":"CI","file":"ci.yml"}]}` |
+| `scripts/sprint/worktree-links.json` | full tier; worktree env files + (link mode) shared dependency dirs | `{"envFiles":[".env"]}` |
 | Tag→doc table + DOC_HEALTH rows | PROTOCOL / DOC_HEALTH; seeded by bootstrap from a doc scan | — |

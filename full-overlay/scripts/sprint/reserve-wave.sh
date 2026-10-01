@@ -14,7 +14,9 @@
 # Options for all forms: [--no-push] [--wait <secs>]
 #
 # Exit codes: 0 ok · 2 member missing / already reserved / claims overlap ·
-# 75 lock busy · 1 unexpected (transaction rolled back)
+# 3 committed locally but push withheld — local main carries non-ledger commits
+# (ledger-push.sh); the reservation stands · 75 lock busy ·
+# 1 unexpected (transaction rolled back)
 set -euo pipefail
 
 SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -177,8 +179,16 @@ for FILE in "${FILES[@]}"; do
   fi
 done
 
+# Guarded push: ledger-push.sh withholds (exit 3) when local main also carries
+# another session's unpushed code — the summary below still prints (callers
+# parse it), then the script exits 3.
+PUSH_RC=0
 if [[ $NO_PUSH -eq 0 ]]; then
-  git -C "$ROOT" push origin "$MAIN" || { echo "push failed — local reservation commit is intact; resolve and push before proceeding" >&2; exit 1; }
+  "$SELF_DIR/ledger-push.sh" "$ROOT" "$MAIN" || PUSH_RC=$?
+  if [[ $PUSH_RC -ne 0 && $PUSH_RC -ne 3 ]]; then
+    echo "push failed — local reservation commit is intact; resolve and push before proceeding" >&2
+    exit 1
+  fi
 else
   AHEAD=$(git -C "$ROOT" rev-list --count "origin/$MAIN..$MAIN" 2>/dev/null || echo '?')
   echo "push deferred — local $MAIN is $AHEAD commit(s) ahead of origin/$MAIN; wave checkpoints push via scripts/sprint/push-main.sh"
@@ -194,3 +204,7 @@ reserve)
 drop)    echo "dropped ${MEMBERS[0]} from wave $WAVE at $(git -C "$ROOT" rev-parse HEAD)" ;;
 release) echo "released wave $WAVE (${#FILES[@]} member(s)) at $(git -C "$ROOT" rev-parse HEAD)" ;;
 esac
+if [[ $PUSH_RC -eq 3 ]]; then
+  echo "$MODE committed locally, push withheld (see ledger-push above) — safe to proceed with the wave; exiting 3" >&2
+  exit 3
+fi

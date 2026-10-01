@@ -48,14 +48,28 @@ transaction — reserve, deepen, decisions, N starts, N finishes — roughly 13 
 downstream CI. Waves instead **defer** pushes and settle them at three checkpoints: **during a
 wave, every main-mutating script gets `--no-push`; only `scripts/sprint/push-main.sh` pushes.**
 
+`merge-sprint.sh finish` never pushes, in any mode (`--no-push` is accepted there as a no-op).
+Local `main` is shared by every session in the checkout, so a push from `finish` could carry
+another session's held completions past their deploy gate. The only code-bearing pusher is
+`push-main.sh --expect <your sprint ids>`: it refuses (exit 2) a range carrying another
+sprint's non-doc commits. The ledger scripts push only through `ledger-push.sh` (below).
+
 - **P1 (wave start).** `reserve-wave.sh` is the sole exception to the no-push rule above — it
-  keeps its normal push as the wave's origin-sync point, backing up the roster. Its commit
-  carries `[skip ci]`, so it costs zero CI.
-- **P2 (after the last `start.sh --no-push`).** Run `push-main.sh` — a ledger-only backup push,
-  zero CI (HEAD is a `[skip ci]` start commit).
-- **P3 (wave end, mandatory).** After the last `merge-sprint.sh finish <branch> --no-push` and
-  any `reserve-wave.sh --release`, ask the deploy-gate question (below), then run
-  `push-main.sh` — the single CI-triggering push of the wave. PROTOCOL Phase 3 Step 6's
+  keeps its push as the wave's origin-sync point, backing up the roster. Its commit carries
+  `[skip ci]`, so it costs zero CI. The push goes through `ledger-push.sh` and is **ledger-only
+  or nothing**: if local `main` already carries unpushed commits touching paths outside
+  `docs/`/`.claude/` — typically another session's completions awaiting their own deploy
+  gate — it pushes nothing, keeps the reservation commit local (already visible to every
+  session sharing this checkout), prints the code-bearing commits and the
+  `push-main.sh --expect <their ids>` command their owner settles with, and exits **3**.
+  Exit 3 is not a failure of the reservation: read the printed `wave id:`/`pre_wave_sha:` and
+  proceed; the reservation rides out with the owner's (or your P3) push.
+- **P2 (after the last `start.sh --no-push`).** Run `push-main.sh --expect <the wave's sprint
+  ids>` — a ledger-only backup push, zero CI (HEAD is a `[skip ci]` start commit). `--expect`
+  makes it refuse rather than carry another session's code out with your bookkeeping.
+- **P3 (wave end, mandatory).** After the last `merge-sprint.sh finish <branch>` and any
+  `reserve-wave.sh --release`, ask the deploy-gate question (below), then run
+  `push-main.sh --expect <the wave's sprint ids>` — the single CI-triggering push of the wave. PROTOCOL Phase 3 Step 6's
   "verify CI green" check runs exactly once here, against this push, covering every sprint
   in the wave.
 
@@ -63,45 +77,79 @@ wave, every main-mutating script gets `--no-push`; only `scripts/sprint/push-mai
 platform that auto-deploys the default branch (Railway, Vercel, Netlify, Render…). Never
 run a code-bearing `push-main.sh` silently — ask first (AskUserQuestion):
 
-- **Push now (deploy)** — run `push-main.sh`, then verify CI green. *(recommended)*
+- **Push now (deploy)** — run `push-main.sh --expect <ids>`, then verify CI green
+  (`verify-ci.sh`, PROTOCOL Phase 3 Step 6). *(recommended)*
 - **Hold** — keep commits local; the board's unpushed-ledger check surfaces the held state,
-  and the catch-up path is `push-main.sh` (CI verification rides with the eventual push).
+  and the catch-up path is `push-main.sh --expect <ids>` (CI verification rides with the
+  eventual push).
 
 The gate applies to code-bearing pushes only: solo `finish`, wave P3, and train checkpoints
-(per the T1 policy, below). Ledger-only `[skip ci]` pushes (P1/P2, start, reserve, unstart)
-stay automatic — gating bookkeeping would make the workflow unusable. Two platform caveats
+(per the T1 policy, below). Ledger-only `[skip ci]` pushes (P1/P2, start, reserve, unstart,
+claim) stay automatic — gating bookkeeping would make the workflow unusable — but automatic
+is not unconditional: the four ledger scripts push only through `ledger-push.sh`, which
+refuses any range that is not ledger-only, so bookkeeping can never carry code past its gate.
+Two platform caveats
 to note in project docs: commit-marker handling is platform-dependent (Railway honors
 `[skip ci]`; Vercel needs its own Ignored Build Step), so configure the platform to ignore
 `docs/` + `.claude/` watch paths if ledger-only pushes trigger redeploys; and `push-main.sh`
 deliberately *forces* CI on code-bearing ranges whose HEAD carries a skip marker.
 
-**The `[skip ci]` convention:** ledger-only lifecycle commits (start, claim expansions, deepen,
-decisions, reservations) carry a trailing ` [skip ci]`. The `sprint: complete` commit written by
+**The `[skip ci]` convention:** ledger-only lifecycle commits (start, unstart, claim expansions,
+deepen, decisions, reservations, drops, releases) carry a trailing ` [skip ci]`, stamped by the
+scripts themselves. The marker is safe only because `ledger-push.sh` never lets such a HEAD ride
+out over code. The `sprint: complete` commit written by
 `merge-sprint.sh finish` deliberately does **not** — it is the HEAD of a code-bearing push, and a
 skip marker there would skip CI for landed code.
 
-**`push-main.sh [--wait <secs>]` contract:** acquires the sprint-main lock (label `push-main`);
-fetches `origin` and refuses with a hard error if the remote has diverged (it never auto-rebases
-the ledger); exits 0 ("nothing to push") when local `main` already matches `origin`; guards a
-`[skip ci]` HEAD — if the HEAD commit carries a skip marker but the pushed range touches paths
-outside `docs/` and `.claude/`, it appends an empty, unmarked
-`ci: run checks for wave push (<range>)` commit so code pushes still trigger CI; then pushes and
-reports the pushed range.
+**`push-main.sh [--wait <secs>] [--expect <csv>] [--allow-foreign] [--self-test]` contract:**
+acquires the sprint-main lock (label `push-main`); fetches `origin` and refuses with a hard error
+if the remote has diverged (it never auto-rebases the ledger); exits 0 ("nothing to push") when
+local `main` already matches `origin`. Then it **classifies the about-to-be-pushed range before
+pushing**: commits are grouped by the sprint id in their subject (`S-NNN: …`,
+`<type>(S-NNN): …` / `<type>(S-NNN)!: …`, `sprint: <verb> S-NNN …`; anything else is
+`(unattributed)`) and each group is printed as doc-only (`docs/`, `.claude/`) or code. With
+`--expect <csv>` (the sprint ids the caller owns), any code group not in the list is FOREIGN and
+the script **refuses (exit 2)** — nothing pushed, no commit added — printing the
+`--allow-foreign` re-run command; use it only after the user confirms the foreign code may ship.
+Without `--expect` it classifies and pushes (no refusal) — always pass it from the workflow.
+Next it guards a `[skip ci]` HEAD: if the HEAD commit carries a skip marker but the range touches
+paths outside `docs/` and `.claude/`, it adds an empty, unmarked
+`ci: run checks for wave push (<range>)` commit **on `main`** (built with `commit-tree` +
+`update-ref`, so it never lands on whatever branch happens to be checked out) so code pushes
+still trigger CI. Then it pushes and, for a code-bearing push, prints the exact CI check to run:
+`scripts/sprint/verify-ci.sh <new sha> --base <old origin sha>` (PROTOCOL Phase 3 Step 6).
+`--self-test` runs scratch-repo cases and never touches the real lock, `origin`, or `git push`.
+
+**`ledger-push.sh <root> <branch> [--self-test]` contract:** the one push path for
+`start.sh`, `unstart.sh`, `reserve-wave.sh` and `claims.mjs add` (each skips it under
+`--no-push`). Called while the caller already holds the sprint-main lock — it never touches
+`lock.sh`. Fetches `origin`; exits 0 when there is nothing to push (a missing remote branch is
+fine — first push); exits 1 on an unreachable origin, a diverged remote or a failed push; and
+otherwise inspects **every commit** in `origin/<branch>..<branch>` (merges diffed against their
+first parent, so a land merge's code counts): all paths under `docs/`/`.claude/` → push;
+anything else → push nothing, list the code-bearing commits, print
+`push-main.sh --expect <the sprint ids found in their subjects>`, exit **3**. Each caller still
+prints its normal summary on 3 and then exits 3 ("committed locally, push withheld") — distinct
+from 2 ("rolled back, nothing committed"). History is linear, so the caller's own ledger commit
+cannot be pushed alone; refusing is the only safe option. `--self-test` runs scratch-repo cases
+against a bare origin plus a read-only sentinel that fails if any script in `scripts/sprint/`
+other than `push-main.sh` and `ledger-push.sh` contains a raw `push origin`.
 
 On a long-running (multi-hour) wave, the orchestrator **may** run `push-main.sh` after any
 individual sprint's finish for backup, at the cost of one CI cycle per extra push — a deliberate
 tradeoff, not a violation of the checkpoint schedule.
 
 **Abandoning or pausing a wave:** always **settle** the push before walking away — run
-`bash scripts/sprint/push-main.sh` (asking the deploy-gate question if the range carries
-code), or record an explicit user *hold* decision. A user-confirmed hold is a deliberate,
+`bash scripts/sprint/push-main.sh --expect <your sprint ids>` (asking the deploy-gate question
+if the range carries code; exit 2 means another session's code is on local `main` — that is its
+owner's to settle, not yours), or record an explicit user *hold* decision. A user-confirmed hold is a deliberate,
 board-visible state; what must never happen is local `main` left silently ahead of `origin`
 with nobody having decided that. Applies equally to abandonment (Failure handling) and to
 any pause longer than a session (e.g. a decision round parked overnight).
 
 Solo (non-wave) `/sprint start` keeps its push-per-transaction (ledger-only, `[skip ci]`).
-Solo `/sprint done` runs `finish --no-push` and settles its code-bearing push through the
-same deploy gate: ask, then `push-main.sh`.
+Solo `/sprint done` runs `finish` (which never pushes) and settles its code-bearing push
+through the same deploy gate: ask, then `push-main.sh --expect S-NNN`.
 
 ## Worktree mode: path-scoped (verified)
 
@@ -230,16 +278,20 @@ For each remaining member, in the primary checkout:
    `start.sh S-NNN --wave W-<id> --no-push` **without `--touches`** (the file's manifest was
    verified in Step 2; the start commit lands on `main` under the lock; when another wave is
    live, add `--wait 900`) → `git worktree add .claude/worktrees/S-NNN-… -b S-NNN-… main`
-   (from the post-start main tip; **no EnterWorktree**) → setup (copy env files, install deps
-   with `{{PACKAGE_MANAGER}}`).
+   (from the post-start main tip; **no EnterWorktree**) →
+   `bash scripts/sprint/worktree-link.sh setup <worktree>` (env files; links in link mode) →
+   in install mode only, install deps with `{{PACKAGE_MANAGER}}` (PROTOCOL "Worktree
+   toolchain").
 
 These run one-at-a-time: `start.sh` serializes on the lock anyway (each start is a fast
 commit, so brief contention). PROTOCOL Phase 1's doc validation and tradeoff questions are
 already covered by Step 2 (doc drift recorded in each file's PLAN NOTES; decisions in
 Pre-Sprint Decisions).
 
-After the **last** member's start: **checkpoint P2** — `bash scripts/sprint/push-main.sh`
-(ledger-only; the HEAD commit carries `[skip ci]`, so this triggers no CI).
+After the **last** member's start: **checkpoint P2** —
+`bash scripts/sprint/push-main.sh --expect <the wave's sprint ids>` (ledger-only; the HEAD
+commit carries `[skip ci]`, so this triggers no CI; exit 2 means another session's code sits on
+local `main` — leave it for its owner and continue, the ledger rides your P3).
 
 ### Step 4 — Fan out execution (parallel subagents)
 
@@ -328,10 +380,11 @@ racing completions make all but one hit the lock ceiling (exit 75). Complete fin
    executor is gone and the gap is cosmetic) → apply the docs draft **and** finalize the
    landed done-file's `Docs synced` / `New docs` / `ADR check` rows from the doc-sync
    return, prepend any `plan`-class `learnings[]` line to `docs/sprints/PLANNING_LEARNINGS.md`
-   → `finish <branch> --no-push`. Phase 3 Step 6's CI check does **not** run here — `finish`
-   deferred its push, so there is nothing to poll yet; it defers to checkpoint P3 in Step 6
+   → `finish <branch>`. Phase 3 Step 6's CI check does **not** run here — `finish`
+   never pushes, so there is nothing to poll yet; it defers to checkpoint P3 in Step 6
    below, which covers every sprint in the wave at once.
-3. Remove the sprint's worktree, then move to the next.
+3. `bash scripts/sprint/worktree-link.sh teardown <worktree>` (must pass), remove the
+   sprint's worktree, then move to the next.
 
 A sprint that lands changes (`prepare` exit 3) re-runs the gate in its worktree before
 `land`, lock held — that serialization is the point.
@@ -377,14 +430,27 @@ into the wave close; it needs the proposal's evidence spec, not the wave report.
 finishers can't each see a sibling in-progress and silently drop the gate offer.)
 
 Then close out the wave: `reserve-wave.sh --release W-<id>` if any backlog members still
-carry the reservation (deferred/split members). Then **checkpoint P3 (mandatory)**: ask
+carry the reservation (deferred/split members).
+
+**Wave-end checks on merged `main` (before P3).** Each sprint's gate ran inside its own
+worktree, which is blind to two things: repo-wide guard/sentinel tests that scan the whole
+tree (a sibling's new file is invisible from your worktree), and integration between sprints.
+Run the project's repo-wide guard tests from the primary checkout on the merged `main`, and —
+if any member touched the end-to-end suite or the paths it drives — run that suite once there
+too, recording pass / fail / skip counts (PROTOCOL Step 3.8). A red here is fixed on `main`
+under the lock before P3.
+
+Then **checkpoint P3 (mandatory)**: ask
 the deploy-gate question (Push policy above), then run
-`bash scripts/sprint/push-main.sh` — the single CI-triggering push of the wave — and run
-PROTOCOL Phase 3 Step 6's "verify CI green" check against **this** push; it covers every
+`bash scripts/sprint/push-main.sh --expect <the wave's sprint ids>` — the single CI-triggering
+push of the wave — and run PROTOCOL Phase 3 Step 6's `verify-ci.sh` check against **this**
+push (the command `push-main.sh` prints); it covers every
 sprint in the wave in one pass. On a red run: identify the offending sprint locally by
 bisecting over the wave's merge commits (each sprint's `gate.sh` already passed inside its
 own worktree, so the regression is almost always an integration effect between sprints, not
-a single sprint's own gate) — fix on `main` under the lock, then run `push-main.sh` again
+a single sprint's own gate) — fix on `main` under the lock (subject `fix(S-NNN): …` naming the
+offending sprint, so `--expect` attributes it — an untagged commit is `(unattributed)` and
+refused as foreign), then run `push-main.sh --expect …` again
 (never a raw `git push` — the fix commit becomes the new HEAD and needs the same
 `[skip ci]`-guard treatment) and re-verify.
 
@@ -583,7 +649,8 @@ re-cut **now** — never mid-train.
 
 **T4 — Open the train.** `start.sh S-A --wave W-<id> --no-push` →
 `git worktree add .claude/worktrees/train-W-<id> -b train-W-<id> main` (once; never
-EnterWorktree) → setup (env files, one `{{PACKAGE_MANAGER}}` install). Record the base SHA
+EnterWorktree) → `worktree-link.sh setup` (env files; links in link mode — install mode adds
+one `{{PACKAGE_MANAGER}}` install). Record the base SHA
 in train-progress.md.
 
 **T5 — The sprint loop** (strictly serial, per member i):
@@ -614,15 +681,17 @@ in train-progress.md.
 `merge-sprint.sh prepare train-W-<id>` (exit 3 → full `gate.sh` in the worktree, lock held)
 → `merge-sprint.sh land train-W-<id> --sprints S-A,S-B,…` (one `--no-ff` merge; per-sprint
 done-moves + status/end_date flips; one regen; exit 4) → apply the segment's pre-drafted
-docs (seconds) → `merge-sprint.sh finish train-W-<id> --sprints S-A,S-B,… --no-push` →
+docs (seconds) → `merge-sprint.sh finish train-W-<id> --sprints S-A,S-B,…` →
 push **per the T1 push policy**: "ask-each" → deploy-gate question, then
-`bash scripts/sprint/push-main.sh`; "auto" → `push-main.sh` directly; "hold" → skip the
+`bash scripts/sprint/push-main.sh --expect S-A,S-B,…` (the landed ids); "auto" → that
+`push-main.sh --expect` directly; "hold" → skip the
 push (the segment stays local until T7). When pushed, it is **the checkpoint's single
 CI-triggering push** — verify CI green once (PROTOCOL Phase 3 Step 6); a held segment
 carries the CI check to whichever later push lands it. Update train-progress.md
 (`landed@ckpt-n`).
 **Red CI:** the segment's boundary SHAs narrow a first-parent bisect to one sprint in ≤2
-steps; fix on `main` under the lock, `push-main.sh` again (never raw `git push`), re-verify.
+steps; fix on `main` under the lock (`fix(S-NNN): …` subject), `push-main.sh --expect …` again
+(never raw `git push`), re-verify.
 Not cured by one targeted fix → hard stop; the batched land gives a clean escape hatch —
 `git revert -m 1 <segment-merge-sha>` undoes the whole segment in one commit (surface to the
 user first).
@@ -635,8 +704,9 @@ the final push, larger ones become follow-up sprints; Step 6's conditional outsi
 second pass applies here too, with the same `pre_wave_sha` base) → run wave Step 6's
 **proposal stage check** over the whole train's landed sprints →
 `reserve-wave.sh --release W-<id>` for never-started
-members → final push per the T1 policy (auto → `push-main.sh`; otherwise the deploy-gate
-question first — under "hold" this is the train's one code-bearing push) + CI verify →
+members → final push per the T1 policy (auto → `push-main.sh --expect <train ids>`; otherwise
+the deploy-gate question first — under "hold" this is the train's one code-bearing push) + CI
+verify → `worktree-link.sh teardown .claude/worktrees/train-W-<id>` →
 `git worktree remove .claude/worktrees/train-W-<id> && git branch -d train-W-<id>` →
 recompute `claims.mjs waves`, report the board, stop.
 
@@ -651,7 +721,7 @@ recompute `claims.mjs waves`, report the board, stop.
   boundaries are gate-green), then `unstart.sh S-i` for the aborted member. Caution:
   `unstart.sh`'s deliverable-commit guard keys off an `S-NNN-*` branch name and cannot see
   the train branch — check for non-disposable partial work yourself before unstarting.
-  Release leftovers (`--release`), final `push-main.sh`, keep the ledger dir for the
+  Release leftovers (`--release`), final `push-main.sh --expect <train ids>`, keep the ledger dir for the
   post-mortem. Never leave local `main` ahead of `origin`.
 - **Executor dies:** fresh dispatch pointed at
   `git -C <wt> log <boundary>..HEAD` — committed work persists on the branch.
@@ -695,6 +765,9 @@ carries the full duties; the prompt carries only the per-sprint variables:
 > - Worktree (work ONLY here, via `git -C` / absolute paths): `<absolute worktree path>`
 > - Repo root: `<absolute repo root>`
 > - Wave ledger dir (your report goes here): `<repo-root>/.claude/sprint-orchestration/W-<id>/`
+> - Run your pre-completion `reviewer` child with `run_in_background: false` and keep your
+>   turn alive until it returns. If you end your turn while it runs, its completion notification
+>   is routed to the master, not to you, and your sprint stalls until the master relays it.
 >
 > Execute the sprint per your instructions and return the structured status (≤15 lines).
 
@@ -733,12 +806,21 @@ carries the full duties; the prompt carries only the per-sprint variables:
   member between your Step 1 and Step 1.5 — recompute the wave and re-confirm.
 - **Start race (`start.sh` exit 2):** backlog file gone (another agent started it) or the
   sprint is reserved by another wave — drop it from your roster.
+- **Ledger push withheld (exit 3 from `start.sh` / `unstart.sh` / `reserve-wave.sh` /
+  `claims.mjs add` — not to be confused with `merge-sprint.sh prepare`'s exit 3, "re-run the
+  gate"):** the transaction committed locally; `ledger-push.sh` refused to push
+  because local `main` carries another session's unpushed code. Not a failure — continue; the
+  printed `push-main.sh --expect <ids>` is the owner's to run, and your ledger commits ride the
+  next permitted push. Never "fix" it with a raw `git push`.
+- **`push-main.sh` exit 2 (FOREIGN code in the range):** another session's landed code is on
+  local `main`. Do not push it past its owner's deploy gate: show the printed groups and ask
+  the user; `--allow-foreign` only on an explicit yes.
 - **Lock busy (exit 75):** another session/wave holds it — follow the exit-75 protocol in
   "Running waves from multiple sessions". Never steal silently.
 - **Orphaned worktree** (sprint in `in-progress/` with no worktree, or vice-versa): see
   `/sprint board`'s orphan check before re-dispatching.
 - **Abandoning a wave:** release what you hold — `reserve-wave.sh --release W-<id>` for
   unstarted members; started members are individually `unstart`ed or completed. Then, always,
-  `bash scripts/sprint/push-main.sh` before walking away (see Push policy) — a deferred wave
+  `bash scripts/sprint/push-main.sh --expect <wave ids>` before walking away (see Push policy) — a deferred wave
   must never leave local `main` silently ahead of `origin`. Leave the ledger dir for the
   post-mortem.

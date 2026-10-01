@@ -11,7 +11,9 @@
 # a sprint reserved by a DIFFERENT wave refuses to start (exit 2).
 #
 # Exit codes: 0 ok (prints new main SHA) · 2 claims overlap / sprint not in
-# backlog / reserved by another wave · 75 lock busy · 1 unexpected (rolled back)
+# backlog / reserved by another wave · 3 started locally but push withheld —
+# local main carries non-ledger commits (ledger-push.sh); the start stands ·
+# 75 lock busy · 1 unexpected (rolled back)
 set -euo pipefail
 
 SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -109,13 +111,25 @@ git -C "$ROOT" commit --no-verify -q -m "sprint: start $SPRINT — $TITLE [skip 
 COMMITTED=1
 
 # Survival check (the lint-staged/mv stash bug class): the commit must carry the claims.
-git -C "$ROOT" show "HEAD:docs/sprints/in-progress/$BASENAME" | grep -q '^touches:' ||
+# Read ONCE into a variable and grep that. Never pipe `git show` into `grep -q`:
+# grep exits at the first match, `git show` then dies of SIGPIPE, and pipefail
+# turns that into a failure — a false FATAL on a good commit that also skips the
+# push below. It scales with file size, so it bites deepened briefs hardest.
+COMMITTED_FILE=$(git -C "$ROOT" show "HEAD:docs/sprints/in-progress/$BASENAME")
+grep -q '^touches:' <<<"$COMMITTED_FILE" ||
   { echo "FATAL: committed sprint file lost its touches: frontmatter — inspect HEAD" >&2; exit 1; }
-git -C "$ROOT" show "HEAD:docs/sprints/in-progress/$BASENAME" | grep -q '^status: in-progress' ||
+grep -q '^status: in-progress' <<<"$COMMITTED_FILE" ||
   { echo "FATAL: committed sprint file is not status: in-progress — inspect HEAD" >&2; exit 1; }
 
+# Guarded push: ledger-push.sh withholds (exit 3) when local main also carries
+# another session's unpushed code — the start itself stands; the summary prints.
+PUSH_RC=0
 if [[ $NO_PUSH -eq 0 ]]; then
-  git -C "$ROOT" push origin "$MAIN" || { echo "push failed — local start commit is intact; resolve and push before creating the worktree" >&2; exit 1; }
+  "$SELF_DIR/ledger-push.sh" "$ROOT" "$MAIN" || PUSH_RC=$?
+  if [[ $PUSH_RC -ne 0 && $PUSH_RC -ne 3 ]]; then
+    echo "push failed — local start commit is intact; resolve and push before creating the worktree" >&2
+    exit 1
+  fi
 else
   AHEAD=$(git -C "$ROOT" rev-list --count "origin/$MAIN..$MAIN" 2>/dev/null || echo '?')
   echo "push deferred — local $MAIN is $AHEAD commit(s) ahead of origin/$MAIN; wave checkpoints push via scripts/sprint/push-main.sh"
@@ -123,3 +137,7 @@ fi
 
 echo "started $SPRINT on $MAIN at $(git -C "$ROOT" rev-parse HEAD)"
 echo "next: git -C \"$ROOT\" worktree add .claude/worktrees/${BASENAME%.md} -b ${BASENAME%.md} $MAIN"
+if [[ $PUSH_RC -eq 3 ]]; then
+  echo "start committed locally, push withheld (see ledger-push above) — safe to create the worktree; exiting 3" >&2
+  exit 3
+fi

@@ -4,6 +4,131 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.11.0] - 2026-10-01
+
+**Push safety, fail-closed CI verification, and an opt-in shared-install worktree mode**,
+backported from a month of production wave use in ai-todo (the repo this template was
+extracted from). The common thread: local `main` is shared by every session in a checkout,
+and the 1.10.0 scripts pushed whatever it held. Measured downstream: a wave-start reservation
+push carried 26 of another wave's held code commits past that wave's deploy gate; three
+earlier pushes did the same because `push-main.sh` only reported what it had pushed
+*afterwards*; and a code push read "all green" after 91 s because the CI check counted a
+run that had not started yet as "not applicable". No migrations. New per-project config
+files are **seeded**, which `/template-upgrade` never adds — see Upgrade notes.
+
+- **`push-main.sh` classifies before it pushes (full).** The unpushed range is grouped by
+  the sprint id in each commit subject (`S-NNN: …`, `<type>(S-NNN): …`,
+  `<type>(S-NNN)!: …`, `sprint: <verb> S-NNN …`; anything else is `(unattributed)`) and each
+  group is printed as doc-only or code. New `--expect <ids>`: a code group you didn't list is
+  FOREIGN and the push is **refused with exit 2** (nothing pushed, nothing committed), with
+  the `--allow-foreign` re-run command printed for after the user confirms. Every workflow
+  call site (solo close, wave P2/P3, train checkpoints, abandon) now passes `--expect`.
+  Without the flag it classifies and pushes as before; an empty `--expect ""` (an unset
+  variable) is an error (exit 1), never a silent bypass, and an unreachable origin is exit 1
+  rather than "no remote branch yet". After a code-bearing push it prints
+  the exact `verify-ci.sh <sha> --base <old>` command to run.
+- **`push-main.sh` skip-CI guard fixed.** The empty "force CI" commit it adds when a
+  `[skip ci]` HEAD would hide a code push was written to *whatever branch was checked out*,
+  not `main`. It is now built with `commit-tree` + `update-ref` on `main`, and runs only after
+  the `--expect` check passes (a refused push no longer leaves a stray `ci:` commit).
+- **New `ledger-push.sh` — bookkeeping pushes are ledger-only or nothing (full).**
+  `start.sh`, `unstart.sh`, `reserve-wave.sh` and `claims.mjs add` no longer run a raw
+  `git push`. If any unpushed commit touches a path outside `docs/`/`.claude/` (merges diffed
+  against their first parent), nothing is pushed, the code-bearing commits are listed with
+  the `push-main.sh --expect <their ids>` their owner settles with, and the caller exits
+  **3 — "committed locally, push withheld"**. Exit 3 is not a failure (the transaction
+  committed; create the worktree / proceed with the wave), and is distinct from exit 2
+  (rolled back). A self-test sentinel fails if any sprint script other than `push-main.sh`
+  and `ledger-push.sh` contains a raw `push origin`.
+- **`merge-sprint.sh finish` never pushes, in any mode (full).** Solo `finish` used to push
+  all of local `main` by default. The deferral line now names
+  `push-main.sh --expect <roster>`; `--no-push` is still accepted (no-op for `finish`; it
+  still skips `prepare`'s pull). New `merge-sprint.sh --self-test`.
+- **`merge-sprint.sh land` train-mode stamping fixed.** With `--sprints S-A,S-B`, every
+  member's `### Commits` was stamped with the *last* member's commits (and an
+  `--allow-incomplete` note landed in the wrong file) — a stale loop variable.
+- **New `verify-ci.sh` — CI verification that fails closed (full).**
+  `verify-ci.sh <sha> --base <pre-push origin tip>` waits for each required workflow listed
+  in the new seeded `scripts/sprint/ci-gates.json` (`workflows: [{name, file}]`, optional
+  `deployEnvironment` checked through GitHub's deployments API, `timeoutSeconds`,
+  `graceSeconds`). Exit **0** green or provably not triggered (it reads each workflow's
+  `on.push.paths` at the pushed SHA and diffs against `--base`); **1** red; **2 not
+  verifiable — never green**: an expected run that never appeared within the grace period, a
+  `gh` error, cancelled, timeout, or missing config. Omitting `--base` makes every gate
+  expected. `SKIP_CI_VERIFY=1` now requires `SKIP_CI_VERIFY_REASON`. PROTOCOL Phase 3 Step 6
+  (full) calls it instead of an ad-hoc `gh run list`; the lite Step 6 gains the same
+  fail-closed rule in prose.
+- **Claims: unknown tokens fail loud; reserved sprints keep Wave 1 (full).** A token-shaped
+  claim (`word` / `word:word`) that is neither in `claims-tokens.json` nor an existing
+  root file/dir used to become an exact-path claim that overlapped nothing; `claims.mjs
+  check`/`add`/`waves` — and therefore `start.sh`/`reserve-wave.sh` — now exit 2 naming it
+  (and say so when `claims-tokens.json` is missing). `regen.mjs` reports it with exit 2
+  instead of a stack trace. `claims.mjs waves` now pins in-progress and wave-reserved
+  sprints to Wave 1 instead of letting a lower-id backlog sprint displace them (which
+  advertised starts `start.sh` would refuse). The CLI also works when invoked through a
+  symlinked path (macOS `/var` vs `/private/var`).
+- **New `check-ledger-links.mjs` (full).** Relinks INDEX `(done/…)` links orphaned by archive
+  rotation; `--check` (also run by `regen.mjs --check`) flags unresolved links and duplicate
+  TODOS ids. Exit 2 while issues remain.
+- **Worktree setup is a script; optional shared-install "link mode" (full).** New
+  `worktree-link.sh setup|teardown <worktree>` driven by the seeded
+  `scripts/sprint/worktree-links.json`. Default **install mode** (`links: []`): setup copies
+  the listed `envFiles` (replacing "copy `.env` — match whatever the project uses") and you
+  install as before. **Link mode** (for large monorepos): every worktree symlinks the primary
+  checkout's dependency dirs; setup parks a worktree's own real install aside so there is one
+  store, keeps `keepIfReal` generated dirs, refuses foreign links; teardown restores and
+  exits 1 if any primary link still points into the worktree — run it before
+  `git worktree remove`. New `worktree-guard.sh` detects any linked worktree; two new
+  placeholders, `{{WORKTREE_GATE_COMMANDS}}` / `{{WORKTREE_PREPUSH_GATE_COMMANDS}}`, give
+  `gate.sh` / `pre-push-gate.sh` a reduced, package-manager-free gate inside a linked
+  worktree. Blank (the default, and always in lite) = the normal gate everywhere — except
+  that in link mode a blank reduced command makes the gate **fail** inside a linked worktree
+  rather than run the package manager there. Setup/teardown refuse overlapping `links`
+  entries and any path whose parent resolves outside the worktree.
+- **`start.sh` / `unstart.sh` SIGPIPE false-FATAL fixed.** `git show … | grep -q` under
+  `pipefail` reported a failed frontmatter check on sprint files larger than a pipe buffer.
+- **`close-check.mjs` (lite + full):** a Manual criterion's `confirmed` now matches
+  case-insensitively (`Confirmed`, `CONFIRMED`).
+- **Executor reviewer child runs in the foreground.** `sprint-executor` and the
+  ORCHESTRATION dispatch prompt now require `run_in_background: false` for the pre-completion
+  `reviewer` child: a background child that finishes after the executor's turn ends reports
+  to the orchestrator, and the sprint stalls.
+- **Docs (full):** a "Worktree toolchain" subsection (install vs link mode rules); PROTOCOL
+  Step 3.8 — if a sprint touches the end-to-end suite, run it before the code-bearing push
+  and record pass/fail/skip *counts*, not the exit code; ORCHESTRATION Step 6 "wave-end
+  checks on merged `main`" (repo-wide guard tests and the e2e suite run once there before
+  P3 — a sprint worktree cannot see a sibling's files); failure-handling rows for exit 3 and
+  FOREIGN exit 2.
+- **Tests:** new `test-push-main.sh`, `test-ledger-push.sh`, `test-merge-sprint-finish.sh`,
+  `test-merge-sprint-train-land.sh`, `test-verify-ci.sh` (skips without `jq`),
+  `test-claims.mjs`, `test-check-ledger-links.sh`, `test-worktree-guard.sh`,
+  `test-worktree-link.sh`; `test-close-check.mjs` gains the case-insensitive case. Each new
+  script also has a `--self-test`.
+
+**Upgrade notes.**
+- Expect three-way conflicts in `push-main.sh`, `merge-sprint.sh`, `start.sh`, `unstart.sh`,
+  `reserve-wave.sh`, `claims.mjs`, `gate.sh` and `pre-push-gate.sh` if you customized them.
+  Keep the template's push paths: any remaining raw `git push origin` fails the ledger-push
+  sentinel.
+- `/template-upgrade` will prompt for the two new worktree-gate placeholders — answer blank
+  unless you use link mode.
+- **Create the seeded configs by hand** (upgrades never add seeded files):
+  `scripts/sprint/ci-gates.json` — e.g.
+  `{"workflows": [{"name": "CI", "file": "ci.yml"}], "deployEnvironment": null,
+  "timeoutSeconds": 1800, "graceSeconds": 300}` — without it `verify-ci.sh` exits 2
+  ("not configured"); and `scripts/sprint/worktree-links.json` —
+  `{"links": [], "envFiles": [".env"], "keepIfReal": [], "scanExclude": []}` (it is optional;
+  missing = install mode with no env files copied).
+- `verify-ci.sh` needs `gh` (authenticated) and `jq`; `worktree-link.sh` needs `node`.
+- **Audit `touches:` after upgrading:** a backlog or in-progress sprint whose `touches:`
+  names a bare token that is not in `claims-tokens.json` (and not a root file/dir) now makes
+  `regen.mjs`, `claims.mjs waves` and `start.sh` exit 2. Run `node scripts/sprint/claims.mjs
+  waves` once; define the token or fix the claim it names.
+- Commits made directly on `main` to fix a red wave/train push must carry the sprint id
+  (`fix(S-NNN): …`) — `push-main.sh --expect` treats an untagged code commit as foreign.
+- Update any project-local docs or scripts that call `merge-sprint.sh finish` expecting a
+  push, or `push-main.sh` without `--expect`.
+
 ## [1.10.0] - 2026-09-01
 
 The sprint file becomes the **durable completion record**. Measured across three downstream

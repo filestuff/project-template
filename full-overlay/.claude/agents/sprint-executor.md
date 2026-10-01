@@ -106,6 +106,9 @@ You may spawn at most 2–3 children per sprint, each for one of:
   the brief are its whole input (a reviewer anchored on your framing misses what you
   missed). If the diff touches a surface in `docs/sprints/review-calibration.md`'s
   risk-tier table, say "high-risk: deep pass" in the child's prompt.
+  Spawn it in the foreground (`run_in_background: false`) and do not end your turn until
+  it returns: a background child that finishes after your turn ends reports to the
+  orchestrator, not to you, and the sprint stalls until someone relays the result.
 - **debug** — a failure that resists two root-cause attempts of your own.
 
 Every child prompt MUST restate: the absolute worktree path plus "operate via

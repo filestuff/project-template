@@ -20,7 +20,11 @@
 #       the narrative lives in the sprint file's ### Outcome — + header line;
 #       ROADMAP.md narrative), then `finish`.
 #   merge-sprint.sh finish <branch> [--sprints S-A,S-B,…] [--no-push]
-#       Verify, commit `sprint: complete S-NNN`, push, release the lock.
+#       Verify, commit `sprint: complete S-NNN`, release the lock. Never pushes:
+#       local main is shared by every session in the checkout, so a push here
+#       could carry another session's held code past its deploy gate. Settle
+#       with `push-main.sh --expect <roster csv>` behind the deploy gate.
+#       --no-push is accepted as a no-op for compatibility.
 #
 # --sprints (train mode — ORCHESTRATION.md "The serial train"): the branch carries
 # several sprints and its name (`train-W-<id>`) has no sprint id, so land/finish
@@ -28,6 +32,10 @@
 # Without the flag, behavior is unchanged (single sprint, id from the branch name).
 #   merge-sprint.sh abort <branch>
 #       Roll main back to the pre-land SHA, abort in-progress merges, release.
+#   merge-sprint.sh --self-test
+#       Scratch-repo check that finish never pushes; never touches the real lock or origin.
+#
+# prepare --no-push skips its `git pull --ff-only` from origin (offline / deferred waves).
 #
 # Exit codes: 0 ok · 1 error (lock kept — fix and re-run, or abort) ·
 # 3 gate re-run needed · 4 paused for doc authoring · 5 completion log incomplete
@@ -38,6 +46,90 @@
 set -euo pipefail
 
 SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# --- --self-test -------------------------------------------------------------
+# Runs the real `finish` as a child process whose cwd is a scratch `mktemp -d`
+# repo, so GIT_COMMON, ROOT and the lock dir (lock.sh resolves it from the cwd's
+# git-common-dir) all land in the scratch repo; a bare clone stands in for
+# origin. Never the real repo's lock or origin. Local main carries an unpushed
+# code commit owned by another sprint — the held-completion scenario — and no
+# case may move origin.
+run_self_test() {
+  local scratch work bare base rc out
+  # An inherited GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE (hook or wrapper shell)
+  # would redirect every `git -C <scratch>` below into that repo — scrub them.
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+  SELF_TEST_SCRATCH=$(cd "$(mktemp -d)" && pwd -P)
+  trap 'rm -rf "$SELF_TEST_SCRATCH"' EXIT
+  scratch=$SELF_TEST_SCRATCH
+  work="$scratch/work" bare="$scratch/origin.git"
+  fail() { echo "FAIL: $1"; [[ -n ${out:-} ]] && echo "$out"; exit 1; }
+  in_scratch() { (cd "$work" && SPRINT_MAIN_BRANCH=main "$@"); }
+  done_file() { # done_file <id> <slug> <title> — a landed sprint file, staged the way land leaves it
+    local path="docs/sprints/done/$1-$2.md"
+    printf -- '---\nsprint: %s\nstatus: done\n---\n\n# %s: %s\n\n## Completion Log\n' "$1" "$1" "$3" >"$work/$path"
+    git -C "$work" add -- "$path"
+  }
+  hold_lock() { in_scratch bash "$SELF_DIR/lock.sh" acquire "land-$1" --wait 0 >/dev/null; }
+  finish() { rc=0; out=$(in_scratch bash "$SELF_DIR/merge-sprint.sh" finish "$@" 2>&1) || rc=$?; }
+  origin_moved() { [[ $(git -C "$bare" rev-parse main) != "$base" ]]; }
+  subject() { git -C "$work" log -1 --format=%s main; }
+
+  git init -q -b main "$work"
+  git -C "$work" config user.email "selftest@example.com"
+  git -C "$work" config user.name "merge-sprint self-test"
+  git -C "$work" config commit.gpgsign false
+  mkdir -p "$work/docs/sprints/done" "$work/src"
+  local f
+  for f in docs/sprints/INDEX.md docs/sprints/ROADMAP.md docs/DOC_HEALTH.md; do echo "# $f" >"$work/$f"; done
+  git -C "$work" add docs
+  git -C "$work" commit -q -m "base"
+  git clone -q --bare "$work" "$bare"
+  git -C "$work" remote add origin "$bare"
+  git -C "$work" fetch -q origin
+  base=$(git -C "$bare" rev-parse main)
+  echo 'export {};' >"$work/src/held.ts"
+  git -C "$work" add src/held.ts
+  git -C "$work" commit -q -m "S-900: held code"
+
+  [[ $(in_scratch git rev-parse --path-format=absolute --git-common-dir) == "$scratch"/* ]] ||
+    fail "scratch repo's git-common-dir does not resolve inside $scratch — refusing to run finish"
+
+  # (a) default mode (no flag) commits locally and leaves origin alone
+  done_file S-1 one One
+  hold_lock S-1-one
+  finish S-1-one
+  [[ $rc -eq 0 ]] || fail "(a) finish should succeed (rc=$rc)"
+  origin_moved && fail "(a) finish moved origin — it swept the held S-900 code past its deploy gate"
+  [[ $(subject) == "sprint: complete S-1 — One" ]] || fail "(a) completion commit missing (HEAD: $(subject))"
+  [[ ! -d "$work/.git/sprint-main.lock" ]] || fail "(a) lock not released"
+  grep -q -- 'push-main.sh --expect S-1' <<<"$out" || fail "(a) deferral line should name push-main.sh --expect S-1"
+
+  # (b) train roster with the (no-op) --no-push flag
+  done_file S-2 two Two
+  done_file S-3 three Three
+  hold_lock train-W-x
+  finish train-W-x --sprints S-2,S-3 --no-push
+  [[ $rc -eq 0 ]] || fail "(b) train finish should succeed (rc=$rc)"
+  origin_moved && fail "(b) finish moved origin"
+  [[ $(subject) == "sprint: complete S-2,S-3" ]] || fail "(b) completion commit missing (HEAD: $(subject))"
+  grep -q -- '--expect S-2,S-3' <<<"$out" || fail "(b) deferral line should name --expect S-2,S-3"
+
+  # (c) land lock not held → 75, origin untouched
+  done_file S-4 four Four
+  finish S-4-four
+  [[ $rc -eq 75 ]] || fail "(c) finish without the land lock should exit 75 (rc=$rc)"
+  origin_moved && fail "(c) finish moved origin"
+
+  echo "self-test OK"
+}
+
+# Before GIT_COMMON/ROOT are computed, so the self-test never resolves the real repo.
+if [[ "${1:-}" == "--self-test" ]]; then
+  run_self_test
+  exit 0
+fi
+
 GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
 ROOT=${GIT_COMMON%/.git}
 LOCK_DIR="$GIT_COMMON/sprint-main.lock"
@@ -241,6 +333,7 @@ land)
   fi
 
   for ((i = 0; i < ${#SPRINTS[@]}; i++)); do
+    s=${SPRINTS[i]}
     BASENAME=${BASENAMES[i]}
     git -C "$ROOT" mv "docs/sprints/in-progress/$BASENAME" "docs/sprints/done/$BASENAME"
     DONE_FILE="$ROOT/docs/sprints/done/$BASENAME"
@@ -345,16 +438,15 @@ finish)
     echo "these will dirty-stop the NEXT sprint's prepare — commit or restore them before then." >&2
   fi
 
-  if [[ $NO_PUSH -eq 0 ]]; then
-    git -C "$ROOT" push origin "$MAIN" ||
-      { echo "push failed — local commits intact, lock kept; resolve and re-run finish" >&2; exit 1; }
-  else
-    echo "push deferred — this push deploys via any connected platform; confirm with the user (deploy gate), then run scripts/sprint/push-main.sh and verify CI on that push (PROTOCOL Phase 3 Step 6). Waves/trains: settle at the next checkpoint per the push policy."
-  fi
-
   rm -f "$LOCK_DIR/preland-sha"
   "$SELF_DIR/lock.sh" release-label "$LABEL"
   echo "completed $CSV — $MAIN at $(git -C "$ROOT" rev-parse HEAD)"
+
+  # finish never pushes (--no-push is a no-op): local main is shared by every
+  # session in this checkout, so pushing it here could carry another session's
+  # held completions past their deploy gate. push-main.sh --expect is the one
+  # code-bearing pusher — it refuses a range with foreign non-doc groups.
+  echo "push deferred — finish never pushes; this push deploys via any connected platform. After the deploy gate (confirm with the user): scripts/sprint/push-main.sh --expect $CSV, then run the verify-ci command it prints (PROTOCOL Phase 3 Step 6). Waves/trains: settle at the next checkpoint per the push policy."
   echo "cleanup: ExitWorktree {action: \"keep\"} · git worktree remove .claude/worktrees/$BRANCH · git branch -d $BRANCH"
   ;;
 

@@ -76,6 +76,49 @@ code_changed=$(printf '%s\n' "$changed" | grep -Ev '^(docs/|\.claude/)|\.mdx?$' 
 
 if [ -n "$code_changed" ]; then
   echo "pre-push: running fast static gate…"
+
+  # Linked-worktree guard (full tier only; rationale in scripts/sprint/gate.sh): in link mode
+  # the package manager inside a linked worktree corrupts the PRIMARY checkout's shared
+  # install, so run the worktree pre-push commands (direct tool binaries) instead. Blank = the
+  # normal checks below run everywhere — except in a linked worktree when worktree-links.json
+  # lists links: then the gate FAILS rather than fall through to the package manager.
+  WORKTREE_PREPUSH_CMD=""
+  IFS= read -r -d '' WORKTREE_PREPUSH_CMD <<'WORKTREE_PREPUSH_EOF' || true
+{{WORKTREE_PREPUSH_GATE_COMMANDS}}
+WORKTREE_PREPUSH_EOF
+  if [ -f "$(dirname "${BASH_SOURCE[0]}")/worktree-guard.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$(dirname "${BASH_SOURCE[0]}")/worktree-guard.sh"
+    if in_linked_worktree; then
+      if [ -n "${WORKTREE_PREPUSH_CMD//[[:space:]]/}" ]; then
+        echo "pre-push: REDUCED gate (linked worktree) — running the worktree pre-push commands"
+        echo "pre-push: instead of the package manager, which would corrupt the PRIMARY's install."
+        bash -euo pipefail -c "$WORKTREE_PREPUSH_CMD"
+        echo "pre-push: static gate passed (REDUCED — linked worktree)."
+        exit 0
+      fi
+      links_file="$(dirname "${BASH_SOURCE[0]}")/worktree-links.json"
+      if [ -f "$links_file" ]; then
+        # "install" only when node reads a config with an empty/missing `links`; a missing node
+        # or an unreadable file fails closed (treated as link mode).
+        links_mode=""
+        if command -v node >/dev/null 2>&1; then
+          links_mode=$(node -e 'const c = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+            process.stdout.write(Array.isArray(c && c.links) && c.links.length ? "link" : "install")' "$links_file" 2>/dev/null) || links_mode=""
+        fi
+        if [ "$links_mode" != install ]; then
+          why="it lists links"
+          [ -n "$links_mode" ] || why="unreadable without node / not valid JSON — assuming links"
+          echo "pre-push: link mode is on ($links_file: $why), but no worktree pre-push commands" >&2
+          echo "pre-push: are set — the normal checks would run the package manager here and corrupt the" >&2
+          echo "pre-push: PRIMARY checkout's shared install. Set the worktree gate commands via" >&2
+          echo "pre-push: /template-upgrade, or run the gate from the primary checkout." >&2
+          exit 1
+        fi
+      fi
+    fi
+  fi
+
   {{PREPUSH_GATE_COMMANDS}}
   echo "pre-push: static gate passed."
 fi

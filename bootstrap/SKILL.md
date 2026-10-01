@@ -37,7 +37,16 @@ commands; the cheap **pre-push** checks (the fast subset of CI to run on every p
 the project's quickest structural/lint checks, mirroring the CI steps that most often go red,
 e.g. lint/typecheck/unit; catching a failure locally is the top CI-cost lever, since a red push
 re-runs the whole workflow. "none" → a gitleaks-only pre-push gate); full
-tier only — where the schema/migrations live (for `claims-tokens.json`; "none" is valid).
+tier only — where the schema/migrations live (for `claims-tokens.json`; "none" is valid);
+full tier only — the **required CI workflows** for `verify-ci.sh` (detect: list
+`.github/workflows/*.yml` with an `on: push` trigger on the default branch and propose their
+`name:` + filename; plus an optional GitHub deployment environment to check, e.g. `Production`,
+or none); full tier only — the **worktree dependency model**: *install* (default — each sprint
+worktree runs its own install) or *link* (worktrees share the primary checkout's install via
+symlinks — for large monorepos where per-worktree installs are slow; then ask which dependency
+dirs to link, which generated dirs to keep worktree-local, and the reduced commit/pre-push
+commands that run in a linked worktree **without** the package manager, e.g. the linter's
+direct binary). Also ask which untracked env files a worktree needs copied (e.g. `.env`).
 
 ## Step 2: Preflight
 
@@ -86,6 +95,16 @@ placeholder is a bootstrap bug, not a cosmetic issue.
 - Full tier: write `scripts/sprint/claims-tokens.json` from the schema answer — always a
   `deps` token (manifest + lockfile); a `schema` token if applicable; drop the REPLACE
   placeholders entirely if a token doesn't apply.
+- Full tier: write `scripts/sprint/ci-gates.json` from the CI answer —
+  `{"workflows": [{"name": "<workflow name:>", "file": "<file>.yml"}], "deployEnvironment":
+  null | "<env>", "timeoutSeconds": 1800, "graceSeconds": 300}`. No CI → leave `workflows`
+  empty (`verify-ci.sh` then exits 2 "not configured"; PROTOCOL Step 6 is skipped).
+- Full tier: write `scripts/sprint/worktree-links.json` — `envFiles` from the env answer in
+  both modes; in link mode also `links` (e.g. `["node_modules", "packages/app/node_modules"]`),
+  `keepIfReal` (generated dirs) and `scanExclude` (e.g. `["*/.pnpm/*"]` for pnpm). Install
+  mode keeps `links: []`. The two worktree gate placeholders (`{{WORKTREE_GATE_COMMANDS}}`,
+  `{{WORKTREE_PREPUSH_GATE_COMMANDS}}`) got the reduced commands in step 4 — blank in install
+  mode and in the lite tier (blank = run the normal gate).
 - Default branch ≠ main: add to `.claude/settings.json`:
   `"env": { "SPRINT_MAIN_BRANCH": "<branch>" }`.
 
@@ -113,7 +132,7 @@ upgrade's three-way merges preserve.
      "template": { "version": "<VERSION>", "commit": "<40-hex HEAD sha>", "repo": "<templateRepo from template.config.json>" },
      "tier": "<lite|full>",
      "updateCheck": true,
-     "placeholders": { "{{PROJECT_NAME}}": "...", "{{PROJECT_DESCRIPTION}}": "...", "{{GATE_COMMANDS}}": "...", "{{PREPUSH_GATE_COMMANDS}}": "...", "{{PACKAGE_MANAGER}}": "..." },
+     "placeholders": { "{{PROJECT_NAME}}": "...", "{{PROJECT_DESCRIPTION}}": "...", "{{GATE_COMMANDS}}": "...", "{{PREPUSH_GATE_COMMANDS}}": "...", "{{WORKTREE_GATE_COMMANDS}}": "", "{{WORKTREE_PREPUSH_GATE_COMMANDS}}": "", "{{PACKAGE_MANAGER}}": "..." },
      "files": { "<destPath>": { "source": "lite/<destPath> | full-overlay/<destPath>", "class": "managed", "renderHash": "<sha256>" } }
    }
    ```
@@ -183,7 +202,10 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
   - `bash scripts/template/update-check.sh` prints **nothing** (a fresh install is
     current; any output here means the manifest version/repo is wrong).
 - Full, additionally:
-  - `bash -n scripts/sprint/unstart.sh` and `bash -n scripts/sprint/reserve-wave.sh`
+  - `bash -n` on `unstart.sh`, `reserve-wave.sh`, `push-main.sh`, `ledger-push.sh`,
+    `verify-ci.sh`, `worktree-guard.sh`, `worktree-link.sh` (all under `scripts/sprint/`)
+  - `scripts/sprint/ci-gates.json` and `scripts/sprint/worktree-links.json` parse as JSON
+  - `node scripts/sprint/check-ledger-links.mjs --check` exits 0
   - `scripts/sprint/lock.sh status` prints `FREE`
   - `node scripts/sprint/regen.mjs --check` exits 0 (empty skeleton is current — this also
     covers the ROADMAP Parallel Waves block)
@@ -276,7 +298,9 @@ sprints out to subagents.
    is correct (those sprints were never certified by `/sprint plan`); mechanically stamping a
    date would defeat the readiness gate. They get certified per-sprint by `/sprint plan` or
    the `/sprint wave` planning pass.
-5. Write `scripts/sprint/claims-tokens.json` (ask the schema/deps questions from step 1).
+5. Write `scripts/sprint/claims-tokens.json`, `scripts/sprint/ci-gates.json` and
+   `scripts/sprint/worktree-links.json` (ask the schema/deps, CI and worktree questions from
+   step 1).
 5.5. **Update the manifest**: set `"tier": "full"`; add/overwrite a `files` entry for every
    file full-overlay provided or overwrote (`source: "full-overlay/..."`), with a fresh
    `renderHash` (`node scripts/template/upgrade.mjs hash <destPath>`) computed now — after
