@@ -40,16 +40,20 @@ backlog sprint.
 
 | Script | Purpose | Key exits |
 |--------|---------|-----------|
-| `gate.sh` | The commit gate — single source of truth for pre-commit checks | non-zero = fix first |
+| `gate.sh` | The commit gate — single source of truth for pre-commit checks (in a linked worktree with worktree gate commands set: a reduced gate, reported as such) | non-zero = fix first |
 | `lock.sh` | Mutex for all main mutations (`acquire`/`release`/`status`/`steal --force`) | 75 = busy |
-| `claims.mjs` | `check` claims overlap vs in-flight sprints; `add` expands a claim (locked main commit). Tokens: `claims-tokens.json` | 2 = overlap |
-| `regen.mjs` | Regenerate the marker-delimited blocks in INDEX.md + ROADMAP.md (`--check` for drift) | 2 = drift |
-| `start.sh S-NNN --touches "…" [--wave W-<id>]` | The whole locked start transaction on main (refuses a sprint reserved by another wave) | 2 = overlap/claimed/foreign-reserved, 75 = busy |
-| `unstart.sh S-NNN [--reason "…"]` | The locked inverse: in-progress → backlog (keeps `plan_date`/`touches:`/decisions; clears `wave:`) | 2 = not in flight / branch has commits, 75 = busy |
-| `reserve-wave.sh S-A S-B… \| --drop W-<id> S-NNN \| --release W-<id>` | Locked wave reservation: mints `W-<id>`, writes `wave:` into backlog members so concurrent sessions can't take them or overlapping claims | 2 = member gone/reserved/overlap, 75 = busy |
-| `merge-sprint.sh prepare\|land\|finish\|abort <branch>` | The locked completion (merge queue); `land`/`finish` take `--sprints S-A,S-B,…` in train mode to land a whole segment in one merge + one completion commit | 3 = re-run gate, 4 = author docs, 75 = busy |
+| `claims.mjs` | `check` claims overlap vs in-flight sprints; `add` expands a claim (locked main commit, pushed via `ledger-push.sh`); `waves` (in-flight + reserved sprints pinned to Wave 1). Tokens: `claims-tokens.json` | 2 = overlap / unknown token, 3 = `add` committed, push withheld |
+| `regen.mjs` | Regenerate the marker-delimited blocks in INDEX.md + ROADMAP.md (`--check` for drift, broken INDEX `done/` links and duplicate TODOS ids) | 2 = drift / unknown token |
+| `check-ledger-links.mjs [--check]` | Relink INDEX `(done/…)` links orphaned by archive rotation; `--check` also flags unresolved links + duplicate TODOS ids | 2 = issues remain |
+| `start.sh S-NNN --touches "…" [--wave W-<id>]` | The whole locked start transaction on main (refuses a sprint reserved by another wave) | 2 = overlap/claimed/foreign-reserved, 3 = committed, push withheld, 75 = busy |
+| `unstart.sh S-NNN [--reason "…"]` | The locked inverse: in-progress → backlog (keeps `plan_date`/`touches:`/decisions; clears `wave:`) | 2 = not in flight / branch has commits, 3 = committed, push withheld, 75 = busy |
+| `reserve-wave.sh S-A S-B… \| --drop W-<id> S-NNN \| --release W-<id>` | Locked wave reservation: mints `W-<id>`, writes `wave:` into backlog members so concurrent sessions can't take them or overlapping claims | 2 = member gone/reserved/overlap, 3 = committed, push withheld, 75 = busy |
+| `merge-sprint.sh prepare\|land\|finish\|abort <branch>` | The locked completion (merge queue); `land`/`finish` take `--sprints S-A,S-B,…` in train mode to land a whole segment in one merge + one completion commit. `finish` never pushes | 3 = re-run gate, 4 = author docs, 5 = incomplete record, 75 = busy |
 | `frontmatter.mjs get\|set` | Read/write sprint frontmatter fields round-trip-safely | |
-| `push-main.sh [--wait <secs>]` | Lock-guarded batch push of deferred wave commits; guards against a `[skip ci]` HEAD hiding a code push | 75 = busy |
+| `push-main.sh [--wait <secs>] [--expect <ids>] [--allow-foreign]` | The only code-bearing pusher: classifies the range by sprint id **before** pushing; with `--expect`, refuses another sprint's code; guards against a `[skip ci]` HEAD hiding a code push; prints the `verify-ci.sh` command | 2 = FOREIGN code (ask before `--allow-foreign`), 75 = busy |
+| `ledger-push.sh <root> <branch>` | Ledger-only push used by the lifecycle scripts (caller holds the lock): pushes only if every unpushed commit is `docs/`/`.claude/` | 3 = withheld (code on local main), 1 = error |
+| `verify-ci.sh <sha> --base <old>` | Waits for the required CI workflows (`ci-gates.json`) + optional deploy; fails closed | 0 = green, 1 = red, 2 = not verifiable (not green) |
+| `worktree-link.sh setup\|teardown <wt>` | Worktree env-file copy + link-mode dependency links (`worktree-links.json`); teardown verifies no primary link points into the worktree | 1 = refused (reason printed) |
 
 ## Step 0 (silent): template update check
 
@@ -95,8 +99,9 @@ Print the current kanban state:
 8. **Unpushed ledger check**: run `git rev-list --count origin/<main>..<main>` (guard: skip if
    the `origin/<main>` ref doesn't exist). If the count is > 0 and no wave is currently live,
    classify the range: `git diff --name-only origin/<main>..<main> | grep -vE '^(docs/|\.claude/)'`
-   — **non-empty** → "unpushed completion awaiting deploy confirmation — `push-main.sh`
-   pushes and deploys via any connected platform"; **empty** → warn that main carries
+   — **non-empty** → "unpushed completion awaiting deploy confirmation — `push-main.sh
+   --expect <its ids>` pushes and deploys via any connected platform" (local `main` is shared:
+   name whose sprints they are from the commit subjects); **empty** → warn that main carries
    unpushed lifecycle commits and suggest `bash scripts/sprint/push-main.sh`.
 
 Format as a concise board view. (Ignore `.gitkeep` files when counting.)
@@ -112,6 +117,8 @@ from the sprint's Files lists → `claims.mjs check` (stop and ask on overlap) �
 create + enter the sprint worktree from the post-start main tip
 (`git worktree add .claude/worktrees/S-NNN-… -b S-NNN-… main` then `EnterWorktree {path}`;
 if the branch already exists another agent owns the sprint — stop and ask) →
+`scripts/sprint/worktree-link.sh setup` (env files; dependency links in link mode — in install
+mode, then install deps) →
 DOC_HEALTH-gated + tag-scoped doc validation → 2–4 architectural tradeoff questions.
 Then begin executing deliverables sequentially per **Phase 2: Execution** (commit atomically
 per deliverable, run `scripts/sprint/gate.sh` before each commit, and respect the
@@ -132,13 +139,14 @@ main untouched, fix and re-run; merges to main, moves the file, stamps `### Comm
 regenerates; exits 4) →
 author the semantic docs on main (DOC_HEALTH.md, INDEX Done-row — one sentence — + header,
 ROADMAP narrative, the done-file's `Docs synced`/`New docs`/`ADR check` rows)
-→ **`merge-sprint.sh finish S-NNN-… --no-push`** (commits, releases the lock — the
+→ **`merge-sprint.sh finish S-NNN-…`** (commits, releases the lock, **never pushes** — the
 completion commit intentionally carries no `[skip ci]`, since its eventual push is what
 lands the code) → **deploy gate**: ask via AskUserQuestion — **Push now (deploy)**
-(recommended: `bash scripts/sprint/push-main.sh`, then verify CI green per Phase 3 Step 6)
+(recommended: `bash scripts/sprint/push-main.sh --expect S-NNN`, then verify CI with the
+`verify-ci.sh <sha> --base <old>` command it prints — exit 2 is not green; Phase 3 Step 6)
 or **Hold** (keep commits local; report that main is ahead of origin — the board surfaces
-it; push later with `push-main.sh`, which carries the CI check with it) →
-exit + remove the worktree and branch (Phase 3 Step 6).
+it; push later with `push-main.sh --expect S-NNN`, which carries the CI check with it) →
+`worktree-link.sh teardown` → exit + remove the worktree and branch (Phase 3 Step 6).
 
 ### `/sprint create [title]`
 
@@ -238,7 +246,8 @@ open decisions into one AskUserQuestion round, write the answers into the sprint
 Pre-Sprint Decisions — two short locked commits, both `[skip ci]`, neither pushed), then run
 **`start.sh --wave W-<id> --no-push` + worktree creation per sprint yourself** (serialized, on
 `main`, under the lock — you stay parked on `main` and never EnterWorktree; after the last
-start, checkpoint P2 — `bash scripts/sprint/push-main.sh`, a ledger-only push, zero CI),
+start, checkpoint P2 — `bash scripts/sprint/push-main.sh --expect <wave ids>`, a ledger-only
+push, zero CI),
 **dispatch one `sprint-executor` subagent per sprint** (single message = parallel) to run
 **Phase 2 only** in its worktree via `git -C` — each runs a `reviewer` child over its branch
 and writes the Completion Log into its sprint file before returning (DONE / BLOCKED /
@@ -246,15 +255,17 @@ NEEDS_CLAIM / **PLAN_GAP** + a pointer report; the master checks the record with
 `close-check.mjs --json`, never by reading the file). **Advise
 blocked executors yourself** (answer from plan/repo context and continue the same agent via
 SendMessage; escalate to the user only for genuine tradeoffs), then **complete finished
-sprints one at a time** with `merge-sprint.sh finish <branch> --no-push` (Phase 3 is
+sprints one at a time** with `merge-sprint.sh finish <branch>` (Phase 3 is
 lock-serialized and cannot be fanned out; pre-draft the semantic docs before taking the lock).
 Keep the durable ledger in `.claude/sprint-orchestration/W-<id>/`. Optional `N` caps the wave
 size. After the wave lands, dispatch a `reviewer` subagent over the merged result (adjudicate
 its findings — don't read the diffs yourself; ORCHESTRATION Step 6 adds a conditional
 second "outside voice" reviewer for high-risk waves), release any leftover reservations,
 then run **checkpoint P3 (mandatory)** — ask the deploy-gate question (Push now (deploy) /
-Hold — ORCHESTRATION "Push policy"), and on confirmation `bash scripts/sprint/push-main.sh`,
-the wave's single CI-triggering push — and verify CI green against it (PROTOCOL Phase 3
+Hold — ORCHESTRATION "Push policy"), and on confirmation
+`bash scripts/sprint/push-main.sh --expect <wave ids>`, the wave's single CI-triggering push
+(after the wave-end checks on merged `main`: repo-wide guard tests, and the e2e suite if any
+member touched it) — and verify CI green against it with `verify-ci.sh` (PROTOCOL Phase 3
 Step 6, run once for the whole wave; see ORCHESTRATION Step 6 for red-run recovery).
 Recompute the next wave. Multiple
 waves can run from different terminal sessions — see ORCHESTRATION.md "Running waves from
@@ -280,8 +291,8 @@ fresh `sprint-executor` per sprint (pass the predecessor's boundary SHA as the r
 diff base), advise BLOCKED executors yourself (SendMessage continuation; decision-ladder
 auto-answers recorded as `(train, auto)`). Every K sprints (default 3, `--every K` to
 change) and at the end: a **checkpoint** — `merge-sprint.sh prepare` → `land --sprints
-S-A,S-B,…` → apply pre-drafted docs → `finish --sprints … --no-push` → push **per the T1
-push policy** (`push-main.sh` is the segment's single CI push; "ask-each" pauses for the
+S-A,S-B,…` → apply pre-drafted docs → `finish --sprints …` → push **per the T1
+push policy** (`push-main.sh --expect <landed ids>` is the segment's single CI push; "ask-each" pauses for the
 deploy-gate question first, "hold" skips it until the final T7 push) → verify CI green
 once. Hard stops only: 2nd PLAN_GAP on one
 sprint, red checkpoint CI not cured by one fix, a NOT_READY delta verdict, or an
@@ -289,7 +300,7 @@ irreversible tradeoff. `--fast-gate` (opt-in) relaxes per-commit gates to the ch
 subset with the full gate mandatory at sprint boundaries. Ledger:
 `.claude/sprint-orchestration/W-<id>/train-progress.md` (per-sprint boundary SHAs). Close:
 post-train `reviewer` over merged main (plus the conditional outside-voice second reviewer,
-ORCHESTRATION Step 6/T7), release leftovers, final `push-main.sh` (gated per the T1 policy)
+ORCHESTRATION Step 6/T7), release leftovers, final `push-main.sh --expect <train ids>` (gated per the T1 policy)
 + CI verify, remove the train worktree/branch.
 
 ## No Arguments

@@ -70,7 +70,10 @@ touches:
   `/**`, or a token. No mid-path wildcards. Tokens are defined in
   `scripts/sprint/claims-tokens.json` — keep a `deps` token (the lockfile is the classic
   hidden conflict) and a `schema` token if the project has one (two parallel migrations
-  conflict structurally even in different files).
+  conflict structurally even in different files). A token-shaped claim (`word` or `word:word`)
+  that is neither defined there nor an existing file/dir at the repo root **fails loud** —
+  `claims.mjs check`/`add`/`waves` (and so `start.sh`/`reserve-wave.sh`) exit 2 naming it —
+  instead of silently becoming an exact-path claim that overlaps nothing.
 - **What to claim:** files the sprint will *modify*, plus its likely doc-sync targets.
   Always exempt: the sprint's own file, its own `docs/sprints/evidence/S-NNN/` directory,
   and the three generated docs.
@@ -94,10 +97,16 @@ the lifecycle paths if a transaction died mid-flight; abort any in-progress merg
 Two guarantees the scripts already enforce, stated for multi-session operation: every locked
 transaction **pulls `--ff-only` before mutating and pushes before releasing the lock** —
 commit + push form one critical section, so two sessions cannot race pushes to `main` —
-unless the caller defers (`--no-push` — the wave orchestrator's mode, and now the rule for
-`finish` in **every** mode: the code-bearing completion push settles after the lock via the
-deploy gate + `scripts/sprint/push-main.sh`, which takes the lock itself; see ORCHESTRATION
-"Push policy"); and a failed push leaves
+unless the caller defers (`--no-push` — the wave orchestrator's mode). `finish` never pushes
+in **any** mode: the code-bearing completion push settles after the lock via the deploy gate +
+`scripts/sprint/push-main.sh --expect <your sprint ids>`, which takes the lock itself and
+refuses (exit 2) a range carrying another sprint's code; see ORCHESTRATION "Push policy". The
+ledger scripts (`start.sh`, `unstart.sh`, `reserve-wave.sh`, `claims.mjs add`) push only through
+`scripts/sprint/ledger-push.sh`, which pushes **ledger-only or nothing**: if local `main` (shared
+by every session in the checkout) carries unpushed code commits, it keeps your ledger commit
+local, prints those commits and the `push-main.sh --expect <ids>` their owner settles with, and
+the caller exits **3** ("committed locally, push withheld" — not a failure of your transaction,
+distinct from exit 2 "rolled back"). A failed push leaves
 the local commit intact with printed recovery instructions. When another session's wave is
 live, pass `--wait 900` to `start.sh` and `merge-sprint.sh prepare` — the other wave's
 completion legitimately holds the lock across its prepare→land→finish window.
@@ -153,10 +162,12 @@ Do NOT silently skip unmet dependencies.
    Under the lock it re-checks claims, moves `backlog/ → in-progress/`, sets
    `status: in-progress` / `start_date` / `touches:`, regenerates the INDEX/ROADMAP blocks,
    commits `sprint: start S-NNN — [name]` **on `main`**, verifies the committed frontmatter
-   survived, and pushes. It prints the new `main` SHA — the worktree branches from it. In wave
-   mode the orchestrator passes `--no-push`, deferring this push to the wave's checkpoint
-   push (`scripts/sprint/push-main.sh`; see ORCHESTRATION "Push policy") — solo starts always
-   push immediately.
+   survived, and pushes (via `ledger-push.sh` — exit 3 means the start committed but the push
+   was withheld because local `main` carries someone else's code; proceed, the worktree
+   branches from the printed SHA either way). It prints the new `main` SHA — the worktree
+   branches from it. In wave mode the orchestrator passes `--no-push`, deferring this push to
+   the wave's checkpoint push (`scripts/sprint/push-main.sh`; see ORCHESTRATION "Push policy")
+   — solo starts always push immediately.
 
    The inverse exists: `scripts/sprint/unstart.sh S-NNN` is the **only** sanctioned way to
    move an in-flight sprint back to `backlog/` (locked; refuses if the branch carries
@@ -174,10 +185,38 @@ Do NOT silently skip unmet dependencies.
 4. Switch the session in with `EnterWorktree {path: ".claude/worktrees/S-NNN-kebab-name"}`.
    All subsequent deliverable reads, edits, and commits happen inside the worktree — the
    primary checkout is only touched via the lifecycle scripts.
-5. Setup: copy untracked env files from the primary checkout (e.g.
-   `cp <repo-root>/.env .env` — match whatever the project actually uses), then install
-   dependencies with `{{PACKAGE_MANAGER}}` (worktrees don't share installed modules). The
-   install may run in the background while Step 5 proceeds.
+5. Setup: `bash <repo-root>/scripts/sprint/worktree-link.sh setup <worktree>` — copies the
+   untracked env files listed in `scripts/sprint/worktree-links.json` (`envFiles`) from the
+   primary checkout and, in link mode, links the shared dependency dirs (see "Worktree
+   toolchain" below). In **install mode** (the default: empty `links`) then install
+   dependencies with `{{PACKAGE_MANAGER}}` — the install may run in the background while
+   Step 5 proceeds. In **link mode** never install in the worktree.
+
+#### Worktree toolchain
+
+`scripts/sprint/worktree-links.json` picks one of two models:
+
+- **Install mode** (`links: []`, the default) — each worktree installs its own dependencies.
+  `worktree-link.sh setup` only copies `envFiles`; `teardown` is a passing no-op check.
+- **Link mode** (`links` lists dependency dirs, e.g. `node_modules` and per-package
+  `*/node_modules`) — every worktree shares the primary checkout's single install via
+  symlinks. `setup` links each entry to the primary's copy, parks a real copy already in the
+  worktree (e.g. a desktop-app session worktree created with its own root install) under
+  `<worktree git dir>/worktree-link-aside/` so there is exactly **one** dependency store
+  (two stores make type checkers see every package twice), keeps entries listed in
+  `keepIfReal` (generated dirs a sprint regenerates locally), and copies `envFiles`. It refuses
+  in the primary checkout, refuses to replace a link pointing somewhere unexpected, and is
+  idempotent. Rules in link mode:
+  - Never run `{{PACKAGE_MANAGER}}` (install, or any script that may trigger one) inside a
+    linked worktree — it rewrites the *primary's* store through the links. Install and
+    regenerate dependencies in the primary checkout only; use direct tool binaries in the
+    worktree.
+  - `gate.sh` / `pre-push-gate.sh` detect any linked worktree (`worktree-guard.sh`) and, when
+    the project set the worktree gate commands at install, run that reduced gate instead and
+    say so — report a reduced pass as reduced, never as a full gate pass.
+  - **Teardown before removal:** `worktree-link.sh teardown <worktree>` removes the links,
+    restores anything parked aside, and exits 1 if any link in the primary still points into
+    the worktree. Do not `git worktree remove` until it passes.
 
 ### Step 5: Doc Drift Validation (token-optimized)
 
@@ -398,6 +437,15 @@ brief — is also prepended to `docs/sprints/PLANNING_LEARNINGS.md` (a doc-sync 
 `main` during Step 5's pause, or claim the file; never delete older entries). Other classes
 stay in the sprint file, greppable across `done/` via `### Learnings`.
 
+### Step 3.8: End-to-End Suite Check (projects with an e2e suite)
+
+If the sprint's `touches:` adds or changes end-to-end specs (or the code paths they drive),
+run that suite locally **before the code-bearing push** — CI is not the first place a new spec
+runs. Record the **pass / fail / skip counts** in the Completion Log, not the exit code: an e2e
+runner that skips everything (missing seed data, an unmet precondition) exits 0 and looks
+green. Specs that cannot run locally are listed by name with the reason. Wave mode runs this
+once, on the merged `main`, before checkpoint P3 (ORCHESTRATION Step 6) rather than per sprint.
+
 ### Step 4: Prepare (locked)
 
 Run `<repo-root>/scripts/sprint/merge-sprint.sh prepare S-NNN-kebab-name`. It acquires the
@@ -441,20 +489,23 @@ the sprint branch.
      `main` can answer — `Docs synced`, `New docs registered`, `ADR check` (from Steps 2–3
      or the doc-sync agent's return) — and, when the deploy gate decides, `Deployed`.
      Prepend any `plan`-class `### Learnings` line to `docs/sprints/PLANNING_LEARNINGS.md`.
-3. `merge-sprint.sh finish S-NNN-kebab-name --no-push` — verifies the moved file kept
+3. `merge-sprint.sh finish S-NNN-kebab-name` — verifies the moved file kept
    `status: done` (commit hooks that stash unstaged changes can silently drop edits made
    around a `git mv`), guards against `" 2."` macOS sync-duplicate files, commits
    `sprint: complete S-NNN — [name]` with explicit paths `--no-verify`, and releases
-   the lock. **`--no-push` is now the rule in every mode** — the code-bearing push is
-   settled after the lock is released, behind the deploy gate. Other ledger-only lifecycle
+   the lock. **`finish` never pushes, in any mode** (`--no-push` is accepted as a no-op) —
+   the code-bearing push is settled after the lock is released, behind the deploy gate, by
+   `push-main.sh --expect <ids>` only. Other ledger-only lifecycle
    commits (start, claim expansions, wave reservations)
    carry a trailing ` [skip ci]`; this completion commit never does — it is the HEAD of a
    code-bearing push, and a skip marker there would skip CI for the landed code.
    - **Solo:** ask the deploy-gate question (AskUserQuestion — pushing `main` deploys via
      any connected platform): **Push now (deploy)** (recommended) → `bash
-     scripts/sprint/push-main.sh`, then Step 6's CI check; **Hold** → keep commits local,
-     state that main is ahead of origin (the board surfaces it; `push-main.sh` is the
-     catch-up path and Step 6 rides the eventual push). Never ask while the lock is held —
+     scripts/sprint/push-main.sh --expect S-NNN`, then Step 6's CI check (exit 2 = the range
+     carries another sprint's code: show the printed groups and ask before re-running with
+     `--allow-foreign`); **Hold** → keep commits local,
+     state that main is ahead of origin (the board surfaces it; `push-main.sh --expect S-NNN`
+     is the catch-up path and Step 6 rides the eventual push). Never ask while the lock is held —
      `finish` releases it first.
    - **Wave mode:** the push defers to the wave's gated checkpoint push
      (ORCHESTRATION "Push policy" / checkpoint P3).
@@ -469,10 +520,20 @@ to the recorded pre-land SHA and releases the lock.
 
 1. **If the project has CI**, verify the completion push's runs are green before declaring the
    sprint closed — pushed-but-red is a silent failure mode: the push step always ran, but
-   nobody read the result. Poll the runs for the completion push until they finish
-   (e.g. `gh run list --branch <main> --limit 5`, or `gh run watch <id>`). A red run
+   nobody read the result. Run the command `push-main.sh` printed:
+   `bash scripts/sprint/verify-ci.sh <pushed sha> --base <pre-push origin tip>`. It waits for
+   each required workflow in `scripts/sprint/ci-gates.json` (and the deploy, if
+   `deployEnvironment` is set) and **fails closed**: exit 0 = green or provably not triggered
+   by this range; 1 = red (failure / timed out / failed deploy); **2 = not verifiable, which is
+   not green** — an expected run that never appeared within the grace period, a `gh` error,
+   cancelled, timeout, or missing config. Omitting `--base` makes every gate expected (the
+   docs-only shortcut needs the base to prove it). `SKIP_CI_VERIFY=1` requires
+   `SKIP_CI_VERIFY_REASON="<why>"` and the reason goes in the close summary. Cite the run IDs
+   it prints, not just the exit code. A red run
    **reopens the sprint's close**: fix on a follow-up commit (small fixes can go straight to
-   `main` under the lock; anything larger reopens the worktree), then re-verify. Cite the
+   `main` under the lock; anything larger reopens the worktree), then re-verify. Tag the fix
+   commit's subject with the sprint id (`fix(S-NNN): …`) — `push-main.sh --expect` treats a
+   commit with no sprint id as foreign code and refuses it. Cite the
    green run IDs in the close summary. (No CI? skip this step.) The check runs against the
    **actual** push, whenever the deploy gate lets it happen — a held push carries this
    check with it. (Wave mode: this check runs
@@ -480,8 +541,10 @@ to the recorded pre-land SHA and releases the lock.
    not after each sprint's `finish`.)
 2. `ExitWorktree {action: "keep"}` — returns the session to the primary checkout
    (path-entered worktrees are not auto-removed, so "keep" is correct here).
-3. `git worktree remove .claude/worktrees/S-NNN-kebab-name`
-4. `git branch -d S-NNN-kebab-name` (safe: the branch is merged).
+3. `bash scripts/sprint/worktree-link.sh teardown .claude/worktrees/S-NNN-kebab-name` — must
+   pass before removal (see "Worktree toolchain").
+4. `git worktree remove .claude/worktrees/S-NNN-kebab-name`
+5. `git branch -d S-NNN-kebab-name` (safe: the branch is merged).
 
 ---
 

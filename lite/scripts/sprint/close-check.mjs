@@ -18,7 +18,7 @@
 // heading, so Testing / Open Questions checkboxes are untouched):
 //   criterion-unevidenced  checked Automated criterion not followed by `- Evidence:`
 //   criterion-unchecked    unchecked Automated criterion without `descoped:`
-//   manual-unconfirmed     Manual criterion not `[x] … confirmed` and not descoped
+//   manual-unconfirmed     Manual criterion not `[x] … confirmed` (any case) and not descoped
 //   record-missing         no `## Completion Log` heading at all
 //   section-missing        a required `### ` subsection is absent
 //   outcome-empty          `### Outcome` has no prose
@@ -149,7 +149,8 @@ if (delivStart !== -1) {
     const descoped = /\bdescoped:/.test(body);
     if (mode === "manual") {
       counts.manual++;
-      if (checked && /\bconfirmed\b/.test(body)) counts.manual_confirmed++;
+      // Case-insensitive: "— Confirmed 2026-09-01" is the same human sign-off.
+      if (checked && /\bconfirmed\b/i.test(body)) counts.manual_confirmed++;
       else if (!checked && descoped) counts.descoped++;
       else criterionFinding("manual-unconfirmed", i);
     } else {

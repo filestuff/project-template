@@ -261,7 +261,10 @@ older entries). Other classes stay in the sprint file, greppable across `done/` 
      main is ahead of origin so the held push isn't forgotten.
 5. **If the project has CI**, after pushing verify the completion commit's runs are green
    before declaring the sprint closed (e.g. `gh run list --limit 5`) — a red run reopens the
-   close: fix, re-push, re-verify. (No CI? skip this step.) A held push carries this check
+   close: fix, re-push, re-verify. **Fail closed:** a run you expected for this push that has
+   not appeared yet, is still in progress, or could not be read (`gh` error) is *not* green —
+   keep waiting or say it is unverified; "no red run listed" is not evidence. Cite the run IDs
+   for the pushed SHA. (No CI? skip this step.) A held push carries this check
    with it — it runs whenever the push happens.
 
 ---

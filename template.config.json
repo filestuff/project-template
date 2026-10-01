@@ -27,6 +27,14 @@
       "prompt": "Cheap pre-push checks — the fast subset of CI to run on every push (skips doc-only pushes); blank/`:` = gitleaks-only",
       "files": ["scripts/sprint/pre-push-gate.sh"]
     },
+    "{{WORKTREE_GATE_COMMANDS}}": {
+      "prompt": "Reduced commit gate run inside a linked sprint worktree in link mode (direct tool binaries, never the package manager); blank = run the normal gate everywhere (install mode / lite tier)",
+      "files": ["scripts/sprint/gate.sh"]
+    },
+    "{{WORKTREE_PREPUSH_GATE_COMMANDS}}": {
+      "prompt": "Reduced pre-push checks run inside a linked sprint worktree in link mode; blank = run the normal pre-push gate everywhere (install mode / lite tier)",
+      "files": ["scripts/sprint/pre-push-gate.sh"]
+    },
     "{{PACKAGE_MANAGER}}": {
       "prompt": "Package manager / dependency install command prefix (npm | pnpm | yarn | pip | cargo | ...)",
       "files": [".claude/settings.json", "docs/sprints/PROTOCOL.md", "docs/sprints/ORCHESTRATION.md"]
@@ -43,6 +51,8 @@
     "$comment": "Read by upgrade.mjs plan/apply (classOf). 'seeded': copied once at bootstrap, never auto-merged on upgrade (structural changes ship as migrations/). 'merged': handled by a dedicated merge flow, never plan-merged; the value names the strategy (merge-claude-block / merge-settings subcommands). Keys are dest paths relative to the downstream repo root.",
     "seeded": [
       "scripts/sprint/claims-tokens.json",
+      "scripts/sprint/ci-gates.json",
+      "scripts/sprint/worktree-links.json",
       "docs/sprints/INDEX.md",
       "docs/sprints/ROADMAP.md",
       "docs/TODOS.md"
@@ -56,6 +66,8 @@
     "chmod+x": ["scripts/sprint/*.sh", "scripts/template/*.sh"],
     "writePerProject": [
       "scripts/sprint/claims-tokens.json (full tier — from stack answers)",
+      "scripts/sprint/ci-gates.json (full tier — required CI workflows {name,file} + optional deployEnvironment, from stack answers)",
+      "scripts/sprint/worktree-links.json (full tier — envFiles always; link mode adds links/keepIfReal/scanExclude)",
       ".claude/settings.json env.SPRINT_MAIN_BRANCH (only if default branch != main)"
     ]
   }
