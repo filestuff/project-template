@@ -32,16 +32,25 @@ function stripComment(s) {
   return (i === -1 ? s : s.slice(0, i)).trim();
 }
 
+function unquote(s) {
+  return s.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+}
+
+// Array items are unquoted too: `touches: ["a/b.py"]` must claim a/b.py, not "a/b.py".
+function parseItem(raw) {
+  return unquote(stripComment(raw.trim()));
+}
+
 function parseScalar(raw) {
   const v = stripComment(raw);
   if (v === "" || v === "null" || v === "~") return null;
   if (v.startsWith("[")) {
     const inner = v.replace(/^\[/, "").replace(/\]$/, "").trim();
     if (inner === "") return [];
-    return inner.split(",").map((s) => stripComment(s.trim()));
+    return inner.split(",").map(parseItem);
   }
   if (/^-?\d+$/.test(v)) return Number(v);
-  return v.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+  return unquote(v);
 }
 
 // Returns { fields: { name: value }, spans: { name: [startLine, endLine] }, lines, bodyStart }
@@ -65,7 +74,7 @@ export function parseFrontmatter(text) {
       const items = [];
       let j = i + 1;
       while (j < lines.length && /^\s+-\s/.test(lines[j])) {
-        items.push(stripComment(lines[j].replace(/^\s+-\s+/, "")));
+        items.push(parseItem(lines[j].replace(/^\s+-\s+/, "")));
         j++;
       }
       fields[key] = items.length > 0 ? items : null;

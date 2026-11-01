@@ -186,7 +186,9 @@ For each sprint, starting at S-{highest+1}, create a file from
   `plan_date`.
 - **Full tier only** (if `scripts/sprint/claims.mjs` exists): populate `touches:` from the
   Files lists you just wrote, plus tokens from `scripts/sprint/claims-tokens.json` and likely
-  doc-sync targets — `/sprint start` verifies rather than re-derives it.
+  doc-sync targets — `/sprint start` verifies rather than re-derives it. Write it as a
+  block list of bare items (`touches:` then `  - src/x.ts` lines), never an inline quoted
+  array like `touches: ["src/x.ts"]`: the template stub's `touches: []` is for empty only.
 
 **Full tier only — verify the parallel schedule** (only if `scripts/sprint/claims.mjs` exists):
 after writing every sprint's `touches:`, run `node scripts/sprint/claims.mjs waves` and read the

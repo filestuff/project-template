@@ -25,6 +25,9 @@ touches: []
 <!-- touches: is the file-claims manifest — FULL TIER ONLY (ignored in lite).
      /sprint plan populates it from the deliverables' Files lists: exact paths,
      `dir/**` prefixes, or tokens from scripts/sprint/claims-tokens.json.
+     Write it as a block list of bare, unquoted items (`touches:` then one
+     `  - path` line each), not an inline `["a", "b"]` array; keep `[]` only
+     for an empty manifest.
      /sprint start re-derives or verifies it and checks overlap with in-flight
      sprints. -->
 
