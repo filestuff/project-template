@@ -4,6 +4,15 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [Unreleased]
+
+- **Quoted `touches:` claims now match** (`frontmatter.mjs`). An inline array like
+  `touches: ["src/a.ts", "docs/x/**"]` (the form `/plan` tended to write) kept the quote
+  characters in every item, so `claims.mjs check`/`waves` compared `"src/a.ts"` against
+  `src/a.ts` and reported FREE for a real overlap. Inline and block-list items are now
+  unquoted like scalars. `/plan` and `SPRINT_TEMPLATE.md` now ask for a block list of bare
+  items. No migration: existing quoted manifests parse correctly after the upgrade.
+
 ## [1.10.0] - 2026-09-01
 
 The sprint file becomes the **durable completion record**. Measured across three downstream
