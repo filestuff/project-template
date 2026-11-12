@@ -240,7 +240,7 @@ function currentBranch(dir) {
 }
 
 // ---------------------------------------------------------------- Bash guards
-const LIFECYCLE = /(^|\/)scripts\/sprint\/(start|unstart|merge-sprint|lock|reserve-wave|push-main|assemble-train)\.sh$/;
+const LIFECYCLE = /(^|\/)scripts\/sprint\/(start|unstart|merge-sprint|lock|reserve-wave|push-main|assemble-train|ledger-push)\.sh$/;
 
 function bashGuard(input, projectDir) {
   const command = input.tool_input?.command;

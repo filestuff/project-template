@@ -11,8 +11,9 @@
 # with real work should go to rejected/ (keeping its branch) or be completed, not
 # unstarted. --force overrides after you have confirmed the work is disposable.
 #
-# Exit codes: 0 ok · 2 not in-flight / branch has commits · 75 lock busy ·
-# 1 unexpected (transaction rolled back)
+# Exit codes: 0 ok · 2 not in-flight / branch has commits · 3 unstarted locally
+# but push withheld — local main carries non-ledger commits (ledger-push.sh);
+# the unstart stands · 75 lock busy · 1 unexpected (transaction rolled back)
 set -euo pipefail
 
 SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -99,12 +100,21 @@ MSG="$MSG [skip ci]"
 git -C "$ROOT" commit --no-verify -q -m "$MSG" -- "${PATHS[@]}" "docs/sprints/in-progress/$BASENAME"
 COMMITTED=1
 
-# Survival check (grep without -q: -q SIGPIPEs git-show and trips pipefail).
-git -C "$ROOT" show "HEAD:docs/sprints/backlog/$BASENAME" | grep '^status: backlog' >/dev/null ||
+# Survival check. Read ONCE into a variable: piping `git show` into a grep that
+# exits early SIGPIPEs git-show, and pipefail turns that into a false FATAL.
+COMMITTED_FILE=$(git -C "$ROOT" show "HEAD:docs/sprints/backlog/$BASENAME")
+grep -q '^status: backlog' <<<"$COMMITTED_FILE" ||
   { echo "FATAL: committed sprint file is not status: backlog — inspect HEAD" >&2; exit 1; }
 
+# Guarded push: ledger-push.sh withholds (exit 3) when local main also carries
+# another session's unpushed code — the unstart itself stands.
+PUSH_RC=0
 if [[ $NO_PUSH -eq 0 ]]; then
-  git -C "$ROOT" push origin "$MAIN" || { echo "push failed — local unstart commit is intact; resolve and push" >&2; exit 1; }
+  "$SELF_DIR/ledger-push.sh" "$ROOT" "$MAIN" || PUSH_RC=$?
+  if [[ $PUSH_RC -ne 0 && $PUSH_RC -ne 3 ]]; then
+    echo "push failed — local unstart commit is intact; resolve and push" >&2
+    exit 1
+  fi
 else
   AHEAD=$(git -C "$ROOT" rev-list --count "origin/$MAIN..$MAIN" 2>/dev/null || echo '?')
   echo "push deferred — local $MAIN is $AHEAD commit(s) ahead of origin/$MAIN; wave checkpoints push via scripts/sprint/push-main.sh"
@@ -112,3 +122,7 @@ fi
 
 echo "unstarted $SPRINT — back in backlog/ on $MAIN at $(git -C "$ROOT" rev-parse HEAD)"
 echo "cleanup (if they exist): git worktree remove .claude/worktrees/$BRANCH · git branch -D $BRANCH"
+if [[ $PUSH_RC -eq 3 ]]; then
+  echo "unstart committed locally, push withheld (see ledger-push above); exiting 3" >&2
+  exit 3
+fi

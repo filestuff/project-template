@@ -152,8 +152,8 @@ node --input-type=module -e '
 import { computeReady } from "'"$CL"'";
 import assert from "node:assert";
 const { ready, blocked } = computeReady([
-  { sprint: "S-001", dir: "backlog", touches: ["a"], depends_on: [] },
-  { sprint: "S-002", dir: "backlog", touches: ["a"], depends_on: [] },
+  { sprint: "S-001", dir: "backlog", touches: ["src/a.txt"], depends_on: [] },
+  { sprint: "S-002", dir: "backlog", touches: ["src/a.txt"], depends_on: [] },
 ], undefined);
 assert.deepStrictEqual(ready.map((s) => s.sprint), ["S-001"]);
 assert.deepStrictEqual(blocked, [{ sprint: "S-002", reason: "claims overlap S-001 (ready ahead of it)" }]);

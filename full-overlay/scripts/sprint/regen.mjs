@@ -5,19 +5,35 @@
 // LLM-maintained and untouched here.
 //
 //   regen.mjs           # rewrite blocks in place
-//   regen.mjs --check   # exit 2 (listing blocks) if any block is out of date
+//   regen.mjs --check   # exit 2 (listing problems) if any block is out of date, OR
+//                       # if INDEX.md's done/ links have rotted or docs/TODOS.md
+//                       # repeats an id (see check-ledger-links.mjs)
 //
-// Blocks — INDEX.md: totals, in-progress, backlog · ROADMAP.md: graph, critical-path
+// Exit 2 also when a sprint's `touches:` carries an unknown claim token (the
+// wave schedule cannot be computed) — nothing is written in that case.
+//
+// Blocks — INDEX.md: totals, in-progress, backlog · ROADMAP.md: graph, critical-path, waves
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot, allSprints, shortLabel } from "./frontmatter.mjs";
 import { computeWaves, planStatus } from "./claims.mjs";
+import { checkLinks, checkTodosIds } from "./check-ledger-links.mjs";
 
 const root = repoRoot();
 const check = process.argv.includes("--check");
 const sprints = allSprints(root);
 const byId = new Map(sprints.map((s) => [s.sprint, s]));
+
+// Computed before any block is written, so a bad claim token cannot leave
+// INDEX.md regenerated and ROADMAP.md stale.
+let schedule;
+try {
+  schedule = computeWaves(sprints);
+} catch (err) {
+  console.error(`regen: cannot compute the wave schedule — ${err.message ?? String(err)}`);
+  process.exit(2);
+}
 const isDone = (id) => ["done", "done/archive"].includes(byId.get(id)?.dir);
 
 function bucket(dir) {
@@ -141,7 +157,7 @@ function genCriticalPath() {
 
 function genWaves() {
   // Derived parallel schedule: each wave is dependency-ready AND claim-disjoint.
-  const { waves, unscheduled } = computeWaves(sprints);
+  const { waves, unscheduled } = schedule;
   if (waves.length === 0) return ["_(no pending sprints)_"];
   const label = (s) => {
     const plan = s.dir === "backlog" ? planStatus(s, byId) : "fresh";
@@ -170,7 +186,7 @@ const FILES = {
   "docs/sprints/ROADMAP.md": { graph: genGraph, "critical-path": genCriticalPath, waves: genWaves },
 };
 
-let drift = [];
+const drift = [];
 for (const [rel, blocks] of Object.entries(FILES)) {
   const path = join(root, rel);
   let text = readFileSync(path, "utf8");
@@ -191,8 +207,33 @@ for (const [rel, blocks] of Object.entries(FILES)) {
   if (!check) writeFileSync(path, text);
 }
 
-if (check && drift.length > 0) {
-  console.log(`DRIFT in generated blocks:\n  ${drift.join("\n  ")}`);
+const reasons = [];
+if (drift.length > 0) reasons.push(`DRIFT in generated blocks:\n  ${drift.join("\n  ")}`);
+
+if (check) {
+  const { rewrites, failures } = checkLinks(
+    join(root, "docs/sprints/INDEX.md"),
+    join(root, "docs/sprints"),
+  );
+  if (rewrites.length > 0 || failures.length > 0) {
+    const lines = [
+      ...rewrites.map((r) => `  needs rewrite: (${r.from}) -> (${r.to})`),
+      ...failures.map((f) => `  unresolved: (${f})`),
+    ];
+    reasons.push(
+      `LEDGER LINK issues in docs/sprints/INDEX.md (fix: node scripts/sprint/check-ledger-links.mjs):\n${lines.join("\n")}`,
+    );
+  }
+  const todosPath = join(root, "docs/TODOS.md");
+  if (existsSync(todosPath)) {
+    const { duplicates } = checkTodosIds(todosPath);
+    if (duplicates.length > 0)
+      reasons.push(`DUPLICATE TODOS ids in docs/TODOS.md: ${duplicates.map((d) => `#${d}`).join(", ")}`);
+  }
+}
+
+if (check && reasons.length > 0) {
+  console.log(reasons.join("\n\n"));
   process.exit(2);
 }
 console.log(check ? "generated blocks are current" : `regenerated${drift.length ? `: ${drift.join(", ")}` : " (no changes)"}`);

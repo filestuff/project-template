@@ -36,7 +36,7 @@ const deliverables = ({ evidence = true, manual = "confirmed", extraUnchecked = 
      - Automated:
        - [x] \`npm test\` → 3 passed
 ${evidence ? "         - Evidence: `npm test` → Tests 3 passed (3)\n" : ""}${extraUnchecked ? "       - [ ] `npm run lint` → clean\n" : ""}     - Manual (user-confirmed at close):
-       - [x] Looks right on mobile${manual === "confirmed" ? " — confirmed 2026-09-01" : ""}
+       - [x] Looks right on mobile${manual === "bare" ? "" : ` — ${manual} 2026-09-01`}
 
 ### Out of Scope
 
@@ -103,6 +103,15 @@ check("unchecked criterion → criterion-unchecked", r.code === 5 && /criterion-
 // 4. Manual checked without 'confirmed'
 r = run("manual.md", FM + deliverables({ manual: "bare" }) + log());
 check("manual [x] without confirmed → manual-unconfirmed", r.code === 5 && /manual-unconfirmed/.test(r.out), r.out);
+
+// 4b. Manual 'confirmed' is matched case-insensitively (a capitalised sign-off is still a sign-off)
+for (const word of ["Confirmed", "CONFIRMED"]) {
+  r = run(`manual-${word}.md`, FM + deliverables({ manual: word }) + log());
+  check(`manual [x] '— ${word} <date>' passes`, r.code === 0 && /manual=1\/1/.test(r.out), r.out);
+}
+// ...but a word that merely contains it is not a sign-off
+r = run("manual-unconfirmed.md", FM + deliverables({ manual: "Unconfirmed" }) + log());
+check("manual [x] '— Unconfirmed' → manual-unconfirmed", r.code === 5 && /manual-unconfirmed/.test(r.out), r.out);
 
 // 5. vacuous annotations
 r = run("vacuous.md", FM + deliverables() + log({ gate: "done", deployed: "n/a" }));
