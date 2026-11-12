@@ -281,8 +281,8 @@ rejects("contract: no source sprint", twoSprints({ consumes: "- `Widget` — `sr
 
 // 9. production notes
 {
-  const bad = rejects("production-notes missing section", { [`${BL}/S-001-x.md`]: sprint({ risk: "high", tier: "complex" }) }, "production-notes-missing");
-  const ok = run(mkRoot({ [`${BL}/S-001-x.md`]: sprint({ risk: "high", tier: "complex", notes: NOTES }) }));
+  const bad = rejects("production-notes missing section", { [`${BL}/S-001-x.md`]: sprint({ risk: "high" }) }, "production-notes-missing");
+  const ok = run(mkRoot({ [`${BL}/S-001-x.md`]: sprint({ risk: "high", notes: NOTES }) }));
   check("risk: high with Production notes passes", ok.code === 0, ok.out);
   const low = run(mkRoot({ [`${BL}/S-001-x.md`]: sprint({ risk: "low" }) }));
   check("risk: low needs no Production notes", low.code === 0, low.out);
@@ -442,7 +442,7 @@ recordRejects("record-unresolved", RECORD({ tail: "UNRESOLVED DECISIONS:\n- whic
   check("unreadable --record exits 1", missing.code === 1, missing.out + missing.err);
 }
 
-// tiers — four values, and the rubric's asymmetry: routine must be justified, raising need not be
+// tiers — four values; both ends are earned: routine must meet its checklist, complex/critical must name a signal
 {
   const withReason = (body, reason) => body.replace(/^tier: (\w+)$/m, (m) => `${m}\ntier_reason: ${reason}`);
   for (const t of ["routine", "standard", "complex", "critical"]) {
@@ -464,8 +464,10 @@ recordRejects("record-unresolved", RECORD({ tail: "UNRESOLVED DECISIONS:\n- whic
     check("the same open question on a standard sprint is fine", ok.code === 0, ok.out);
   }
   for (const t of ["complex", "critical"]) {
-    const r = run(mkRoot({ [`${BL}/S-001-x.md`]: sprint({ tier: t }) }));
-    check(`tier: ${t} without a reason only warns (pre-1.14 briefs have no tier_reason)`, r.code === 0 && /WARN tier-unreasoned/.test(r.out), r.out);
+    rejects(`tier: ${t} without a reason`, { [`${BL}/S-001-x.md`]: sprint({ tier: t }) }, "tier-unreasoned");
+    rejects(`tier: ${t} with tier_reason: null`, { [`${BL}/S-001-x.md`]: withReason(sprint({ tier: t }), "null") }, "tier-unreasoned");
+    const r = run(mkRoot({ [`${BL}/S-001-x.md`]: withReason(sprint({ tier: t, risk: "high", notes: NOTES }), "new retry state machine across two services") }));
+    check(`tier: ${t} with a reason on a high-risk sprint is valid`, r.code === 0, r.out);
   }
   {
     const r = run(mkRoot({ [`${BL}/S-001-x.md`]: sprint({ tier: "standard" }) }));

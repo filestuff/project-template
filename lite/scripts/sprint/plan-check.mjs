@@ -37,10 +37,12 @@
 //                           accepted) whose file is missing under --root or too short
 //   tier-unjustified        `tier: routine` — the cheapest execution setting — without what
 //                           docs/sprints/tier-rubric.md demands for it: a `tier_reason:`,
-//                           risk low, at most 3 story points, no open question. (The rubric
-//                           is asymmetric: lowering needs every criterion; the ones a lint
-//                           can see are checked here, the brief-auditor checks the rest.)
-//   tier-unreasoned         WARN only: `tier: complex|critical` with no `tier_reason:`
+//                           risk low, at most 3 story points, no open question. (Lowering
+//                           needs every criterion; the ones a lint can see are checked
+//                           here, the brief-auditor checks the rest.)
+//   tier-unreasoned         `tier: complex|critical` — the most expensive settings — with
+//                           no `tier_reason:` naming the rubric signal that decided it.
+//                           (Whether the named signal holds is the brief-auditor's check.)
 //   touches-empty           WARN only, and only when <root>/scripts/sprint/claims.mjs exists
 //                           (full tier): `touches:` has no entries
 // Plan record (--record <file>), a proposal or plan doc:
@@ -297,21 +299,23 @@ for (const t of targets) {
   const riskVal = fm.ok ? fm.get("risk")?.value ?? null : null;
   const tierVal = fm.ok ? fm.get("tier")?.value ?? null : null;
 
-  // tier-unjustified — the rubric is asymmetric (docs/sprints/tier-rubric.md): going DOWN
-  // to routine needs every criterion and a recorded reason, so the mechanical ones are
-  // checked here; a complex/critical tier with no reason only warns (raising is cheap,
-  // and pre-1.14 briefs carry `tier: complex` with no tier_reason key at all).
+  // tier-unjustified / tier-unreasoned — both ends of the rubric are earned
+  // (docs/sprints/tier-rubric.md). Going DOWN to routine needs every criterion and a
+  // recorded reason, so the mechanical ones are checked here. Going UP to complex or
+  // critical needs a named signal: with no tier_reason the sprint cannot be certified
+  // (a pre-1.14 brief carrying a bare `tier: complex` gets its reason, or a lower tier,
+  // at /sprint plan). Whether the reason holds is the brief-auditor's check, not a lint's.
   if (fm.ok && tierVal) {
     const tierLine = fm.get("tier").line;
     const reason = (fm.get("tier_reason")?.value ?? "").trim();
     const hasReason = reason !== "" && reason !== "null" && reason !== "~";
     if (tierVal === "routine") {
       if (!hasReason) fail("tier-unjustified", tierLine, "tier: routine needs tier_reason: naming the existing pattern it follows (file:line)");
-      if (riskVal === "high") fail("tier-unjustified", tierLine, "tier: routine with risk: high — a high-risk sprint is at least complex");
+      if (riskVal === "high") fail("tier-unjustified", tierLine, "tier: routine with risk: high — routine needs risk: low; a high-risk sprint is at least standard");
       const pts = Number(fm.get("story_points")?.value);
       if (pts > 3) fail("tier-unjustified", tierLine, `tier: routine with story_points: ${pts} — routine is at most 3 points`);
     } else if ((tierVal === "complex" || tierVal === "critical") && !hasReason) {
-      warn("tier-unreasoned", tierLine, `tier: ${tierVal} has no tier_reason: — record the signal that decided it`);
+      fail("tier-unreasoned", tierLine, `tier: ${tierVal} has no tier_reason: — name the rubric signal that decided it, or lower the tier to standard`);
     }
   }
 

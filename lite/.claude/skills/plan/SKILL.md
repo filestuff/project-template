@@ -196,8 +196,9 @@ For each sprint, starting at S-{highest+1}, create a file from
   parsing) — decided per sprint from its own files, so a `critical` proposal usually
   yields a few high-risk sprints and several low ones, not all-high. **`tier:`** is how
   hard the work is (`docs/sprints/tier-rubric.md`), and here it is only **provisional**:
-  `complex` when `risk` is high or the source plan describes the sprint as introducing a
-  new boundary, abstraction or cross-module change; otherwise `standard`. Never `routine`
+  `complex` when the source plan describes the sprint as introducing a new boundary,
+  abstraction or cross-module change; otherwise `standard`. `risk` does not set the tier
+  — a high-risk sprint buys a deeper review, not a stronger executor. Never `routine`
   or `critical` from this skill — both need a read of the code this skill does not do; the
   planner assigns the real tier at certification. Size is not difficulty: story points do
   not set the tier. Leave `tier_reason: null`. Both keys are mechanical — state them,

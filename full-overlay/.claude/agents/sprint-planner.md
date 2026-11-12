@@ -66,12 +66,20 @@ against the code — its premises are claims to check, not facts to transcribe.
    - `routine` — ONLY if every routine criterion holds (an existing pattern cited as
      `file:line` and followed; no new interface; `risk: low`; no open question; no
      schema, concurrency, caching, auth or trust-boundary work; ≤ 5 files; ≤ 3 points).
-   - `complex` / `critical` — on any ONE of their signals.
-   - `standard` — everything else. **Unsure between two tiers → the higher.** Lowering
-     costs a wasted run and an escalation when it is wrong; raising costs tokens.
-   Write `tier:` and `tier_reason:` — one line, no `#`, naming the signal or the pattern
-   (`node <repo-root>/scripts/sprint/frontmatter.mjs set <sprint-file> tier_reason "<line>"`).
-   In post-start mode never lower a tier — after a sprint starts it only goes up.
+   - `complex` / `critical` — only on a signal from the rubric's lists that the brief
+     itself shows. **`risk: high` is not a signal**: risk buys review depth (three lenses
+     on the stronger model), not a stronger executor. A sprint that follows an existing
+     pattern and adds a `Produces` is high-risk and `standard`.
+   - `standard` — everything else, and whenever you are unsure between it and a higher
+     tier. Its reviewer runs on the stronger model and an executor out of its depth
+     returns ESCALATE, so a wrong `standard` costs one cheap run; a wrong `complex` is
+     paid in full and nothing reports it.
+   Lower `/plan`'s provisional tier when the code shows the work is simpler than the plan
+   implied. Write `tier:` and `tier_reason:` — one line, no `#`, naming the signal or the
+   pattern (`node <repo-root>/scripts/sprint/frontmatter.mjs set <sprint-file> tier_reason "<line>"`).
+   The brief-auditor checks the claim; when it reports a tier the brief does not support,
+   lower the tier or name the real signal. In post-start mode never lower a tier — after a
+   sprint starts it only goes up.
 8. **Lint.** `node <repo-root>/scripts/sprint/plan-check.mjs --root <root-of-the-checkout-holding-the-file> S-NNN`
    and fix every FAIL (unresolved citations, a Consumes its dependency does not Produce,
    surviving placeholders). Report its SUMMARY line.

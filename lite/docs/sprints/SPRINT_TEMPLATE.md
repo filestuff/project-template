@@ -44,13 +44,14 @@ touches: []
      cross-sprint contracts, secrets, payment or irreversible mutation, trust-boundary
      parsing). It makes `## Production notes` below mandatory and deepens the review.
      tier: routine | standard | complex | critical — how HARD the work is (not how big,
-     not how risky): it decides which model and how much reasoning effort executes and
+     not how risky — risk: high never sets the tier): it decides which model and how much reasoning effort executes and
      reviews the sprint. docs/sprints/tier-rubric.md is the rule. /plan sets a provisional
      standard or complex; the PLANNER assigns the real tier at certification (/sprint
      plan, or the wave's planning pass) and writes tier_reason: — one line naming the
      signal that decided it (`follows src/routes/users.ts:12-40 — same handler shape`;
      `new retry state machine across two services`). routine needs every criterion in the
-     rubric; anything above standard needs one signal; unsure means the higher tier. After
+     rubric; anything above standard needs a rubric signal the brief shows; unsure means
+     standard. After
      the sprint starts the tier only goes up (ESCALATE). A file with none of these keys
      (pre-1.11 sprints) is read as risk: low, tier: standard.
      outcome: is written by the orchestrator when a wave or train lands the sprint —

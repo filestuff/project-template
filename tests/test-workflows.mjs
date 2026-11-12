@@ -321,9 +321,9 @@ for (const rel of scripts) {
 
     // 2. tier: complex starts on the stronger executor
     r = await run(c, A({}, { tier: "complex" }), play({ exec: st("DONE"), review: clean }));
-    eq([r.calls[0].model, r.calls[0].effort, r.calls[1].model, r.calls[1].effort, r.result?.tier], ["opus", "high", "opus", "xhigh", "complex"], "sprint-flow: a complex sprint starts on executor.complex and is reviewed at the complex reviewer's effort");
+    eq([r.calls[0].model, r.calls[0].effort, r.calls[1].model, r.calls[1].effort, r.result?.tier], ["opus", "high", "opus", "high", "complex"], "sprint-flow: a complex sprint starts on executor.complex and is reviewed on the complex reviewer's setting");
     // 2b. every tier fixes model AND effort for executor and reviewer
-    for (const [t, ex, rv] of [["routine", ["sonnet", "medium"], ["sonnet", "high"]], ["standard", ["sonnet", "high"], ["opus", "high"]], ["complex", ["opus", "high"], ["opus", "xhigh"]], ["critical", ["opus", "xhigh"], ["opus", "xhigh"]]]) {
+    for (const [t, ex, rv] of [["routine", ["sonnet", "medium"], ["sonnet", "high"]], ["standard", ["sonnet", "high"], ["opus", "high"]], ["complex", ["opus", "high"], ["opus", "high"]], ["critical", ["opus", "xhigh"], ["opus", "xhigh"]]]) {
       r = await run(c, A({}, { tier: t }), play({ exec: st("DONE"), review: clean }));
       eq([[r.calls[0].model, r.calls[0].effort], [r.calls[1].model, r.calls[1].effort], r.result?.tier], [ex, rv, t], `sprint-flow: tier ${t} routes executor and reviewer`);
     }
@@ -369,7 +369,7 @@ for (const rel of scripts) {
     r = await run(c, A(), play({ exec: [ESC("repeated-failure"), st("DONE")], review: clean }));
     eq([r.calls[0].model, r.calls[1].model, r.result?.tier, r.result?.tier_assigned, r.result?.escalations], ["sonnet", "opus", "complex", "standard", [{ from: "standard", to: "complex", reason: "repeated-failure" }]], "sprint-flow: ESCALATE re-dispatches on the next tier and records it");
     check(r.calls[1].prompt.includes("TRIED: two attempts at the race") && r.calls[1].prompt.includes("Leave the sprint file's `tier:` as the planner assigned it"), "sprint-flow: the stronger executor gets the handover and leaves the assigned tier alone");
-    eq([r.calls[2].agentType, r.calls[2].effort, r.result?.outcome], ["reviewer", "xhigh", "assigned=standard final=complex runs=1 escalations=1 arbiter=0 fix_rounds=0 findings=0/0"], "sprint-flow: an escalated sprint is reviewed at the tier it finished on, and the outcome records both tiers");
+    eq([r.calls[2].agentType, r.calls[2].model, r.calls[2].effort, r.result?.outcome], ["reviewer", "opus", "high", "assigned=standard final=complex runs=1 escalations=1 arbiter=0 fix_rounds=0 findings=0/0"], "sprint-flow: an escalated sprint is reviewed at the tier it finished on, and the outcome records both tiers");
     // a routine sprint escalates one rung at a time: routine → standard
     r = await run(c, A({}, { tier: "routine" }), play({ exec: [ESC("beyond-capability"), st("DONE")], review: clean }));
     eq([r.calls[0].effort, r.calls[1].effort, r.result?.escalations[0].to], ["medium", "high", "standard"], "sprint-flow: routine escalates to standard, not straight to the top");
@@ -405,6 +405,18 @@ for (const rel of scripts) {
     r = await run(c, A({}, { risk: "high" }), play({ exec: st("DONE"), review: clean }));
     eq(labels(r).slice(1), ["review:S-001:correctness", "review:S-001:security", "review:S-001:tests"], "sprint-flow: a high-risk sprint gets three review lenses");
     check(/correctness, security, tests/.test(r.result?.review_record[0]) && /high-risk deep pass/.test(r.result.review_record[0]), "sprint-flow: the record names the lenses that ran");
+    // 13b. the tests lens is routed apart (reviewer_lens.tests) on every tier but those in its `except`
+    const lensRouting = (r) => r.calls.slice(1).map((x) => [x.model, x.effort]);
+    eq(lensRouting(r), [["opus", "high"], ["opus", "high"], ["sonnet", "high"]], "sprint-flow: on a standard high-risk sprint the tests lens runs on reviewer_lens.tests");
+    r = await run(c, A({}, { risk: "high", tier: "complex" }), play({ exec: st("DONE"), review: clean }));
+    eq(lensRouting(r), [["opus", "high"], ["opus", "high"], ["sonnet", "high"]], "sprint-flow: on a complex high-risk sprint correctness and security stay on the tier's reviewer");
+    r = await run(c, A({}, { risk: "high", tier: "critical" }), play({ exec: st("DONE"), review: clean }));
+    eq(lensRouting(r), [["opus", "xhigh"], ["opus", "xhigh"], ["opus", "xhigh"]], "sprint-flow: a critical sprint keeps every lens on the tier's reviewer");
+    {
+      const { reviewer_lens: _drop, ...roles } = ROUTING.roles;
+      r = await run(c, A({ routing: { ...ROUTING, roles } }, { risk: "high" }), play({ exec: st("DONE"), review: clean }));
+      eq(lensRouting(r), [["opus", "high"], ["opus", "high"], ["opus", "high"]], "sprint-flow: without reviewer_lens (an older routing.json) every lens runs on the tier's reviewer");
+    }
 
     // 14. a confirmed finding is fixed, re-checked, and recorded with its commit
     r = await run(c, A(), play({ exec: st("DONE"), review: { findings: [F("Critical"), F("Minor", "src/a.ts:9", "naming")], summary: "one bug" }, verify: { verdict: "confirmed", evidence: "src/a.ts:3", note: "real" }, fix: st("DONE", { commits: ["abc S-001: thing", "def S-001: address review — null path"], fixes: [{ id: "F1", disposition: "fixed", detail: "def" }] }), recheck: { resolved: true, evidence: "src/a.ts:3 guarded" } }));
