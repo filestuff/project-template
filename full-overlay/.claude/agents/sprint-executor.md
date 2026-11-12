@@ -49,7 +49,12 @@ child (see Children).
    `docs: fix drift found in pre-sprint validation for S-NNN` on the branch).
 3. **Execute Phase 2** of `docs/sprints/PROTOCOL.md` for each deliverable:
    **test-first (RED → GREEN → refactor)**, run `scripts/sprint/gate.sh` before each
-   commit (all must pass — never commit broken code), commit atomically per
+   commit (all must pass — never commit broken code). **The gate is that script,
+   exactly.** If it fails on the untouched baseline — before your first change — or for
+   a reason outside your sprint, that is a **PLAN_GAP**: return it. Never substitute
+   another command for the gate ("it passes with `node --test`"), never record a
+   substitute as a criterion's Evidence, and never edit the gate yourself — changing what
+   the gate runs is the user's decision. Commit atomically per
    deliverable as `S-NNN: <description>`. Apply `docs/ENGINEERING_PRINCIPLES.md`
    (YAGNI/KISS/DRY/SOLID). Hit an unexpected failure → follow
    `.claude/skills/debug/SKILL.md` (root-cause before fixing).

@@ -36,6 +36,12 @@ apart from two extra allow rules.
   at land. This also retires the v1.11 stop-gap for executors that could not spawn
   children — nothing in the wave depends on an agent spawning a child any more, so waves
   behave the same in cloud sessions (where subagent nesting is capped) as on a laptop.
+- **The gate is the gate.** `sprint-executor` is now told in so many words that a
+  `gate.sh` failing on the untouched baseline is a PLAN_GAP, and that substituting another
+  command for it — or editing it — is never the executor's call. (Found in a live fixture
+  run: with a broken gate, two executors stopped correctly and one "verified" with a
+  different command; the batch's single gate run at landing would have caught it, but it
+  should not get that far.)
 - **Batch landing** (new: `scripts/sprint/assemble-train.sh`). Every sprint that is ready
   when you turn to landing goes in one batch: the script merges their branches into one
   integration branch (a member that conflicts is left out, not allowed to sink the batch),
