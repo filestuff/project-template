@@ -46,7 +46,10 @@ const TOKENS = existsSync(TOKENS_FILE)
 const BARE_TOKEN_SHAPE = /^[\w-]+(:[\w-]+)?$/;
 
 let rootCache;
-const rootPathExists = (claim) => existsSync(join((rootCache ??= repoRoot()), claim));
+const rootPathExists = (claim) => {
+  rootCache ??= repoRoot();
+  return existsSync(join(rootCache, claim));
+};
 
 // A claim expands to one or more patterns: {kind: "exact"|"prefix", value}.
 // Throws (never process.exit) on an unknown bare token: computeWaves/claimsOverlap
@@ -116,7 +119,7 @@ export function computeWaves(sprints) {
   // (a lone backlog sprint) must still fail loud on an unknown token.
   for (const s of work) for (const c of s.touches ?? []) expand(c);
   const ids = new Set(work.map((s) => s.sprint));
-  const num = (s) => parseInt(String(s.sprint).replace(/\D/g, ""), 10) || 0;
+  const num = (s) => Number.parseInt(String(s.sprint).replace(/\D/g, ""), 10) || 0;
   const holdsClaims = (s) => s.dir === "in-progress" || (s.dir === "backlog" && Boolean(s.wave));
   const placed = new Map(); // sprint id -> wave index
   const waves = [];
@@ -174,7 +177,7 @@ function touchesOverlap(a, b) {
 // together). Returns { ready: [sprint…], blocked: [{ sprint, reason }] } — each blocked
 // sprint carries its FIRST failing reason, checked in the order above.
 export function computeReady(sprints, wave) {
-  const num = (s) => parseInt(String(s.sprint).replace(/\D/g, ""), 10) || 0;
+  const num = (s) => Number.parseInt(String(s.sprint).replace(/\D/g, ""), 10) || 0;
   const byId = new Map(sprints.map((s) => [s.sprint, s]));
   const inFlight = sprints.filter((s) => s.dir === "in-progress");
   const reservedElsewhere = sprints.filter((s) => s.dir === "backlog" && s.wave && s.wave !== wave);
@@ -242,6 +245,7 @@ function findSprintFile(root, id) {
 
 function parseArgs(argv) {
   const args = { positional: [] };
+  // biome-ignore lint/style/useForOf: the loop consumes a flag's value with ++i
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--sprint") args.sprint = argv[++i];
     else if (argv[i] === "--paths") args.paths = argv[++i].split(",").map((s) => s.trim());
@@ -264,7 +268,7 @@ function unknownToken(claim) {
   return new Error(
     `unknown claim token "${claim}" — not defined in ${TOKENS_FILE} ` +
       `(${names.length ? `valid tokens: ${names.join(", ")}` : "the file defines no tokens"}); ${notPath}. ` +
-      `Define the token, or claim an exact path / dir/** prefix.`,
+      "Define the token, or claim an exact path / dir/** prefix.",
   );
 }
 
@@ -479,6 +483,7 @@ if (cmd === "check") {
   let wave = null;
   let json = false;
   let bad = null;
+  // biome-ignore lint/style/useForOf: the loop consumes a flag's value with ++i
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === "--json") json = true;
     else if (rest[i] === "--wave") {

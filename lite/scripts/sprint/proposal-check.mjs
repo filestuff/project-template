@@ -238,8 +238,7 @@ for (let i = 0; i < lines.length; i++) {
   if (fence[i]) continue;
   const l = lines[i];
   CITE.lastIndex = 0;
-  let m;
-  while ((m = CITE.exec(l))) {
+  for (let m = CITE.exec(l); m; m = CITE.exec(l)) {
     const [raw, p, ext, a, b] = m;
     const before = l[m.index - 1] ?? "";
     if (/[{}<>]/.test(before) || /[{}<>]/.test(p)) continue; // placeholder path
@@ -295,7 +294,7 @@ if (!legacy) {
     for (let i = s.start; i < s.end; i++) {
       if (!/^\s*[-*]\s+\[ \]/.test(lines[i])) continue;
       let t = lines[i];
-      for (let j = i + 1; j < s.end && !isBlank(j) && !/^\s*[-*]\s+\[/.test(lines[j]) && !headingAtLine.has(j); j++) t += " " + lines[j];
+      for (let j = i + 1; j < s.end && !isBlank(j) && !/^\s*[-*]\s+\[/.test(lines[j]) && !headingAtLine.has(j); j++) t += ` ${lines[j]}`;
       const lc = t.toLowerCase();
       const missing = ["options:", "if deferred:"].filter((k) => !lc.includes(k));
       if (missing.length) fail("open-question-vague", i, `${lines[i].trim()}  ← missing ${missing.join(", ")}`);
@@ -332,7 +331,7 @@ if (!legacy) {
       if (!m) continue;
       at = i;
       let t = m[1];
-      for (let j = i + 1; j < s.end && !isBlank(j) && !headingAtLine.has(j); j++) t += " " + lines[j];
+      for (let j = i + 1; j < s.end && !isBlank(j) && !headingAtLine.has(j); j++) t += ` ${lines[j]}`;
       t = t.trim();
       ok = t !== "" && !t.startsWith("{") && !/^\[.*\]$/.test(t);
       break;

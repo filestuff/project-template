@@ -149,12 +149,17 @@ sprint files as-is.
   placeholders, tier copy-sets, and file classes (seeded vs merged vs managed).
 - `VERSION` + `CHANGELOG.md` + `migrations/` — the release surface downstream repos
   upgrade against (see **Releasing**).
+- `tests/` — the template's own suite: `bash tests/run.sh`. Run `npm ci` once first.
+  `tests/test-lint.sh` holds every shipped script to Biome (`biome.jsonc`, with versions
+  pinned in `package.json`), because link-mode downstreams lint `scripts/` in their
+  worktree gate. Without the tooling the test fails; it never skips silently.
+  `package.json`, `biome.jsonc` and `node_modules/` are maintainer tooling and never ship.
 
 ## Releasing
 
 Downstream repos pin what they installed in `.claude/template-manifest.json` and
 upgrade via `/template-upgrade`, which diffs template versions by commit SHA. That
-imposes three hard rules on this repo:
+imposes four hard rules on this repo:
 
 1. **Every change to `lite/`, `full-overlay/`, `template.config.json`, or
    `migrations/` must bump `VERSION` and add a `CHANGELOG.md` entry in the same
@@ -169,6 +174,9 @@ imposes three hard rules on this repo:
    copied once at bootstrap and never auto-merged afterwards — a template-side edit
    to them never reaches downstream unless a `migrations/vX.Y.Z.sh` script applies
    it in place (see `migrations/README.md`).
+4. **`bash tests/run.sh` is green before release**, `tests/test-lint.sh` included. A
+   shipped script that fails Biome reddens every downstream link-mode sprint gate on
+   the next upgrade (v1.15.1).
 
 ## Fixed conventions (deliberately not configurable)
 

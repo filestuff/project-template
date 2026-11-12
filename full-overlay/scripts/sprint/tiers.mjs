@@ -57,7 +57,7 @@ for (const t of TIERS) {
   if (r.length === 0) continue;
   const escalated = r.filter((x) => x.escalations > 0 || x.final !== x.assigned);
   const strained = r.filter((x) => x.fix_rounds >= 2 || x.runs > 1 || x.confirmed >= 2);
-  const st = (stats[t] = {
+  const st = {
     sprints: r.length,
     escalated: escalated.length,
     escalated_pct: pct(escalated.length, r.length),
@@ -67,7 +67,8 @@ for (const t of TIERS) {
     confirmed_findings: r.reduce((a, x) => a + x.confirmed, 0),
     relaunched: r.filter((x) => x.runs > 1).length,
     arbiter_calls: r.reduce((a, x) => a + x.arbiter, 0),
-  });
+  };
+  stats[t] = st;
   if (r.length < MIN_N) continue;
   if (st.escalated_pct >= 25) flags.push({ flag: "UNDER", tier: t, text: `${st.escalated}/${r.length} ${t} sprints escalated (${escalated.map((x) => x.sprint).join(", ")}) — the tier is being assigned to work that is harder than the rubric admits: tighten its criteria, or route ${t} one step up in routing.json` });
   else if (st.strained_pct >= 40) flags.push({ flag: "STRAINED", tier: t, text: `${st.strained}/${r.length} ${t} sprints needed two fix rounds, a re-launch, or had ≥2 confirmed findings (${strained.map((x) => x.sprint).join(", ")}) — they finish, but not cleanly` });
