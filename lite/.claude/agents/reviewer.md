@@ -27,6 +27,15 @@ If the dispatch names a sprint file, read its acceptance criteria and check the 
 delivers each one; ignore any author-supplied summary of the work — the diff and the
 sprint file are your whole input.
 
+## Start from what past reviews missed
+
+If `scripts/sprint/learnings.mjs` exists, run
+`node scripts/sprint/learnings.mjs --class review,test --limit 20` (add
+`--root <repo-root>` when you were handed a worktree) before reading the diff. Each line
+is a miss a previous sprint already paid for; a `RECURRING` rule is one this project keeps
+relearning. Check the diff against them first — they are this codebase's actual failure
+modes, which no generic checklist knows.
+
 ## Distrust the report
 
 Treat the author's claims and commit messages as **unverified**. A stated rationale ("this is

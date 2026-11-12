@@ -41,6 +41,7 @@ This file is the maintainer-side build spec for the template itself. It lives ou
 | F16 | `render` exits 3 on any `{{…}}` in any text file that is not a known placeholder (`/\{\{[^}]*\}\}/`). Shipped JS and shell must not contain two adjacent opening braces closed by two adjacent closing braces. | C (`upgrade.mjs:287-295`) |
 | F17 | `merge-sprint.sh land` has no check that a branch's diff stays inside its `touches:`. Claims are advisory end to end. | C |
 | F18 | `land --sprints` already lands several sprints from one branch in one merge and one completion commit (train checkpoint). | C, tested |
+| F19 | Saved workflows in `.claude/workflows/` are discovered by name only with a `.js` extension; a `.mjs` file there is invisible to `Workflow({ name })`. | E |
 
 Consequences drawn from these:
 
@@ -145,7 +146,7 @@ review to `/plan` Phase 4.
   with a surviving blocker unless the user accepts it by name (recorded).
 - The outcome is written into the artifact as `## Review record` (lens, score, findings
   kept / refuted / fixed, rounds).
-- Delivery: `.claude/workflows/design-review.mjs` when the Workflow tool is available;
+- Delivery: `.claude/workflows/design-review.js` when the Workflow tool is available;
   otherwise the skill dispatches the same lenses with the Agent tool in one message. The
   anti-shortcut clause is unchanged: mechanical fixes are applied, material changes go
   through the decision policy.
@@ -198,6 +199,26 @@ three or more times in `done/` Learnings is proposed as a Project-Specific Check
 - No shipped file contains an unknown `{{…}}` token (F16) — a test renders both tiers.
 - Lite and overlay copies of the three shadowed files stay consistent
   (`docs/sprints/PROTOCOL.md`, `docs/sprints/INDEX.md`, `.claude/skills/sprint/SKILL.md`).
+
+### 3.10 As built (v1.11.0) — deviations from the text above
+
+- **Brace placeholders are template-derived.** The lints flag a `{…}` string only when it
+  is one of the placeholders in the repo's own template; a generic "braces outside code"
+  rule failed honest prose in testing.
+- **Pre-push scope is narrower than "changed proposal and backlog files".** Briefs are
+  linted only when they are in `backlog/`, certified (`plan_date` set) and carry a `risk:`
+  key. Unplanned skeletons legitimately hold placeholders, in-progress citations move as
+  the sprint edits code, and pre-1.11 briefs must not start failing on upgrade.
+- **Learning loop is a script, not prose.** `learnings.mjs` lists closed sprints'
+  learnings and flags rules recorded by 3+ sprints; the reviewer and `/review` read it.
+- **`plan-wave.mjs` gained the auditor stage now** (planner → brief-auditor → one repair),
+  rather than waiting for `plan-flow` in §5; it also gained `recommended` on questions.
+- **Two defects fixed in passing:** `exec-wave.mjs` / `plan-wave.mjs` reported dead agents
+  as alive; and a stopgap for F8/F9 (executor declares "review not run", master reviews)
+  ships now, ahead of the orchestration-layer review in §5.
+- **New test harnesses:** `tests/test-workflows.mjs` runs workflow script bodies against a
+  stub runtime; `tests/test-payload-integrity.mjs` guards tokens, dangling references,
+  tier parity and exec bits across the whole payload.
 
 ## 4. Phase 2 — decision policy, routing and escalation, enforcement (v1.12.0)
 
@@ -330,7 +351,7 @@ need auto mode set in **user** settings (F14).
 
 ### 5.1 One workflow per sprint
 
-`.claude/workflows/sprint-flow.mjs` replaces `exec-wave.mjs`. The master launches one run
+`.claude/workflows/sprint-flow.js` replaces `exec-wave.mjs`. The master launches one run
 per started sprint, all in one message. Each run notifies the master when it finishes, so
 there is no barrier across sprints (F11): finished sprints land while others still execute.
 
@@ -355,7 +376,7 @@ Result: `{sprint, status: READY_TO_LAND | PARKED | PLAN_GAP | NEEDS_CLAIM | DIED
 gate, review, decisions[], escalations[], question?}`. Arbiter decisions are returned for
 the master to confirm they were recorded in the sprint file.
 
-`.claude/workflows/plan-flow.mjs` replaces `plan-wave.mjs`: per member, planner →
+`.claude/workflows/plan-flow.js` replaces `plan-wave.mjs`: per member, planner →
 brief-auditor, as a pipeline; question objects carry `recommended` and a policy class.
 
 The executor definition drops the reviewer-child duty and the Agent tool requirement

@@ -26,6 +26,7 @@ file paths.
 |-------|------|---------|
 | **Orchestrator** (this session — the "master") | Compute + reserve the wave; run the planning pass (dispatch planners, batch the decision round, write answers into sprint files, two locked commits); per sprint run start (dep check, claims check, `start.sh` under the lock, create the worktree); dispatch `sprint-executor` subagents; **advise** blocked subagents (see The advisor loop); collect reports; **serialize** Phase 3 completions; adjudicate review findings | `main` (lock-serialized), the ledger docs, the user |
 | **Planning subagent** (`sprint-planner`, one per unplanned/stale sprint) | Verify + deepen ONE sprint file against current `main`: staleness, contract drift, deliverable detail, `touches:`, decision-ready questions; set `plan_date` | its assigned sprint file only (in the wave's planning worktree — the orchestrator commits) |
+| **Brief auditor** (`brief-auditor`, one per planned sprint) | Cold-read ONE planned sprint file as its future executor: what it would have to ask or assume. Its verdict, not the planner's, is what lets `plan_date` stand | nothing — verdict only |
 | **Wave-planning subagent** (`wave-planner`, conditional) | Cross-sprint constraint check when planner reports signal it (shared foundations, contract misalignment) | the wave's wave-plan.md only |
 | **Execution subagent** (`sprint-executor`, one per sprint) | PROTOCOL **Phase 2 only** — verify the brief, implement deliverables test-first, gate, commit atomically, run a `reviewer` child before DONE — inside its assigned worktree; may spawn read-only Explore/debug children (see Executor children) | its worktree branch only + its report file |
 | **Doc-sync subagent** (`doc-sync`, one per completing sprint) | Step 5 completion pass: resolve the diff base (`git -C <worktree> merge-base HEAD main`), run PROTOCOL Phase 3's doc-sync pass and `/adr check` over the diff | nothing — docs/ADR signal only |
@@ -169,6 +170,20 @@ absolute backlog-file path **inside the planning worktree**, the repo root, the 
 (pairwise-distinct) files in the worktree; the primary checkout — the ledger — **stays
 clean throughout**, so other waves' locked transactions are never blocked by this pass.
 
+**2b′ — Cold-read audit (parallel).** A planner cannot certify the brief it wrote, so
+its `plan_date` is provisional until a fresh reader agrees. After the planners return,
+dispatch one **`brief-auditor`** subagent per member whose verdict is `READY` or
+`READY_WITH_QUESTIONS`, all in a single message — prompt: the sprint file's absolute path
+in the planning worktree and the repo root, nothing else. `SUFFICIENT` → the certification
+stands. `INSUFFICIENT` → continue that member's planner (SendMessage) with the auditor's
+BLOCKING list ("audit-repair mode"), then dispatch a FRESH auditor once. A member still
+`INSUFFICIENT` after the repair round is **not certified**: run
+`node scripts/sprint/frontmatter.mjs set <planning-worktree file> plan_date null` and
+surface it in the decision round (2e) as defer / proceed-anyway, exactly like a
+`NOT_READY` verdict. Record each audit verdict in wave-plan.md. (The workflow variant does
+all of this inside `plan-wave.mjs` and returns the still-insufficient members as
+`uncertified` — the `plan_date` reset is still yours.)
+
 **2c — Wave constraints check.** Always (orchestrator, mechanical): after the planners
 return, re-run the wave math **against the planning worktree** (it holds the corrected
 `touches:`): `SPRINT_ROOT=<planning-worktree> node scripts/sprint/claims.mjs waves` and,
@@ -252,6 +267,17 @@ file *is* the brief; the subagent reads it. Do not paste the sprint's contents i
 Before returning DONE, the executor runs a `reviewer` child over its branch diff and fixes all
 Critical/Important findings — **Step 5 receives reviewed work**, and the report discloses the
 review outcome.
+
+**When the executor could not review.** An executor has no Agent tool when it was
+dispatched by a workflow script (always), or when the environment caps subagent nesting
+(`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` — the default in cloud sessions). It then returns
+DONE with `### Review` reading `— not run: no Agent tool — orchestrator must review before
+land`, and says so in its concerns (`close-check.mjs --json` surfaces it in `review[]`).
+**Never land that sprint unreviewed:** dispatch one `reviewer` yourself — worktree path,
+base branch (train: the diff-base SHA), the sprint file path, nothing of the executor's
+reasoning — then hand any Critical/Important findings to the executor (SendMessage
+continuation; after a workflow, a fresh `sprint-executor` pointed at the branch) to fix,
+re-gate and record under `### Review` before Step 5.
 
 A subagent returns one of: **DONE** (deliverables complete, reviewed, acceptance evidence
 gathered, report file written), **BLOCKED** / **NEEDS_CLAIM** (handle via The advisor loop
@@ -430,8 +456,8 @@ sprint bodies (diff-dependent duties — doc sync, `/adr check`, review — are 
 to fresh subagents; the master only adjudicates their structured returns) — that is what
 keeps it alive across a whole wave.
 
-All wave subagents — `sprint-planner`, `sprint-executor`, `wave-planner`, `reviewer`, `doc-sync` —
-are pinned `model: sonnet` in their agent definitions. The Agent tool DOES accept a spawn-time
+All wave subagents — `sprint-planner`, `brief-auditor`, `sprint-executor`, `wave-planner`,
+`reviewer`, `doc-sync` — are pinned `model: sonnet` in their agent definitions. The Agent tool DOES accept a spawn-time
 `model` override, so the pin alone is not a guarantee: always dispatch by agent name, never
 as a generic subagent, and never pass a `model` parameter when dispatching wave agents —
 otherwise N executors silently run on the master's model tier and multiply the wave's cost.
@@ -480,8 +506,10 @@ If the **Workflow tool** is available in this environment, the two fan-outs — 
 those — can run as deterministic workflow scripts with schema-validated returns (no
 text-parsing of planner verdicts / executor statuses) and resume-from-runId:
 
-- Step 2b → `scripts/sprint/workflows/plan-wave.mjs` (args: wave id, roster with file paths
-  in the planning worktree, repo root, landed-since list).
+- Steps 2b + 2b′ → `scripts/sprint/workflows/plan-wave.mjs` (args: wave id, roster with
+  file paths in the planning worktree, repo root, landed-since list). Each member flows
+  planner → brief-auditor → one repair round on its own; the result carries each
+  verdict's `audit` and an `uncertified` list.
 - Step 4 → `scripts/sprint/workflows/exec-wave.mjs` (args: wave id, sprints with worktree
   paths, repo root).
 
@@ -491,8 +519,11 @@ whose exit codes (2/3/4/75) demand in-session judgment. Note one tradeoff: workf
 return structured results but cannot be continued via SendMessage after the workflow ends —
 a BLOCKED executor inside a workflow surfaces its question in the workflow result, and the
 advisor loop answers it via a fresh dispatch (pointing at the branch's committed work) instead
-of a continuation. When the Workflow tool is absent, the Agent-tool dispatch described in
-Steps 2b/4 is the primary path — the two are interchangeable per wave.
+of a continuation. A second tradeoff: workflow agents cannot spawn children, so an
+executor run by `exec-wave.mjs` never performs its pre-completion review — follow "When
+the executor could not review" (Step 4) for every sprint the workflow returns DONE. When
+the Workflow tool is absent, the Agent-tool dispatch described in Steps 2b/4 is the
+primary path — the two are interchangeable per wave.
 
 ## The serial train (`/sprint train`)
 

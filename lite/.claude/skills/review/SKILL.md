@@ -122,8 +122,14 @@ flagging, so the tradeoff is reviewable.
 _(none yet)_
 
 ### Learnings check
-- Did this change teach us something that should be captured in `AGENTS.md` or this review file?
-- Are there patterns that keep coming up that we should document?
+- Before reviewing: `node scripts/sprint/learnings.mjs --class review,test --limit 20` —
+  the misses past sprints recorded at close. Check this change against them.
+- A rule the listing flags `RECURRING ×n` has been relearned by three or more sprints:
+  promote it. Add it to **Project-Specific Checks** above as a concrete, checkable rule
+  (one line, with the sprint ids that taught it) in this change — a lesson that has to be
+  learned a fourth time was never captured.
+- Did this change teach us something else that should be captured in `AGENTS.md` or this
+  review file?
 
 ## Mindset
 

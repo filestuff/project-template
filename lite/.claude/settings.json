@@ -11,6 +11,7 @@
       "Bash(git diff*)",
       "Bash(git log*)",
       "Bash(git show*)",
+      "Workflow(design-review)",
       "Skill(sprint)",
       "Skill(proposal)",
       "Skill(plan)",

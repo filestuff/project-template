@@ -4,6 +4,91 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.11.0] - 2026-11-12
+
+**Planning rigor.** Until now a proposal was scored by one generic reviewer whose result
+was explicitly "not a gate", a plan breakdown was reviewed by nobody but its author, a
+sprint brief was certified by the agent that wrote it, and none of the rules for any of
+them was checked by a script. This release adds a rigor tier, production-readiness
+sections, independent review panels with a pass mark, and two lints. It also fixes two
+defects in the full tier's workflow variant found while testing it. No migrations.
+Everything applies to proposals and sprints written after the upgrade — existing
+proposals (no `**Rigor**:` line) and existing sprints (no `risk:`/`tier:` keys) keep
+working unchanged.
+
+- **Rigor tiers** (`/proposal` Step 1.6, `PROPOSAL_TEMPLATE.md`): each proposal declares
+  `**Rigor**: light | standard | critical`, classified mechanically from what the idea
+  touches (critical: auth, payments, secrets, irreversible data changes, trust-boundary
+  parsing, migrations, public contracts; standard: a new module/service/datastore/
+  dependency, or more than one sprint). The tier scales everything below, so a small
+  proposal stays small.
+- **`## Production readiness`** (new template section): design-level answers for the
+  recommended alternative. Light: risks and rollback. Standard adds architecture and data
+  flow, interfaces and contracts, test strategy, observability. Critical adds data model
+  and migration, security and threat model, failure modes, non-functional targets,
+  rollout plan, cost and capacity. Still no deliverables. A bare "n/a" fails the lint;
+  `n/a — [why]` passes.
+- **Prior decisions are read first.** `/proposal` and `/plan` now read `docs/decisions/`
+  (plus planning learnings and TODOS) before the first question. A direction that
+  contradicts an accepted ADR becomes an explicit "supersede ADR-NNN?" decision for you —
+  previously nothing upstream read the ADRs at all.
+- **Design it twice** (`/proposal` Step 3, standard and critical): when the idea adds a
+  module, service or data model, two `design-explorer` agents each develop a structurally
+  different shape, blind to each other, and Alternatives is built from both.
+- **Review panels replace the single reviewer.** `/proposal` Step 6 and — new — `/plan`
+  Phase 4 dispatch one fresh-context `design-reviewer` per lens
+  (`docs/proposals/review-lenses.md`): 1 lens for light, 3 for standard, up to 7 for
+  critical; 4 for a plan (coverage, slicing, contracts, executability). Every blocker and
+  major finding is checked by a `finding-verifier` told to refute it before anyone acts on
+  it. The panel **passes only if no blocker survives and every lens scores ≥ 7**; at most
+  two rounds; what still stands goes to Open questions, and a surviving blocker needs your
+  explicit acceptance. The result is written into the proposal as `## Review record`.
+  `/plan` skips its panel for 1–2 low-risk sprints and asks before breaking down a
+  rigor-bearing proposal that has no review record.
+- **Sprint files: `risk:` and `tier:`** (`SPRINT_TEMPLATE.md`, set by `/plan`, raised by
+  planning). `risk: high` (the sprint touches a risk-tier surface) makes a new
+  `## Production notes` section mandatory — rollback, observability, security.
+  `tier: complex` marks sprints that should run on a stronger model; it is recorded now
+  and acted on by a later release.
+- **A brief's author no longer certifies it.** `/sprint plan` (both tiers) and the wave
+  planning pass (full) hand the finished sprint file to a `brief-auditor` that has seen
+  nothing else and reports what it would have to ask or assume to execute it. A brief
+  that is still insufficient after one repair round keeps `plan_date: null`.
+- **New lints** (zero-dependency, lite + full): `scripts/sprint/proposal-check.mjs <file>`
+  (sections required by the tier, surviving template placeholders, vague open questions,
+  stage gates, `file:line` citations that do not resolve, a missing review record once the
+  proposal leaves `draft`) and `scripts/sprint/plan-check.mjs [S-NNN …] [--record <doc>]`
+  (dependencies exist and are acyclic, every Consumes is something its dependency
+  Produces, placeholders, Production notes on high-risk sprints, citations, the plan
+  record's coverage map and sentinel). The skills run them; so does
+  `scripts/sprint/pre-push-gate.sh`, narrowly — changed proposals, and changed **backlog**
+  briefs that are certified and carry a `risk:` key. Unplanned skeletons, in-progress
+  files, pre-1.11 briefs and imported proposals are never blocked.
+- **Learnings are read back.** `scripts/sprint/learnings.mjs [--class review,test]` lists
+  the `### Learnings` lines of closed sprints, newest first. The `reviewer` agent and
+  `/review` now start from them, and a rule recorded by three or more sprints is flagged
+  `RECURRING` and promoted into `/review`'s Project-Specific Checks. Before this, only
+  `plan`-class learnings were ever re-read.
+- **Fix (full tier, workflow variant): a dead executor or planner was reported as alive.**
+  `exec-wave.mjs` and `plan-wave.mjs` merged a crashed agent's empty result into an
+  object, so it came back as a status with no fields and `missing` was always empty.
+- **Fix (full tier): sprints could land unreviewed without anyone noticing.** An executor
+  cannot spawn its reviewer child when it is dispatched by a workflow script (always) or
+  when subagent nesting is capped at depth 1 (the default in cloud sessions). It now says
+  so — `### Review` reads `— not run: no Agent tool — orchestrator must review before
+  land` — and ORCHESTRATION.md Step 4 tells the wave master to dispatch the reviewer
+  itself before landing.
+- **Upgrade notes.** New files arrive as additions (four agents, one workflow under
+  `.claude/workflows/`, three scripts, `docs/proposals/review-lenses.md`);
+  `.claude/settings.json` gains one allow rule, `Workflow(design-review)`. `/proposal`,
+  `/plan` and `/sprint plan` now dispatch more subagents than before, and
+  `design-reviewer` and `design-explorer` are pinned to `model: opus` — edit the `model:`
+  line in `.claude/agents/<name>.md` to change that. The panels use the Workflow tool
+  when it is available and fall back to plain parallel subagents when it is not. The
+  workflow ships as `.claude/workflows/design-review.js` — a workflow script, not a Node
+  module (it uses top-level `await` and `return`): if your linter scans dot-directories
+  (ESLint 9's flat config does), add `.claude/` to its ignores.
+
 ## [1.10.1] - 2026-11-12
 
 Fixes a `merge-sprint.sh` defect in **train mode** (full tier), found by code review rather

@@ -68,6 +68,12 @@ child (see Children).
    findings by severity, what was fixed, what was declined and why (Minor only). If
    you believe a Critical finding is wrong, that is not your call: return **BLOCKED**
    with the finding as the question.
+   **If you have no Agent tool** (you were dispatched by a workflow script, or the
+   environment caps subagent nesting — `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, the
+   default in cloud sessions), you cannot run this review, and you must not pretend you
+   did or review your own diff in its place: write `### Review` as
+   `— not run: no Agent tool — orchestrator must review before land` and repeat that
+   sentence in your return's concerns. The orchestrator then dispatches the reviewer.
 7. **Write the Completion Log into the sprint file, then a pointer report.**
    - **7a — the record (the durable artifact).** In the worktree's
      `docs/sprints/in-progress/S-NNN-*.md`, fill the `## Completion Log` per

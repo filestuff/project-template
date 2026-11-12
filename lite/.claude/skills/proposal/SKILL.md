@@ -7,7 +7,7 @@ description: >
   Also decides stage gates of active multi-stage proposals ("decide the gate for
   proposal NNN"). Skips itself when a proposal already exists.
 argument-hint: "[idea, doc path, or proposal number]"
-allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill Agent Task WebSearch WebFetch"
+allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill Agent Task Workflow WebSearch WebFetch"
 ---
 
 # Proposal Skill
@@ -73,6 +73,15 @@ Their findings carry the same citation obligation as your own. Skip the fan-out 
 answers are already obvious (small scope in familiar code): in-context Grep/Read stays the
 default, and the fan-out's value is proportional to uncertainty.
 
+**Prior decisions are part of the ground.** Before the first question, also read: the ADR
+list in `docs/decisions/` (titles and status — then any ADR whose subject overlaps the
+idea, in full), the newest 20 entries of `docs/sprints/PLANNING_LEARNINGS.md` if it exists,
+and `docs/TODOS.md` for deferred work this idea would absorb or duplicate. An accepted ADR
+binds: a direction that contradicts one is not a design detail but an explicit "supersede
+ADR-NNN?" decision, put to the user in Step 3 and never settled by you. Record what you
+consulted on the template's `Prior decisions consulted:` line — "none apply — searched
+docs/decisions/ for [terms]" is a valid answer; silence is not.
+
 ### Step 1 — Premise interrogation
 
 Answer these five anchors before moving on — none may rest on hand-waving:
@@ -105,6 +114,25 @@ direction question, where the user's choice supersedes. When the appetite is sta
 frames alternatives as stage-1 candidates rather than re-offering "staged" as a new option.
 Outside that one flag, the appetite is not re-litigated.
 
+### Step 1.6 — Rigor tier
+
+Classify the proposal and write the template's `**Rigor**:` line — mechanically, from what
+Step 0 found the idea touches, not from how important it feels:
+
+- **critical** — auth or permissions, payments, secrets, irreversible data mutation or
+  deletion, input parsing at a trust boundary (the risk-tier table in
+  `docs/sprints/review-calibration.md`), a schema or stored-data migration, or a public
+  contract others depend on.
+- **standard** — a new module, service, datastore or dependency; or work that will clearly
+  span more than one sprint.
+- **light** — everything else.
+
+State the tier and the one fact that set it ("critical — changes the sessions table,
+`db/schema.sql:41`"). Do not ask: the classification is mechanical, and the user can
+overrule it in one word at any point (record `Rigor: … — set by user`). The tier decides
+how much of `## Production readiness` Step 3 must fill and which review lenses Step 6 runs.
+It never licenses skipping the interrogation — a light proposal still answers Step 1.
+
 ### Step 2 — Scope lock
 
 State non-goals explicitly and early — locking what this is NOT prevents creep later.
@@ -136,6 +164,26 @@ so. Per alternative: how it works, the trade-off it accepts, and a rough dual-sc
 note (human-team time vs Claude-driven time). An installed brainstorming skill MAY be used
 here to generate candidates; it does not replace this method.
 
+**Design it twice (standard and critical rigor).** When the idea adds a module, a
+service or a data model, do not sketch the alternatives yourself — an author comparing its
+favorite against two paragraphs it wrote for the others is advocating. Name two
+structurally different shapes (not two flavors of one: "extend the existing module in
+place" vs "a separate worker behind a queue"), then dispatch two `design-explorer`
+subagents in a single message, one shape each, with the problem statement, goals and
+non-goals, and the `file:line` ground from Step 0. They are blind to each other. Build the
+Alternatives section from their returns, each one's WEAKEST POINT included verbatim in its
+trade-offs; the minimal-viable cut and "do nothing" are still yours to add. Skip this for
+light rigor and for changes that follow an existing pattern — there the shapes are not
+genuinely open. Fail-soft: if subagents cannot run, say so and draft the alternatives
+yourself.
+
+**Production readiness.** For the alternative you will recommend, fill the subsections of
+`## Production readiness` that the Rigor tier requires (the template lists them) and
+delete the rest. Stay at design level — how it fails, how it is undone, how an operator
+sees it — never deliverables. A required subsection that does not apply is
+`n/a — [why]`; if you cannot fill one because the answer is unknown, that is an Open
+question, not an `n/a`. Unknown numbers are "unknown — measure by [method]".
+
 Once the trade-offs are on the table, designate your recommendation — then put the
 direction to the USER via AskUserQuestion: one option per alternative, recommended
 first, "do nothing" included when it was listed, multi-select off. With 5+ options this is
@@ -165,6 +213,15 @@ against this checklist before presenting it:
   "if deferred: {what happens}" consequence.
 - Every claim quantified or explicitly marked "unknown — measure by [method]".
 - Each decision criterion checkable against each alternative.
+- Every Production-readiness subsection the Rigor tier requires is filled with a concrete
+  answer for the recommended alternative — the rollback path names how, not "revert".
+- `Prior decisions consulted:` is filled, and no accepted ADR is contradicted silently.
+
+Then run the lint and fix until it exits 0 — it is the floor, the rating is the ceiling:
+`node scripts/sprint/proposal-check.mjs docs/proposals/{NNN}-{kebab-title}.md` (required
+sections for the tier, surviving placeholders, vague open questions, and every `file:line`
+citation resolving against the working tree). Paste its SUMMARY line when you present the
+draft. A `review-missing` failure cannot occur yet — the file is still `draft`.
 
 Name the gap ("it's a 6 because the churn claim is unquantified; a 10 would cite the
 count"), fix it, re-rate. Show the draft at ≥8, or earlier when closing the gap needs the
@@ -177,23 +234,56 @@ Present the draft, then confirm via AskUserQuestion — "Does this capture what 
 / **"Needs changes"** (the tool's built-in Other carries free-text critique). Iterate until
 confirmed.
 
-### Step 6 — Fresh-context reviewer
+### Step 6 — Review panel
 
-After the user confirms the draft, dispatch ONE fresh-context subagent (the Agent tool —
-named Task on older harnesses; Explore or general-purpose type, read-only) with the
-proposal file path, repo access, and this brief: verify the proposal's factual claims
-against the code; score it 1–10 on Completeness, Consistency, Clarity, Scope (YAGNI), and
-Feasibility; list specific issues, no compliments. Verification gate: issues asserting
-facts about the code (feasibility, disputed claims) must quote the motivating `file:line`
-(or name the search that came up empty); issues about the proposal's own text
-(completeness, consistency, clarity, scope) name the section or line they concern. A
-factual issue the reviewer cannot ground is labeled `unverified`: record it under Open
-questions as a decision-ready question (per the Step 4 checklist) rather than editing the
-claim.
-Fix what's right, re-dispatch at most once (max 2 rounds total). If the same issues recur,
-stop and record them under Open questions instead of looping. Fail-soft: if the subagent
-cannot run, say so and continue — this is a quality bonus, not a gate. Write every accepted
-fix back into the proposal file, never leave it only in conversation.
+After the user confirms the draft, the proposal is reviewed by a panel of fresh-context
+`design-reviewer` subagents — one per **lens**, in parallel, blind to each other and to
+this conversation. `docs/proposals/review-lenses.md` defines the lenses, the scoring scale
+and the evidence rules; the Rigor tier selects the lenses:
+
+| Rigor | Lenses |
+|---|---|
+| light | feasibility |
+| standard | feasibility, architecture, scope |
+| critical | feasibility, architecture, scope, operability, tests — plus security (auth, secrets, payments, trust boundary) and data (stored data or schema) when touched |
+
+**Running it.** When the Workflow tool is available, run
+`Workflow({ name: "design-review", args: { kind: "proposal", artifact:
+"<abs path to the proposal>", repoRoot: "<abs repo root>", lenses: [...] } })` — it runs
+the lenses, verifies the findings and returns the structured result below. Otherwise do
+the same by hand with the Agent tool (named Task on older harnesses): dispatch every
+lens's `design-reviewer` in ONE message (prompt: the proposal path, the repo root, the
+lens name — nothing of your own reasoning), then dispatch one `finding-verifier` per
+`blocker` / `major` finding, again in one message.
+
+**Verification before action.** A reviewer's finding is a claim. Every `blocker` and
+`major` goes to a `finding-verifier` told to refute it against the code and the text:
+`refuted` findings are dropped (and counted), `downgrade` lowers the severity, `confirmed`
+stands, `unverified` is recorded under Open questions as a decision-ready question rather
+than applied. Never revise the proposal on an unverified finding.
+
+**The gate.** The panel passes iff no `blocker` survives verification AND every lens
+scored ≥ 7. Otherwise:
+
+1. Fix what survived — per the anti-shortcut clause below — and write each fix into the
+   file.
+2. Re-run ONLY the lenses that scored < 7 or raised a surviving blocker. At most two
+   rounds in total.
+3. Whatever still stands after round two is carried to `## Open questions` as
+   decision-ready questions and shown to the user. A surviving **blocker** is never
+   waved through: the user either changes the proposal or accepts it by name, via
+   AskUserQuestion (stakes: the blocker's claim; options: revise / accept the risk
+   and proceed / stop). An accepted blocker is recorded verbatim with the date.
+
+**Record it.** Append `## Review record` to the proposal: per round, a dated entry with one
+row per lens (score; findings kept / refuted / fixed) and the last line exactly
+`REVIEW: PASS` or `REVIEW: OPEN — [n] finding(s) carried to Open questions`. `/plan`
+refuses a proposal whose record is missing (the lint's `review-missing` rule fires once
+Status leaves `draft`). Then re-run `proposal-check.mjs` — fixes can break citations.
+
+Fail-soft, honestly: if subagents cannot run at all, say so, write
+`REVIEW: OPEN — panel could not run ([why])` and carry "unreviewed" to the user as the one
+open item. A panel that did not run is never recorded as a pass.
 
 Anti-shortcut clause: apply mechanical fixes (typos, clarity, quantification the code
 answers) directly; material changes — direction, a scope boundary, alternative ranking,
@@ -214,6 +304,11 @@ user confirmed in Step 5.
 - An option silently dropped or merged to fit the 4-option cap — use the Question
   protocol's 5+ option shapes instead.
 - Reviewer findings applied to a confirmed draft without user approval of material changes.
+- A reviewer finding acted on before a `finding-verifier` confirmed it.
+- A required Production-readiness subsection answered with a bare "n/a", or "rollback:
+  revert the commit" where data has moved.
+- A direction that contradicts an accepted ADR without a "supersede ADR-NNN?" decision.
+- Lenses added beyond the Rigor tier's set "to be safe" — raise the tier or don't.
 
 ## Gate flow (staged proposals)
 
@@ -243,7 +338,10 @@ has no gate; its completion flips the proposal to `delivered YYYY-MM-DD` at spri
    highest NNN + 1 (001 when none exist), zero-padded to 3 digits.
 2. Write `docs/proposals/{NNN}-{kebab-title}.md` following `PROPOSAL_TEMPLATE.md`. No
    unresolved placeholder text — every section filled or explicitly marked "n/a — [why]".
-3. Commit: `docs: proposal {NNN} — {title}`.
+   A gate-2 filing (a finished plan lightly mapped onto the headings) carries NO
+   `**Rigor**:` line — the lint then treats it as imported and checks only its shape.
+3. `node scripts/sprint/proposal-check.mjs <the file>` must exit 0, then commit:
+   `docs: proposal {NNN} — {title}`.
 4. **Always end by offering `/plan {NNN}`** — the proposal is not the destination, the
    sprint backlog is. If the user declines, leave Status: draft and stop.
 5. Status lifecycle (defined here, written mostly by other skills): `/plan` flips

@@ -4,6 +4,11 @@
 // and completions (Step 5) stay in-session — this script ONLY runs the
 // executors and returns their statuses as validated JSON.
 //
+// Note: workflow agents cannot spawn children, so an executor run here CANNOT perform its
+// pre-completion review — it returns DONE with `### Review` reading "— not run: no Agent
+// tool". The orchestrator must dispatch a `reviewer` for every DONE sprint before landing
+// (ORCHESTRATION.md Step 4, "When the executor could not review").
+//
 // Note: workflow agents cannot be continued via SendMessage after the run ends.
 // A BLOCKED result here is answered by the advisor loop via a fresh
 // sprint-executor dispatch pointed at the branch's committed work.
@@ -64,7 +69,9 @@ const results = await parallel(
 
 Execute the sprint per your instructions and return your status via the structured output.`,
       { agentType: 'sprint-executor', schema: STATUS_SCHEMA, label: `exec:${s.sprint}`, phase: 'Execute' },
-    ).then((r) => ({ sprint: s.sprint, ...r })),
+    // A dead executor resolves to null — spreading it would yield a truthy `{ sprint }`
+    // with no status, and `missing` below would never see it.
+    ).then((r) => (r ? { sprint: s.sprint, ...r } : null)),
   ),
 )
 

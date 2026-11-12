@@ -395,8 +395,12 @@ Fill `### Learnings` in the worktree copy — one line per lesson in the SPRINT_
 grammar (`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what happened> → rule: <one
 line>`), or `— none`. A `plan`-class line — a gap that would have changed another sprint's
 brief — is also prepended to `docs/sprints/PLANNING_LEARNINGS.md` (a doc-sync target: on
-`main` during Step 5's pause, or claim the file; never delete older entries). Other classes
-stay in the sprint file, greppable across `done/` via `### Learnings`.
+`main` during Step 5's pause, or claim the file; never delete older entries). Other classes stay in the sprint
+file and are read back by `node scripts/sprint/learnings.mjs` (newest first, any class):
+the `reviewer` agent and `/review` start from the `review`/`test` lines, and a rule it
+flags `RECURRING` (three or more sprints) is promoted into `/review`'s Project-Specific
+Checks. Write the `rule:` half as a reusable instruction — it is what the next reviewer
+acts on.
 
 ### Step 4: Prepare (locked)
 

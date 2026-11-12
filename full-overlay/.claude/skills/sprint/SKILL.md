@@ -8,7 +8,7 @@ description: >
   sprint", "what's next", "sprint roadmap", "run/fan out a parallel wave", or
   "run a serial train of sprints".
 argument-hint: "[command] [sprint-id]"
-allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion EnterWorktree ExitWorktree Task"
+allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion EnterWorktree ExitWorktree Agent Task"
 ---
 
 # Sprint Management Skill
@@ -189,6 +189,21 @@ past briefs failed; don't repeat those gaps.
    (missing premise, unstated constraint, criterion it can't evaluate) — and fix it.
    Any decision that still lives only in this conversation goes into Pre-Sprint
    Decisions now.
+9. **Mechanical lint**: `node scripts/sprint/plan-check.mjs S-NNN` exits 0 (dependencies
+   exist, Consumes matches the dependency's Produces, no template placeholders, every
+   `file:line` citation resolves, `risk: high` carries Production notes). Re-check `risk`
+   and `tier` against what the deepened Files lists now touch — raise them when the
+   sprint turned out to reach a risk-tier surface or to need architecture; never lower.
+10. **Independent cold read** — you wrote this brief, so you cannot certify it. Dispatch
+   one `brief-auditor` subagent (Agent tool; prompt: the sprint file path and the repo
+   root — nothing else, least of all your reasoning). `SUFFICIENT` → certify.
+   `INSUFFICIENT` → fix every BLOCKING item in the file (an item that needs the user is
+   an Open Question resolved per item 3), then dispatch a FRESH auditor once more; a
+   second `INSUFFICIENT` leaves `plan_date: null`. Write its ASSUMPTIONS into the file
+   where they bite — an assumption the executor would have to make is a sentence the
+   brief is missing. If subagents cannot run, say so in your report ("cold read: could
+   not run — [why]") and certify on items 1–9 alone; never report a cold read that did
+   not happen.
 
 All pass → `node scripts/sprint/frontmatter.mjs set <file> plan_date "$(date +%F)"`. Any
 fail → leave `plan_date: null` and report what's missing (still commit partial progress).

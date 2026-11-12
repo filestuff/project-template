@@ -23,11 +23,15 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
 
 ## Workflow at a glance
 
-0. **Spec** — when all you have is an idea: `/proposal` grounds itself in the code first,
-   interrogates the premise, weighs 2–3 alternatives equally, and routes every decision —
-   scope calls, the direction itself — through explicit option questions before writing a
-   decision-ready RFC to `docs/proposals/NNN-*.md` (self-reviewed, then scored by a
-   fresh-context reviewer). Sequential directions become **Stages** with measurable gates:
+0. **Spec** — when all you have is an idea: `/proposal` grounds itself in the code and in
+   prior decisions (ADRs, planning learnings) first, interrogates the premise, weighs 2–3
+   alternatives equally — designing structurally different ones in parallel when a new
+   module or service is at stake — and routes every decision — scope calls, the direction
+   itself — through explicit option questions before writing a decision-ready RFC to
+   `docs/proposals/NNN-*.md`. A **rigor tier** (light / standard / critical, classified
+   from what the idea touches) scales how much production-readiness design it must carry
+   and how many independent review lenses it faces; reviewers' findings are verified
+   before anyone acts on them, and the panel has a pass mark. Sequential directions become **Stages** with measurable gates:
    `/plan` consumes one stage at a time, and when a stage's sprints land, `/proposal NNN`
    runs the gate decision before the next stage is planned. It skips itself when a finished
    plan is handed in or a proposal already exists — then continue directly below.
@@ -35,10 +39,13 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
    (e.g. an external plan-review skill), then run `/plan` — it challenges scope against the
    decision ladder, cuts the plan into sprint files in `docs/sprints/backlog/` with
    dependencies, story points, and Produces/Consumes interface contracts, and won't commit
-   until every source-plan requirement maps to a sprint.
+   until every source-plan requirement maps to a sprint, `plan-check.mjs` passes
+   (dependencies, contracts, citations), and — for anything beyond a couple of low-risk
+   sprints — an independent four-lens panel has reviewed the breakdown.
 2. **Certify** a sprint just before working it: `/sprint plan S-NNN` deepens the file to an
    executable brief (exact paths, verified `file:line` citations, no placeholders, a
-   fresh-reader pre-mortem) and stamps `plan_date`. Uncertified sprints still run — you just
+   fresh-reader pre-mortem), then has a `brief-auditor` agent that has seen nothing else
+   cold-read it — the author of a brief cannot certify it — and stamps `plan_date`. Uncertified sprints still run — you just
    get warned.
 3. **Execute**: `/sprint start S-NNN` → implement → `/sprint done S-NNN` (acceptance evidence,
    doc sync, ADR check). `/sprint board` shows the kanban; `/sprint next` suggests what's
@@ -67,6 +74,10 @@ single file sufficient for an agent (or developer) with zero conversation contex
 | Commit gate (`scripts/sprint/gate.sh`, single source of truth) | ✅ | ✅ |
 | Update checks + `/template-upgrade` (three-way merge, migrations) | ✅ | ✅ |
 | Planning gates (scope challenge, coverage map, readiness checklist, `PLANNING_LEARNINGS.md` loop) | ✅ | ✅ |
+| Proposal rigor tiers + production-readiness sections, design-it-twice | ✅ | ✅ |
+| Independent review panels for proposals and plans (`design-reviewer` per lens, verified findings, pass mark) | ✅ | ✅ |
+| Planning lints (`proposal-check.mjs`, `plan-check.mjs`) + cold-read brief certification (`brief-auditor`) | ✅ | ✅ (also inside the wave planning pass) |
+| Learnings read back into review (`learnings.mjs`, recurring-rule promotion) | ✅ | ✅ |
 | Completion record (structured Completion Log, inline `Evidence:` lines, `close-check.mjs` lint, `docs/sprints/evidence/`) | ✅ (lint before the `done/` move) | ✅ (lint gates `merge-sprint.sh land`; commits stamped at land) |
 | Concurrent sprints | one at a time | many, in parallel agents |
 | Wave orchestration (`/sprint wave` + `sprint-planner`/`sprint-executor`/`wave-planner` agents) | — | ✅ |
