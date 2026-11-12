@@ -12,6 +12,7 @@ tags: []
 story_points: 0
 risk: low
 tier: standard
+tier_reason: null
 plan_date: null
 start_date: null
 end_date: null
@@ -42,10 +43,19 @@ touches: []
      docs/sprints/review-calibration.md (auth/permissions, schema/migrations, public or
      cross-sprint contracts, secrets, payment or irreversible mutation, trust-boundary
      parsing). It makes `## Production notes` below mandatory and deepens the review.
-     tier: standard | complex — which executor model runs the sprint. /plan sets complex
-     when story_points >= 8, or risk is high, or the sprint introduces architecture rather
-     than following an existing pattern. A file with neither key (pre-1.11 sprints) is
-     read as risk: low, tier: standard. -->
+     tier: routine | standard | complex | critical — how HARD the work is (not how big,
+     not how risky): it decides which model and how much reasoning effort executes and
+     reviews the sprint. docs/sprints/tier-rubric.md is the rule. /plan sets a provisional
+     standard or complex; the PLANNER assigns the real tier at certification (/sprint
+     plan, or the wave's planning pass) and writes tier_reason: — one line naming the
+     signal that decided it (`follows src/routes/users.ts:12-40 — same handler shape`;
+     `new retry state machine across two services`). routine needs every criterion in the
+     rubric; anything above standard needs one signal; unsure means the higher tier. After
+     the sprint starts the tier only goes up (ESCALATE). A file with none of these keys
+     (pre-1.11 sprints) is read as risk: low, tier: standard.
+     outcome: is written by the orchestrator when a wave or train lands the sprint —
+     assigned/final tier, escalations, fix rounds, findings — and read by
+     scripts/sprint/tiers.mjs to calibrate the rubric. Never set it by hand. -->
 
 <!-- proposal:/stage: are informational backlinks, ignored by scripts — set by /plan
      when the source is a proposal (proposal: NNN, stage: k; stage: 1 for un-staged

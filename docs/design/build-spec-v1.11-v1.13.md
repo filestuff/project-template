@@ -545,3 +545,42 @@ both-tier render test with no leftover tokens.
 | A guard false positive blocks legitimate work. | Guards have no opinion outside worktrees; every deny names the escape (NEEDS_CLAIM); tests cover allow cases. |
 | Downstream repos with hand-edited `settings.json` hooks. | Merge preserves them and is idempotent (§4.5). |
 | Three-file overlay drift (lite vs full copies). | A test diffs the shared sections. |
+
+## 9. Addendum — v1.14.0: tiers that fix model and effort (built 2026-11-12)
+
+Asked by the owner after v1.13: "should model selection and effort level not be dynamic
+based on the complexity of the work?" What v1.12–1.13 had was two tiers chosen by proxy
+(story points, risk), one fixed effort for every executor, one fixed reviewer setting, and
+no record of whether a choice had been right.
+
+**Decisions**
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | Four tiers — `routine`, `standard`, `complex`, `critical` — each fixing model **and** effort for the executor and for its reviewers. | Effort is the cheaper lever; one effort for all work either overpays for mechanical work or under-thinks hard work. |
+| 2 | The tier measures difficulty only. `risk:` still drives review breadth (lens count); story points no longer set the tier. | A 2-point race-condition fix is harder than a 13-point CRUD screen. |
+| 3 | The **planner** assigns the tier at certification, with a recorded `tier_reason:`; `/plan`'s tier is provisional (`standard` or `complex` only). | The planner has just read the code — the only position difficulty can be judged from. |
+| 4 | Rule-based and asymmetric: `routine` needs every checklist criterion (lint + independent cold reader); one signal moves a sprint up; unsure → up; after start a tier only rises. | A model judging its own task errs low, and under-classifying costs a failed run plus an escalation while over-classifying costs tokens. A free per-task model choice by the agent was rejected for that reason. |
+| 5 | A reviewer is never weaker than the executor it reviews, and an escalated sprint is reviewed at the tier it finished on. | Otherwise escalation raises the author above its reviewer. |
+| 6 | Outcomes are recorded in the done-file (`outcome:` frontmatter, one line) and aggregated by `tiers.mjs`; nothing is flagged below 4 sprints. | Records live in the artifact they concern (invariant 7); a second store would drift. |
+| 7 | `sprint-flow` accepts the pre-1.14 `routing.json` shape; an unknown tier below standard runs as standard, above it at the top of the ladder. | A half-merged table must degrade safely, never cheaply. |
+
+**As built**
+
+- `lite/docs/sprints/tier-rubric.md` is the rule; `SPRINT_TEMPLATE.md`, `/plan`,
+  `/sprint plan` (both tiers), `sprint-planner`, `brief-auditor` and `plan-check.mjs`
+  (`tier-unjustified`, `tier-unreasoned`) apply it.
+- `routing.json`: `roles.executor` and `roles.reviewer` are tables by tier; the escalation
+  ladder has four rungs. A test pins that every tier is present, strength never falls as
+  the tier rises, no reviewer is weaker than its executor, the arbiter is at least as
+  strong as the strongest executor, and the agent definitions pin the `standard` tier.
+- `sprint-flow.js` routes both roles by tier, returns `tier`, `tier_assigned` and
+  `outcome`, and takes `sprint.assignedTier` / `sprint.attempt` on a re-launch so an
+  escalation is not lost. It no longer tells the executor to rewrite `tier:` on
+  escalation — the assigned tier stays on the record and the outcome carries the final.
+- `tiers.mjs` + `/sprint board` + the wave close relay `UNDER` / `STRAINED` / `OVER?`.
+- Not done: effort routing on the hand-dispatch fallback (the Agent tool takes a spawn-time
+  model, not an effort — the definition's effort applies there); varying the verifier or
+  the planner by tier; any automatic change to the rubric or the table — flags go to the
+  user.
+

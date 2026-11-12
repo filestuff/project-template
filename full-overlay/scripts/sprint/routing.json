@@ -1,17 +1,24 @@
 {
-  "$comment": "Which model and reasoning effort each role runs on. Read by the orchestrator (/sprint wave, /sprint train) and passed to workflow scripts; the agent definitions in .claude/agents/ carry the same defaults, so the two must be changed together. Use tier aliases (sonnet | opus | fable | haiku) — never dated model ids. Rule of thumb: volume work on the cheaper tier, judgment on the stronger one, and never a model stronger than the one that will have to arbitrate its disputes. executor.standard / executor.complex are chosen per sprint by its frontmatter `tier:`. escalation lists, in order, where an executor that returns ESCALATE is re-dispatched; past the end of the list the sprint is parked for the user.",
+  "$comment": "Which model and reasoning effort each role runs on. Read by the orchestrator (/sprint wave, /sprint train) and passed to the workflow scripts; the agent definitions in .claude/agents/ carry the same defaults for the fixed roles and for the `standard` tier, so change the two together. Use model aliases (sonnet | opus | fable | haiku) — never dated model ids. executor and reviewer are routed PER SPRINT by its frontmatter `tier:` (docs/sprints/tier-rubric.md says how a tier is assigned): each tier fixes model AND effort for both roles, and a reviewer is never weaker than the executor it reviews. `escalation` is the ladder an executor climbs when it returns ESCALATE — one rung per escalation; past the top the sprint is parked for the user. Keep the arbiter at least as strong as the strongest executor: it settles their disputes. Where `fable` is available, the `critical` tier and the arbiter are the places to use it. Tune this table on evidence: `node scripts/sprint/tiers.mjs` shows, per tier, how often sprints escalated or needed fix rounds.",
   "roles": {
     "planner": { "model": "opus", "effort": "high" },
     "wave-planner": { "model": "opus", "effort": "high" },
     "brief-auditor": { "model": "sonnet", "effort": "medium" },
     "executor": {
+      "routine": { "model": "sonnet", "effort": "medium" },
       "standard": { "model": "sonnet", "effort": "high" },
-      "complex": { "model": "opus", "effort": "high" }
+      "complex": { "model": "opus", "effort": "high" },
+      "critical": { "model": "opus", "effort": "xhigh" }
     },
-    "reviewer": { "model": "opus", "effort": "high" },
+    "reviewer": {
+      "routine": { "model": "sonnet", "effort": "high" },
+      "standard": { "model": "opus", "effort": "high" },
+      "complex": { "model": "opus", "effort": "xhigh" },
+      "critical": { "model": "opus", "effort": "xhigh" }
+    },
     "finding-verifier": { "model": "sonnet", "effort": "medium" },
     "arbiter": { "model": "opus", "effort": "xhigh" },
     "doc-sync": { "model": "sonnet", "effort": "low" }
   },
-  "escalation": ["executor.standard", "executor.complex"]
+  "escalation": ["executor.routine", "executor.standard", "executor.complex", "executor.critical"]
 }

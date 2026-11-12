@@ -127,9 +127,16 @@ past briefs failed; don't repeat those gaps.
    decision that still lives only in this conversation goes into Pre-Sprint Decisions now.
 8. **Mechanical lint**: `node scripts/sprint/plan-check.mjs S-NNN` exits 0 (dependencies
    exist, Consumes matches the dependency's Produces, no template placeholders, every
-   `file:line` citation resolves, `risk: high` carries Production notes). Re-check `risk`
-   and `tier` against what the deepened Files lists now touch — raise them when the
-   sprint turned out to reach a risk-tier surface or to need architecture; never lower.
+   `file:line` citation resolves, `risk: high` carries Production notes; a `routine` tier meets its checklist). Re-check
+   `risk` against what the deepened Files lists now touch — raise it when the sprint
+   turned out to reach a risk-tier surface; never lower it. Then **assign the tier** by
+   `docs/sprints/tier-rubric.md` — you have just read the code, which is the only place
+   difficulty can be judged from: `routine` only if EVERY routine criterion holds;
+   `complex` or `critical` on any ONE of their signals; `standard` otherwise; unsure
+   between two → the higher. Write `tier:` and a one-line `tier_reason:` naming the signal
+   or the pattern (`follows src/x.ts:12-40 — same handler shape`). You may lower `/plan`'s
+   provisional tier when the code shows the work is simpler than the plan implied — with
+   the reason on the record.
 9. **Independent cold read** — you wrote this brief, so you cannot certify it. Dispatch
    one `brief-auditor` subagent (Agent tool; prompt: the sprint file path and the repo
    root — nothing else, least of all your reasoning). `SUFFICIENT` → certify.

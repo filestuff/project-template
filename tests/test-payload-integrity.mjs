@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 let failed = 0;
 const check = (c, m) => { if (!c) { failed++; console.error(`FAIL ${m}`); } };
+const eqList = (a, b, m) => check(JSON.stringify(a) === JSON.stringify(b), `${m} (got ${JSON.stringify(a)})`);
 
 const walk = (dir) =>
   readdirSync(dir).flatMap((n) => {
@@ -87,7 +88,7 @@ for (const [rel, needles] of Object.entries(SHADOWED)) {
 // drift, "which model ran this sprint?" has two answers.
 {
   const routing = JSON.parse(readFileSync(join(REPO, "full-overlay/scripts/sprint/routing.json"), "utf8"));
-  const ROLE_AGENT = { planner: "sprint-planner", "wave-planner": "wave-planner", "brief-auditor": "brief-auditor", reviewer: "reviewer", "finding-verifier": "finding-verifier", arbiter: "arbiter", "doc-sync": "doc-sync" };
+  const ROLE_AGENT = { planner: "sprint-planner", "wave-planner": "wave-planner", "brief-auditor": "brief-auditor", "finding-verifier": "finding-verifier", arbiter: "arbiter", "doc-sync": "doc-sync" };
   const front = (name) => {
     const p = TIERS.map((t) => join(REPO, t, ".claude/agents", `${name}.md`)).find(existsSync);
     check(!!p, `routing.json names role agent ${name}, which has no definition`);
@@ -102,8 +103,34 @@ for (const [rel, needles] of Object.entries(SHADOWED)) {
     const got = front(agent);
     check(got.model === want.model && got.effort === want.effort, `.claude/agents/${agent}.md pins ${got.model}/${got.effort} but routing.json says ${want.model}/${want.effort} for "${role}"`);
   }
-  const ex = front("sprint-executor");
-  check(ex.model === routing.roles.executor.standard.model && ex.effort === routing.roles.executor.standard.effort, "sprint-executor.md must pin routing.json's executor.standard (complex is passed at dispatch)");
+  // Per-tier roles: the agent definition pins the `standard` tier (what a by-name dispatch
+  // gets); every tier is present for both roles; a tier never routes a reviewer weaker
+  // than its executor; and effort never falls as the tier rises.
+  const TIER_NAMES = ["routine", "standard", "complex", "critical"];
+  const MODEL_RANK = { haiku: 0, sonnet: 1, opus: 2, fable: 3 };
+  const EFFORT_RANK = { low: 0, medium: 1, high: 2, xhigh: 3, max: 4 };
+  const strength = (r) => [MODEL_RANK[r?.model] ?? -1, EFFORT_RANK[r?.effort] ?? -1];
+  const geq = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] >= b[1]);
+  for (const [role, agent] of [["executor", "sprint-executor"], ["reviewer", "reviewer"]]) {
+    const got = front(agent);
+    const std = routing.roles[role]?.standard;
+    check(std && got.model === std.model && got.effort === std.effort, `.claude/agents/${agent}.md must pin routing.json's ${role}.standard (other tiers are passed at dispatch)`);
+    let prev = null;
+    for (const t of TIER_NAMES) {
+      const r = routing.roles[role]?.[t];
+      check(r && r.model in MODEL_RANK && r.effort in EFFORT_RANK, `routing.json: ${role}.${t} must set a known model alias and effort (has ${JSON.stringify(r)})`);
+      if (r && prev) check(geq(strength(r), strength(prev)), `routing.json: ${role}.${t} is weaker than the tier below it`);
+      prev = r ?? prev;
+    }
+  }
+  for (const t of TIER_NAMES) check(geq(strength(routing.roles.reviewer?.[t]), strength(routing.roles.executor?.[t])), `routing.json: at tier ${t} the reviewer is weaker than the executor it reviews`);
+  check(geq(strength(routing.roles.arbiter), strength(routing.roles.executor?.critical)), "routing.json: the arbiter must be at least as strong as the strongest executor — it settles their disputes");
+  eqList(routing.escalation, TIER_NAMES.map((t) => `executor.${t}`), "routing.json: escalation must climb the four tiers in order");
+  // the rubric, the template comment and the lint must name the same four tiers
+  for (const rel of ["lite/docs/sprints/tier-rubric.md", "lite/docs/sprints/SPRINT_TEMPLATE.md", "lite/scripts/sprint/plan-check.mjs", "full-overlay/docs/sprints/ORCHESTRATION.md"]) {
+    const text = readFileSync(join(REPO, rel), "utf8");
+    for (const t of TIER_NAMES) check(text.includes(t), `${rel}: does not mention tier "${t}"`);
+  }
   for (const step of routing.escalation) check(step.split(".").reduce((o, k) => o?.[k], routing.roles)?.model, `routing.json escalation step "${step}" does not resolve to a role`);
   // every agent definition states model, effort and a turn cap — an unset model silently
   // inherits the session's (most expensive) one.

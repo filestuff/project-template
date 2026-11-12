@@ -197,10 +197,15 @@ Workflow({ name: "plan-flow", args: {
 Each member flows on its own through three stages — no member waits for another:
 
 1. **Plan** — a `sprint-planner` verifies and deepens the member's file against current
-   code. Planners edit their (pairwise-distinct) files in the worktree; the primary
+   code, and **assigns its `tier:`** — how hard the work is, which decides the model and
+   effort that will execute and review it (`docs/sprints/tier-rubric.md`). The planner has
+   just read the code; `/plan`'s tier was provisional. Each verdict carries `tier` and
+   `tier_reason`. Planners edit their (pairwise-distinct) files in the worktree; the primary
    checkout — the ledger — **stays clean throughout**, so other waves' locked
    transactions are never blocked by this pass.
-2. **Audit** — a `brief-auditor` cold-reads the file as its future executor. A planner
+2. **Audit** — a `brief-auditor` cold-reads the file as its future executor, and checks
+   independently any claim that the sprint is `routine` (the cheapest setting — a downgrade
+   that does not hold is a blocking item). A planner
    cannot certify the brief it wrote: its `plan_date` is provisional until a fresh reader
    agrees. `INSUFFICIENT` → one planner repair round with the auditor's blocking list →
    one re-audit.
@@ -312,10 +317,14 @@ Workflow({ name: "sprint-flow", args: {
   ledgerDir: "<abs repo root>/.claude/sprint-orchestration/W-<id>/",
   mode: "wave", autonomy: "<gated | interactive>",
   sprint: { id: "S-NNN", worktree: "<abs worktree path>",
-            risk: "<low | high>", tier: "<standard | complex>" },   // from the sprint's frontmatter
+            risk: "<low | high>",                                     // from the sprint's frontmatter
+            tier: "<routine | standard | complex | critical>" },      // from the sprint's frontmatter
   routing: <the parsed contents of scripts/sprint/routing.json>
 } })
 ```
+
+`tier` picks the rung of `routing.json` the sprint starts on — model **and** effort for
+its executor and for its reviewers. A missing or unknown tier runs as `standard`.
 
 **File-based handoff:** the run is given the sprint id and worktree — the sprint file *is*
 the brief; never paste a sprint's contents into `args`.
@@ -323,13 +332,16 @@ the brief; never paste a sprint's contents into `args`.
 Inside a run (the script is `.claude/workflows/sprint-flow.js`; you do none of this by
 hand):
 
-1. **Execute** — a `sprint-executor` on the model routing.json gives the sprint's `tier:`.
+1. **Execute** — a `sprint-executor` on the model and effort routing.json gives the
+   sprint's `tier:`.
    A **BLOCKED** executor is answered by the `arbiter` and a fresh executor continues from
    the branch; an **ESCALATE** moves the sprint to the next tier in `routing.escalation`;
    a dead executor is re-dispatched once.
 2. **Review** — independent of the author by construction: one `reviewer` over the branch
    diff, or three focused lenses (correctness, security and data, tests) when the sprint
-   is `risk: high`. The executor neither spawns nor briefs them.
+   is `risk: high`. Reviewers run on the reviewer setting of the tier the sprint
+   **finished** on — never weaker than the executor that did the work. The executor
+   neither spawns nor briefs them.
 3. **Verify** — each Critical/Important finding goes to a `finding-verifier` told to
    refute it; refuted findings are dropped and recorded as such.
 4. **Fix** — the executor fixes what survived, re-gates and commits; verifiers re-check
@@ -340,8 +352,10 @@ hand):
 
 Every run ends with a `status`, the executor's `commits` / `gate` / `close_check` lines,
 the `review` summary, a `review_record` (the lines for the sprint's `### Review` section —
-you paste them at land, Step 5), the arbiter `decisions` made along the way, and any
-`escalations`. Act on the status; record one line per sprint in wave-progress.md.
+you paste them at land, Step 5), the arbiter `decisions` made along the way, any
+`escalations`, the `tier` it finished on, and an `outcome` line (assigned and final tier,
+runs, escalations, arbiter calls, fix rounds, findings — you write it into the done-file
+at land; `tiers.mjs` calibrates the rubric on it). Act on the status; record one line per sprint in wave-progress.md.
 
 | Status | Meaning | You |
 |---|---|---|
@@ -351,8 +365,11 @@ you paste them at land, Step 5), the arbiter `decisions` made along the way, and
 | `PLAN_GAP` | the brief is wrong | Failure handling → PLAN_GAP, then re-launch |
 | `DIED` | the executor died twice | read `git -C <worktree> log`; re-launch once, or surface it |
 
-A re-launched run reads the branch first — committed work persists there — and continues;
-`resume` is the only thing it needs from you. Confirm each `decisions` entry is in the
+A re-launched run reads the branch first — committed work persists there — and continues.
+Besides `resume`, pass it where the sprint stands on the ladder so an escalation is not
+lost and the outcome stays true: `sprint.tier` = the `tier` the previous run **returned**,
+`sprint.assignedTier` = the tier in the sprint's frontmatter, and `sprint.attempt` = the
+run count (2 for the first re-launch). Confirm each `decisions` entry is in the
 sprint file's Pre-Sprint Decisions (the executor was told to record it verbatim); collect
 the taste ones for the list you show the user at the wave close (Step 6).
 
@@ -373,8 +390,10 @@ order and the rules are identical; only the dispatcher changes:
   with the blocking list, then one fresh auditor. In a gated wave, dispatch one `arbiter`
   per open question in a single message.
 - **Execute** (4): dispatch one `sprint-executor` per sprint in a single message
-  (Execution dispatch prompt, below), passing the routed `model` for a `tier: complex`
-  sprint. On **BLOCKED**: answer from the record if it is already decided, otherwise
+  (Execution dispatch prompt, below), passing as spawn-time `model` what routing.json's
+  `executor.<tier>` gives for any sprint that is not `standard` (the Agent tool takes a
+  model, not an effort — the definition's effort applies; that is one reason the workflow
+  path is the primary one). On **BLOCKED**: answer from the record if it is already decided, otherwise
   dispatch the `arbiter`; deliver the answer by **continuing the same executor
   (SendMessage)** — its context is the most valuable thing it has. On **ESCALATE**:
   dispatch a fresh `sprint-executor` on the next routing tier with the handover block.
@@ -384,6 +403,11 @@ order and the rules are identical; only the dispatcher changes:
   Critical/Important finding. Send the surviving findings to the executor (SendMessage)
   as a fix round; re-check each fix with a `finding-verifier`. Two rounds at most, then
   it is the user's.
+- Dispatch reviewers with the model routing.json's `reviewer.<tier>` gives for the tier
+  the sprint finished on.
+- Compose the sprint's `outcome` line yourself, in the same grammar the runs use:
+  `assigned=<tier> final=<tier> runs=<n> escalations=<n> arbiter=<n> fix_rounds=<n>
+  findings=<confirmed>/<raised>`.
 - Compose the `review_record` lines yourself, one per finding:
   `- <severity> (<lens>) <file:line> — <description> — fixed <sha> | refuted on
   verification: <why> | declined: <why>`, or `— no material issues found (…)`.
@@ -447,7 +471,9 @@ For the batch (up to 6 sprints; one ready sprint is simply a batch of one):
    from its doc-sync return (an ADR the doc-sync agent says is needed is drafted now via
    `/adr` — mechanical, not a question); **replace the `### Review` section's `— pending:
    independent review before land` line with that sprint's `review_record` lines,
-   verbatim**; prepend any `plan`-class `learnings[]` line to
+   verbatim**; record how the run went —
+   `node scripts/sprint/frontmatter.mjs set docs/sprints/done/S-NNN-….md outcome "<the
+   run's outcome line>"` (the last run's, for a sprint that was re-launched); prepend any `plan`-class `learnings[]` line to
    `docs/sprints/PLANNING_LEARNINGS.md` → `merge-sprint.sh finish <land-branch> --sprints
    S-A,S-B,… --no-push`. Phase 3 Step 6's CI check does **not** run here — `finish`
    deferred its push; it runs once at checkpoint P3 (Step 6).
@@ -546,8 +572,11 @@ into the wave close; it needs the proposal's evidence spec, not the wave report.
 finishers can't each see a sibling in-progress and silently drop the gate offer.)
 
 Then close out the wave: `reserve-wave.sh --release W-<id>` if any backlog members still
-carry the reservation (deferred/split members). Show the user the wave's decisions made
-on their behalf — `node scripts/sprint/decisions.mjs --class taste --since <wave start>` —
+carry the reservation (deferred/split members). Run `node scripts/sprint/tiers.mjs` and
+relay any flag it raises — a tier whose sprints keep escalating (`UNDER`) or finishing
+uncleanly (`STRAINED`) means the rubric or the routing table needs adjusting, and that is
+the user's call to make on evidence, not yours to make silently. Show the user the wave's
+decisions made on their behalf — `node scripts/sprint/decisions.mjs --class taste --since <wave start>` —
 and take any they overturn as follow-up work. Then **checkpoint P3 (mandatory)**: follow
 the push policy chosen at Step 1 — "ask at wave end" → the deploy-gate question (Push
 policy above); "auto-push" → proceed; "hold" → skip the push and say so — then run
@@ -589,8 +618,8 @@ re-dispatched already-landed sprints — the most expensive failure mode. Keep a
   pointer `W-<id>/S-NNN-report.md` (sprint-file path, commit list, literal gate tail, the
   lint SUMMARY line). Step 5 reads the sprint file through `close-check.mjs --json`, never
   the body, and adds `W-<id>/S-NNN-docs-draft.md`. Save each run's returned
-  `review_record` to `W-<id>/S-NNN-review.md` the moment it arrives — you paste it at
-  land, and it must survive a compaction in between. Nothing in this directory is ever cited
+  `review_record` and `outcome` line to `W-<id>/S-NNN-review.md` the moment they arrive —
+  you write both at land, and they must survive a compaction in between. Nothing in this directory is ever cited
   from a committed file — it is gitignored.
 - After a compaction, trust this ledger + `git log` + `/sprint board` (the `in-progress/`
   set and `wave:` reservations on `main` are authoritative), never recollection. Your wave
@@ -606,31 +635,49 @@ sprint bodies (diff-dependent duties — doc sync, `/adr check`, review — are 
 to fresh subagents; the master only adjudicates their structured returns) — that is what
 keeps it alive across a whole wave.
 
-Subagents run on the model their work needs — volume on the cheaper tier, judgment on the
-stronger one. `scripts/sprint/routing.json` is the table; each agent definition pins the
-same `model` and `effort`, so dispatching by agent name gives the routed model with no
-spawn-time parameter:
+Subagents run on the model **and reasoning effort** their work needs.
+`scripts/sprint/routing.json` is the table. Fixed roles are pinned in their agent
+definitions too, so dispatching by name gives the routed setting:
 
 | Role | Default | Why |
 |---|---|---|
-| `sprint-executor`, `tier: standard` | sonnet / high | the volume work; the brief carries the judgment |
-| `sprint-executor`, `tier: complex` | opus / high | large, high-risk or architecture-introducing sprints |
-| `sprint-planner`, `wave-planner` | opus / high | a gap in the brief is a guess committed to code |
-| `reviewer` | opus / high | must out-think the code's author |
+| `sprint-planner`, `wave-planner` | opus / high | a gap in the brief is a guess committed to code — and the planner assigns the tier |
 | `arbiter` | opus / xhigh | makes the decisions others may not (set `fable` where available) |
 | `brief-auditor`, `finding-verifier` | sonnet / medium | narrow, checkable tasks |
 | `doc-sync` | sonnet / low | mechanical |
 
-The executor is the one role whose model varies per dispatch. Read the sprint's
-frontmatter `tier:` and, for `complex` (or a re-dispatch after ESCALATE), pass the
-`model` and `effort` that routing.json gives. `sprint-flow` does this itself from the
-`routing` and `sprint.tier` you pass it; on the hand-dispatch fallback it is a spawn-time
-`model` on the Agent tool. That is the only sanctioned
-spawn-time override: never pass a `model` that is not in routing.json, and never dispatch
-a wave role as a generic subagent — either lets N agents silently run on the master's
-model and multiply the wave's cost. To change a role's model, edit routing.json **and**
-the `model:` line of its agent definition together. Executors' children inherit their own
-definitions (`reviewer`, `arbiter`).
+The **executor and the reviewer are routed per sprint, by its `tier:`** — how hard the work
+is (`docs/sprints/tier-rubric.md`), assigned by the planner at certification with a
+recorded reason:
+
+| `tier:` | The work is… | Executor | Reviewer |
+|---|---|---|---|
+| `routine` | mechanical — repeats an existing pattern | sonnet / medium | sonnet / high |
+| `standard` | ordinary engineering within one module | sonnet / high | opus / high |
+| `complex` | design under constraints, subtle state, cross-module | opus / high | opus / xhigh |
+| `critical` | hard and unforgiving — data loss, security, irreversible | opus / xhigh | opus / xhigh |
+
+Three properties of this table are deliberate. **A tier fixes effort as well as model** —
+effort is the cheaper lever, and running everything at the same effort either overpays for
+mechanical work or under-thinks the hard work. **A reviewer is never weaker than the
+executor it reviews.** And **assignment is asymmetric**: `routine` needs every criterion
+on a checklist (the lint and the cold reader both check it), while one signal is enough to
+go up — a hard sprint run too low costs a failed run, an escalation and a subtler bug; an
+easy sprint run too high costs tokens.
+
+`sprint-flow` applies the table itself from the `routing` and `sprint.tier` you pass it,
+and climbs `routing.escalation` one rung per ESCALATE. On the hand-dispatch fallback the
+routed model is a spawn-time `model` on the Agent tool — the only sanctioned override:
+never pass a `model` that is not in routing.json, and never dispatch a wave role as a
+generic subagent — either lets N agents silently run on the master's model and multiply
+the wave's cost. To change a setting, edit routing.json — and, for a fixed role or the
+`standard` tier, the `model:` / `effort:` lines of its agent definition too.
+
+**Tune it on evidence.** Each landed sprint records an `outcome:` line; `node
+scripts/sprint/tiers.mjs` aggregates them per assigned tier and flags a tier that
+escalates too often (`UNDER`), finishes uncleanly (`STRAINED`), or has run clean long
+enough to question (`OVER?`). Change the rubric or the table when that view says so — not
+after one bad sprint, and not on a hunch.
 
 ### Running waves from multiple sessions
 
@@ -788,7 +835,7 @@ in train-progress.md.
 5. **On `READY_TO_LAND`:** evidence check via `close-check.mjs --json` on the worktree's
    in-progress file (structured output only, never the diff; `ok:false` → re-launch with
    the failure list as `resume`); record the boundary SHA (`git -C <wt> rev-parse HEAD`) +
-   status line in train-progress.md; save the run's `review_record` to
+   status line in train-progress.md; save the run's `review_record` and `outcome` line to
    `W-<id>/S-i-review.md`; dispatch `doc-sync` for S-i against the boundary range and
    pre-draft its semantic docs into `W-<id>/S-i-docs-draft.md`.
 6. **Checkpoint due** (i ≡ 0 mod K, last member, or any pause/abort)? → T6, then continue
@@ -798,8 +845,8 @@ in train-progress.md.
 `merge-sprint.sh prepare train-W-<id>` (exit 3 → full `gate.sh` in the worktree, lock held)
 → `merge-sprint.sh land train-W-<id> --sprints S-A,S-B,…` (one `--no-ff` merge; per-sprint
 done-moves + status/end_date flips; one regen; exit 4) → apply the segment's pre-drafted
-docs and paste each member's saved `review_record` over its `### Review` pending line
-(seconds) → `merge-sprint.sh finish train-W-<id> --sprints S-A,S-B,… --no-push` →
+docs, paste each member's saved `review_record` over its `### Review` pending line, and
+set each done-file's `outcome` (seconds) → `merge-sprint.sh finish train-W-<id> --sprints S-A,S-B,… --no-push` →
 push **per the T1 push policy**: "ask-each" → deploy-gate question, then
 `bash scripts/sprint/push-main.sh`; "auto" → `push-main.sh` directly; "hold" → skip the
 push (the segment stays local until T7). When pushed, it is **the checkpoint's single

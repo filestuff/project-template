@@ -80,7 +80,18 @@ deploys — are always yours, in every mode. `/plan` and `/sprint wave` run gate
 default; `/sprint train` runs unattended after its opening confirmation; `/proposal` asks
 unless you tell it not to. An agent that meets a decision it may not make returns it to
 the `arbiter` (a stronger model); one that meets work beyond it returns `ESCALATE` and a
-stronger executor continues from its branch. `node scripts/sprint/decisions.mjs --class
+stronger executor continues from its branch.
+
+**Which model does the work.** Each sprint carries a `tier:` — `routine`, `standard`,
+`complex` or `critical` — that says how *hard* it is (not how big, and not how risky), and
+the tier fixes both the model and the reasoning effort of the executor and of its
+reviewers. The planner assigns it when it certifies the brief, having just read the code,
+and records why. The rule is deliberately lopsided: a sprint is `routine` only if it meets
+every item on a checklist — which a lint and an independent cold reader both verify —
+while one signal is enough to move it up, because under-powering hard work costs far more
+than over-powering easy work. Every landed sprint records how it went, and
+`node scripts/sprint/tiers.mjs` shows per tier how often sprints escalated or finished
+uncleanly, so the table is tuned on evidence. `node scripts/sprint/decisions.mjs --class
 taste` lists what was decided on your behalf.
 
 ## Tiers
@@ -101,7 +112,8 @@ taste` lists what was decided on your behalf.
 | Decision policy (`docs/DECISION_POLICY.md`: mechanical / taste / reserved, one approval gate, `arbiter` agent, `decisions.mjs` audit view) | ✅ | ✅ (waves run gated, trains unattended) |
 | Guard hooks (`scripts/hooks/guard.mjs`) | main-branch force-push / delete protection | + claim-guard, lifecycle-guard, done-gate, subagent event log |
 | Claims enforced (edit-time hook + `land` exit 6 on paths outside `touches:`) | — | ✅ |
-| Model routing + escalation (`routing.json`, sprint `tier:`, executor `ESCALATE` → stronger executor → arbiter → user) | agent definitions pin model/effort | ✅ |
+| Sprint tiers (`tier: routine / standard / complex / critical` — how hard the work is; assigned by the planner per `docs/sprints/tier-rubric.md`, with a reason; linted) | ✅ (informational: which model to run the session on) | ✅ |
+| Dynamic model + effort routing by tier (`routing.json`: executor and reviewer per tier), escalation up the ladder (`ESCALATE` → next tier → arbiter → user), outcome tracking and calibration (`tiers.mjs`) | agent definitions pin model/effort | ✅ |
 | Completion record (structured Completion Log, inline `Evidence:` lines, `close-check.mjs` lint, `docs/sprints/evidence/`) | ✅ (lint before the `done/` move) | ✅ (lint gates `merge-sprint.sh land`; commits stamped at land) |
 | Concurrent sprints | one at a time | many, in parallel agents |
 | Wave orchestration (`/sprint wave`: `plan-flow` + one `sprint-flow` workflow run per sprint; hand-dispatch fallback without the Workflow tool) | — | ✅ |

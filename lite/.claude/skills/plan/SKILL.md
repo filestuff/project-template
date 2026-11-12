@@ -194,10 +194,14 @@ For each sprint, starting at S-{highest+1}, create a file from
   `docs/sprints/review-calibration.md` (auth/permissions, schema/migrations, public or
   cross-sprint contracts, secrets, payment or irreversible mutation, trust-boundary
   parsing) — decided per sprint from its own files, so a `critical` proposal usually
-  yields a few high-risk sprints and several low ones, not all-high. **`tier: complex`**
-  when `story_points` ≥ 8, or `risk` is high, or the sprint introduces architecture rather
-  than following a pattern the codebase already has; otherwise `standard`. Both are
-  mechanical — state them, don't ask. When the source is a proposal, also set
+  yields a few high-risk sprints and several low ones, not all-high. **`tier:`** is how
+  hard the work is (`docs/sprints/tier-rubric.md`), and here it is only **provisional**:
+  `complex` when `risk` is high or the source plan describes the sprint as introducing a
+  new boundary, abstraction or cross-module change; otherwise `standard`. Never `routine`
+  or `critical` from this skill — both need a read of the code this skill does not do; the
+  planner assigns the real tier at certification. Size is not difficulty: story points do
+  not set the tier. Leave `tier_reason: null`. Both keys are mechanical — state them,
+  don't ask. When the source is a proposal, also set
   `proposal: NNN` and `stage: k` (`stage: 1` for un-staged proposals; both stay `null`
   otherwise) — informational backlinks, ignored by scripts.
 - **Context** (top of body): the source plan's path + this sprint's originating task

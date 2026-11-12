@@ -442,5 +442,36 @@ recordRejects("record-unresolved", RECORD({ tail: "UNRESOLVED DECISIONS:\n- whic
   check("unreadable --record exits 1", missing.code === 1, missing.out + missing.err);
 }
 
+// tiers — four values, and the rubric's asymmetry: routine must be justified, raising need not be
+{
+  const withReason = (body, reason) => body.replace(/^tier: (\w+)$/m, (m) => `${m}\ntier_reason: ${reason}`);
+  for (const t of ["routine", "standard", "complex", "critical"]) {
+    const body = withReason(sprint({ tier: t, points: "2", oq: "— none" }), "follows src/a.js:1-3 — same shape");
+    const r = run(mkRoot({ [`${BL}/S-001-x.md`]: body }));
+    check(`tier ${t} with a reason is valid`, r.code === 0, r.out);
+  }
+  rejects("tier: routine without a reason", { [`${BL}/S-001-x.md`]: sprint({ tier: "routine", points: "2", oq: "— none" }) }, "tier-unjustified");
+  rejects("tier: routine with tier_reason: null", { [`${BL}/S-001-x.md`]: withReason(sprint({ tier: "routine", points: "2", oq: "— none" }), "null") }, "tier-unjustified");
+  rejects("tier: routine on a 5-point sprint", { [`${BL}/S-001-x.md`]: withReason(sprint({ tier: "routine", points: "5", oq: "— none" }), "follows src/a.js:1") }, "tier-unjustified");
+  {
+    const r = run(mkRoot({ [`${BL}/S-001-x.md`]: withReason(sprint({ tier: "routine", points: "2", risk: "high", notes: NOTES, oq: "— none" }), "follows src/a.js:1") }));
+    check("tier: routine with risk: high is rejected", r.code === 5 && /tier-unjustified.*risk: high/.test(r.out), r.out);
+  }
+  {
+    const r = run(mkRoot({ [`${BL}/S-001-x.md`]: withReason(sprint({ tier: "routine", points: "2", oq: "- [ ] Which cache? — options: A lru, B ttl" }), "follows src/a.js:1") }));
+    check("tier: routine with an open question is rejected", r.code === 5 && /tier-unjustified.*open question/.test(r.out), r.out);
+    const ok = run(mkRoot({ [`${BL}/S-001-x.md`]: withReason(sprint({ tier: "standard", points: "2", oq: "- [ ] Which cache? — options: A lru, B ttl" }), "x") }));
+    check("the same open question on a standard sprint is fine", ok.code === 0, ok.out);
+  }
+  for (const t of ["complex", "critical"]) {
+    const r = run(mkRoot({ [`${BL}/S-001-x.md`]: sprint({ tier: t }) }));
+    check(`tier: ${t} without a reason only warns (pre-1.14 briefs have no tier_reason)`, r.code === 0 && /WARN tier-unreasoned/.test(r.out), r.out);
+  }
+  {
+    const r = run(mkRoot({ [`${BL}/S-001-x.md`]: sprint({ tier: "standard" }) }));
+    check("tier: standard needs no reason and does not warn", r.code === 0 && !/tier-un/.test(r.out), r.out);
+  }
+}
+
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
 console.log("plan-check: all checks passed");

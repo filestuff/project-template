@@ -43,11 +43,13 @@ export const meta = {
 const VERDICT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['verdict', 'touches_delta', 'staleness', 'contract_drift', 'questions', 'cross_sprint'],
+  required: ['verdict', 'tier', 'tier_reason', 'touches_delta', 'staleness', 'contract_drift', 'questions', 'cross_sprint'],
   properties: {
     verdict: { enum: ['READY', 'READY_WITH_QUESTIONS', 'NOT_READY', 'SPLIT_SUGGESTED'] },
     verdict_detail: { type: 'string', description: 'reason for NOT_READY / how to SPLIT; empty otherwise' },
     risk_tier: { type: 'string', description: '"<risk>/<tier>" plus "unchanged" or "raised: <why>"' },
+    tier: { enum: ['routine', 'standard', 'complex', 'critical'], description: 'the tier you assigned per docs/sprints/tier-rubric.md and wrote to the frontmatter' },
+    tier_reason: { type: 'string', description: 'the one-line reason you wrote to tier_reason: — the signal or the pattern followed' },
     lint: { type: 'string', description: 'the SUMMARY line from plan-check.mjs ("" if not run)' },
     touches_delta: { type: 'string', description: '"unchanged" or "+added / -removed" paths' },
     staleness: { type: 'array', items: { type: 'string' }, description: 'one line per fixed finding; empty if none' },

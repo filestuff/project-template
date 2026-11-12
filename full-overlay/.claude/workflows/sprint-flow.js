@@ -7,7 +7,8 @@
 // neighbours are still executing — there is no barrier across sprints.
 //
 // Inside a run, in order:
-//   Execute  the `sprint-executor`, on the model routing.json gives the sprint's tier.
+//   Execute  the `sprint-executor`, on the model AND effort routing.json gives the
+//            sprint's tier (routine | standard | complex | critical — tier-rubric.md).
 //            BLOCKED  → the `arbiter` decides (mechanical / taste) and a fresh executor
 //                       continues from the branch with the answer; a reserved decision
 //                       parks the sprint for the user.
@@ -16,6 +17,8 @@
 //            NEEDS_CLAIM / PLAN_GAP → returned: only the orchestrator may touch main.
 //   Review   independent of the author, chosen here and not by the executor: one
 //            `reviewer` always; three focused lenses when the sprint is `risk: high`.
+//            The reviewer's model and effort follow the tier the sprint FINISHED on —
+//            a sprint that escalated is reviewed at the level that completed it.
 //   Verify   every Critical / Important finding goes to a `finding-verifier` told to
 //            refute it.
 //   Fix      the executor fixes what survived, re-gates, commits; reviewers re-check.
@@ -31,15 +34,22 @@
 //     waveId: "W-…", repoRoot: "/abs/repo", ledgerDir: "/abs/repo/.claude/sprint-orchestration/W-…/",
 //     mode: "wave" | "train", autonomy: "gated" | "interactive" | "unattended",
 //     sprint: { id: "S-NNN", worktree: "/abs/repo/.claude/worktrees/S-NNN-…",
-//               risk: "low" | "high", tier: "standard" | "complex",
+//               risk: "low" | "high",
+//               tier: "routine" | "standard" | "complex" | "critical",   // where to start
+//               assignedTier: "standard",     // re-launch only: the frontmatter tier, when
+//                                             //   `tier` is the rung the last run reached
+//               attempt: 2,                   // re-launch only: 1-based run count
 //               diffBase: "<sha>" },          // train mode only: the predecessor's boundary
 //     routing: <contents of scripts/sprint/routing.json>,
 //     resume: "claim granted for src/x.ts — mirror it in your branch copy and proceed"
 //   } })                                      // resume: optional, when re-launching a parked sprint
 //
-// Returns { sprint, status, tier, commits, gate, close_check, review, review_record,
-//           decisions, escalations, question, needs_claim_paths, plan_gap, concerns }
+// Returns { sprint, status, tier, tier_assigned, outcome, commits, gate, close_check,
+//           review, review_record, decisions, escalations, question, needs_claim_paths,
+//           plan_gap, concerns }
 //   status: READY_TO_LAND | PARKED | NEEDS_CLAIM | PLAN_GAP | DIED
+//   tier:   the tier the run ended on (pass it back as sprint.tier when re-launching)
+//   outcome: one line for the done-file's `outcome:` frontmatter (tiers.mjs reads it)
 export const meta = {
   name: 'sprint-flow',
   description: 'Run one started sprint: execute, arbitrate or escalate as needed, review independently, verify findings, fix',
@@ -196,9 +206,27 @@ const highRisk = sprint.risk === 'high'
 
 const role = (path) => path.split('.').reduce((o, k) => (o ? o[k] : undefined), routing.roles)
 const pick = (r) => (r ? { ...(r.model ? { model: r.model } : {}), ...(r.effort ? { effort: r.effort } : {}) } : {})
-// Where on the escalation ladder this sprint starts: its own tier, or the bottom.
-let rung = Math.max(0, routing.escalation.indexOf(`executor.${sprint.tier === 'complex' ? 'complex' : 'standard'}`))
-const tierName = () => routing.escalation[rung] || `executor.${sprint.tier || 'standard'}`
+// Where on the escalation ladder this sprint starts. A tier the table does not know (a
+// typo, or a routing.json older than the tier) starts at `standard` — never at the bottom:
+// starting too low is the expensive mistake.
+const TIERS = ['routine', 'standard', 'complex', 'critical']
+const known = (t) => Boolean(role(`executor.${t}`)) && routing.escalation.includes(`executor.${t}`)
+const ladderTop = (routing.escalation[routing.escalation.length - 1] || 'executor.standard').split('.').pop()
+// Unknown and BELOW standard → standard; unknown and ABOVE standard → the top of the ladder.
+const startTier = known(sprint.tier) ? sprint.tier : TIERS.indexOf(sprint.tier) > TIERS.indexOf('standard') ? ladderTop : 'standard'
+const assignedTier = TIERS.includes(sprint.assignedTier) ? sprint.assignedTier : startTier
+if (sprint.tier && sprint.tier !== startTier) log(`${id}: tier "${sprint.tier}" is not in routing.json — running as ${startTier}`)
+let rung = routing.escalation.indexOf(`executor.${startTier}`)
+if (rung < 0) rung = Math.max(0, routing.escalation.indexOf('executor.standard'))
+const tierName = () => routing.escalation[rung] || `executor.${startTier}`
+const tier = () => tierName().split('.').pop()
+// The reviewer follows the tier the sprint is on NOW (after any escalation). An older
+// routing.json has one reviewer entry for every tier — accept that shape too.
+const reviewerRole = () => {
+  const r = routing.roles.reviewer
+  return r && (r.model || r.effort) ? r : (r && (r[tier()] || r.standard)) || undefined
+}
+const attempt = Number.isInteger(sprint.attempt) && sprint.attempt > 0 ? sprint.attempt : 1
 
 const decisions = []
 const escalations = []
@@ -226,10 +254,17 @@ Execute the sprint per your instructions.`
 
 Return your status via the structured output (always include your sprint id and worktree path).`
 
+let arbiterCalls = 0
+// One line for the done-file's `outcome:` frontmatter — what tiers.mjs calibrates on.
+const outcome = (review) =>
+  `assigned=${assignedTier} final=${tier()} runs=${attempt} escalations=${escalations.length} arbiter=${arbiterCalls} fix_rounds=${review ? review.rounds : 0} findings=${review ? review.counts.confirmed : 0}/${review ? review.counts.raised : 0}`
+
 const result = (status, last, extra) => ({
   sprint: id,
   status,
-  tier: tierName(),
+  tier: tier(),
+  tier_assigned: assignedTier,
+  outcome: outcome(extra && extra.review),
   commits: (last && last.commits) || [],
   gate: (last && last.gate) || '',
   close_check: (last && last.close_check) || '',
@@ -241,8 +276,9 @@ const result = (status, last, extra) => ({
   ...extra,
 })
 
-const askArbiter = (question, where) =>
-  agent(
+const askArbiter = (question, where) => {
+  arbiterCalls++
+  return agent(
     `You are the arbiter subagent. Follow your agent instructions (.claude/agents/arbiter.md) and docs/DECISION_POLICY.md.
 
 ${where}
@@ -256,6 +292,7 @@ ${question}
 Classify and decide per the policy, and return via the structured output. If acting on your decision needs a file outside the sprint's touches:, set needs to "claim" and name the path(s); if it changes the sprint's scope, set needs to "scope".`,
     { agentType: 'arbiter', schema: ARBITER_SCHEMA, label: `arbiter:${id}`, phase: 'Execute', ...pick(role('arbiter')) },
   )
+}
 
 // ------------------------------------------------------------------ Execute
 let last = null
@@ -307,14 +344,14 @@ for (;;) {
         advice = `\nThe arbiter has ruled on the open question (${a.class}): ${a.decision}\nRecord verbatim in Pre-Sprint Decisions: ${a.record}`
       }
     }
-    const from = tierName()
+    const from = tier()
     if (rung + 1 >= routing.escalation.length) {
       return result('PARKED', last, { question: { question: `${id} escalated past the top of the routing ladder (${from}): ${e.next}`, context: `tried: ${e.tried} — state: ${e.state}`, options: [], default: '', from: 'executor', reason: `escalation exhausted (${e.reason})` } })
     }
     rung++
-    escalations.push({ from, to: tierName(), reason: e.reason })
-    log(`${id}: ESCALATE (${e.reason}) — ${from} → ${tierName()}`)
-    directive = `The previous executor (${from}) escalated this sprint to you: ${e.reason}.\nTRIED: ${e.tried}\nSTATE: ${e.state}\nNEXT: ${e.next}${advice}\nSet \`tier: complex\` in the sprint file's frontmatter (branch copy) so the record shows the escalation.`
+    escalations.push({ from, to: tier(), reason: e.reason })
+    log(`${id}: ESCALATE (${e.reason}) — ${from} → ${tier()}`)
+    directive = `The previous executor (${from}) escalated this sprint to you: ${e.reason}.\nTRIED: ${e.tried}\nSTATE: ${e.state}\nNEXT: ${e.next}${advice}\nLeave the sprint file's \`tier:\` as the planner assigned it — the orchestrator records the escalation at land.`
     continue
   }
 
@@ -346,7 +383,7 @@ You have been given nothing of the author's reasoning, on purpose. Return your f
 const key = (f) => `${f.location}::${f.description}`.toLowerCase().replace(/\s+/g, ' ').slice(0, 160)
 
 async function reviewAndVerify(round) {
-  const reviews = await parallel(LENSES.map((lens) => () => agent(reviewPrompt(lens), { agentType: 'reviewer', schema: REVIEW_SCHEMA, label: `review:${id}:${lens.key}${round > 1 ? ` r${round}` : ''}`, phase: 'Review', ...pick(role('reviewer')) })))
+  const reviews = await parallel(LENSES.map((lens) => () => agent(reviewPrompt(lens), { agentType: 'reviewer', schema: REVIEW_SCHEMA, label: `review:${id}:${lens.key}${round > 1 ? ` r${round}` : ''}`, phase: 'Review', ...pick(reviewerRole()) })))
   const ran = LENSES.map((lens, i) => ({ lens: lens.key, ok: Boolean(reviews[i]), summary: reviews[i] ? reviews[i].summary : 'reviewer did not return' }))
   const seen = new Set()
   const raised = []
@@ -470,6 +507,8 @@ const review = {
   rounds,
   counts: {
     raised: all.length,
+    // confirmed = stood after verification as Critical/Important, whatever happened next
+    confirmed: all.filter((f) => ['fixed', 'open', 'overturned'].includes(f.disposition)).length,
     fixed: all.filter((f) => f.disposition === 'fixed').length,
     refuted: all.filter((f) => f.disposition === 'refuted').length,
     overturned: all.filter((f) => f.disposition === 'overturned').length,

@@ -55,13 +55,23 @@ against the code — its premises are claims to check, not facts to transcribe.
 6. **Doc drift.** Do the tag-scoped, DOC_HEALTH-gated read from PROTOCOL.md Phase 1.
    Record findings in a `<!-- PLAN NOTES -->` block at the end of the sprint file —
    do NOT fix other docs; the execution agent applies fixes on its branch.
-7. **Risk and tier.** Re-check the frontmatter `risk:` and `tier:` against what the
-   deepened Files lists now touch: `risk: high` when they reach a surface in the
-   risk-tier table of `docs/sprints/review-calibration.md` (then `## Production notes`
-   is mandatory — fill Rollback / Observability / Security concretely); `tier: complex`
-   when `story_points` ≥ 8, `risk` is high, or the sprint introduces architecture rather
-   than following an existing pattern. Raise, never lower. A file with neither key reads
-   as `low` / `standard` — add the keys when you raise one.
+7. **Risk, then tier.** Re-check the frontmatter `risk:` against what the deepened Files
+   lists now touch: `risk: high` when they reach a surface in the risk-tier table of
+   `docs/sprints/review-calibration.md` (then `## Production notes` is mandatory — fill
+   Rollback / Observability / Security concretely). Raise risk, never lower it.
+   Then **assign the tier** — how hard the work is, which decides the model and effort
+   that execute and review it. `docs/sprints/tier-rubric.md` is the rule; read it. You
+   have just read the code this sprint touches, so this call is yours and `/plan`'s tier
+   was only provisional:
+   - `routine` — ONLY if every routine criterion holds (an existing pattern cited as
+     `file:line` and followed; no new interface; `risk: low`; no open question; no
+     schema, concurrency, caching, auth or trust-boundary work; ≤ 5 files; ≤ 3 points).
+   - `complex` / `critical` — on any ONE of their signals.
+   - `standard` — everything else. **Unsure between two tiers → the higher.** Lowering
+     costs a wasted run and an escalation when it is wrong; raising costs tokens.
+   Write `tier:` and `tier_reason:` — one line, no `#`, naming the signal or the pattern
+   (`node <repo-root>/scripts/sprint/frontmatter.mjs set <sprint-file> tier_reason "<line>"`).
+   In post-start mode never lower a tier — after a sprint starts it only goes up.
 8. **Lint.** `node <repo-root>/scripts/sprint/plan-check.mjs --root <root-of-the-checkout-holding-the-file> S-NNN`
    and fix every FAIL (unresolved citations, a Consumes its dependency does not Produce,
    surviving placeholders). Report its SUMMARY line.
@@ -94,7 +104,7 @@ against the code — its premises are claims to check, not facts to transcribe.
 
 ```
 VERDICT: READY | READY_WITH_QUESTIONS | NOT_READY <reason> | SPLIT_SUGGESTED <how>
-RISK_TIER: <risk>/<tier> (unchanged | raised: <why>)
+RISK_TIER: <risk>/<tier> — <tier_reason> (risk: unchanged | raised: <why>)
 LINT: <plan-check.mjs SUMMARY line>
 TOUCHES: unchanged | +<added> / −<removed>
 STALENESS: <n> findings fixed (one line each; "none")

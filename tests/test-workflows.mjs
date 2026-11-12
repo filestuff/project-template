@@ -278,6 +278,8 @@ for (const rel of scripts) {
 
     r = await run(c, { ...args([]), members: [] }, () => null);
     check(r.error instanceof Error, "plan-flow: empty roster throws");
+    // the planner must return the tier it assigned and why — the schema enforces it
+    check(/required: \[[^\]]*'tier', 'tier_reason'/.test(c.src) && /enum: \['routine', 'standard', 'complex', 'critical'\]/.test(c.src), "plan-flow: the verdict schema requires tier (one of four) and tier_reason");
   }
 }
 
@@ -310,7 +312,8 @@ for (const rel of scripts) {
     // 1. happy path, low risk
     let r = await run(c, A(), play({ exec: st("DONE"), review: clean }));
     eq(labels(r), ["exec:S-001", "review:S-001:review"], "sprint-flow: low-risk happy path is one executor and one reviewer");
-    eq([r.result?.status, r.result?.tier, r.result?.review.counts.raised], ["READY_TO_LAND", "executor.standard", 0], "sprint-flow: clean review → READY_TO_LAND");
+    eq([r.result?.status, r.result?.tier, r.result?.tier_assigned, r.result?.review.counts.raised], ["READY_TO_LAND", "standard", "standard", 0], "sprint-flow: clean review → READY_TO_LAND");
+    eq(r.result?.outcome, "assigned=standard final=standard runs=1 escalations=0 arbiter=0 fix_rounds=0 findings=0/0", "sprint-flow: the outcome line for a clean run");
     check(r.result?.review_record.length === 1 && /no material issues found/.test(r.result.review_record[0]) && /independent review/.test(r.result.review_record[0]), `sprint-flow: a clean review still yields a record line: ${r.result?.review_record}`);
     eq([r.calls[0].model, r.calls[0].effort, r.calls[1].agentType, r.calls[1].model], ["sonnet", "high", "reviewer", "opus"], "sprint-flow: executor.standard and reviewer run on their routed models");
     check(r.calls[1].prompt.includes('git -C "/r/wt/S-001-x" diff main...HEAD') && !/Execute the sprint/.test(r.calls[1].prompt), "sprint-flow: the reviewer is handed the diff, not the author's reasoning");
@@ -318,7 +321,22 @@ for (const rel of scripts) {
 
     // 2. tier: complex starts on the stronger executor
     r = await run(c, A({}, { tier: "complex" }), play({ exec: st("DONE"), review: clean }));
-    eq([r.calls[0].model, r.result?.tier], ["opus", "executor.complex"], "sprint-flow: a complex sprint starts on executor.complex");
+    eq([r.calls[0].model, r.calls[0].effort, r.calls[1].model, r.calls[1].effort, r.result?.tier], ["opus", "high", "opus", "xhigh", "complex"], "sprint-flow: a complex sprint starts on executor.complex and is reviewed at the complex reviewer's effort");
+    // 2b. every tier fixes model AND effort for executor and reviewer
+    for (const [t, ex, rv] of [["routine", ["sonnet", "medium"], ["sonnet", "high"]], ["standard", ["sonnet", "high"], ["opus", "high"]], ["complex", ["opus", "high"], ["opus", "xhigh"]], ["critical", ["opus", "xhigh"], ["opus", "xhigh"]]]) {
+      r = await run(c, A({}, { tier: t }), play({ exec: st("DONE"), review: clean }));
+      eq([[r.calls[0].model, r.calls[0].effort], [r.calls[1].model, r.calls[1].effort], r.result?.tier], [ex, rv, t], `sprint-flow: tier ${t} routes executor and reviewer`);
+    }
+    // 2c. an unknown or missing tier never starts at the bottom; an unknown HIGH tier starts at the top
+    r = await run(c, A({}, { tier: "trivial" }), play({ exec: st("DONE"), review: clean }));
+    eq([r.result?.tier, r.calls[0].effort], ["standard", "high"], "sprint-flow: an unknown tier runs as standard, not routine");
+    r = await run(c, A({}, { tier: undefined }), play({ exec: st("DONE"), review: clean }));
+    eq(r.result?.tier, "standard", "sprint-flow: a sprint with no tier runs as standard");
+    const OLD_ROUTING = { roles: { executor: { standard: { model: "sonnet", effort: "high" }, complex: { model: "opus", effort: "high" } }, reviewer: { model: "opus", effort: "high" }, arbiter: { model: "opus", effort: "xhigh" } }, escalation: ["executor.standard", "executor.complex"] };
+    r = await run(c, A({ routing: OLD_ROUTING }, { tier: "critical" }), play({ exec: st("DONE"), review: clean }));
+    eq([r.result?.tier, r.calls[0].model, r.calls[1].model, r.calls[1].effort], ["complex", "opus", "opus", "high"], "sprint-flow: with a pre-1.14 routing.json a critical sprint starts at the top of the old ladder, and the single reviewer entry still applies");
+    r = await run(c, A({ routing: OLD_ROUTING }, { tier: "routine" }), play({ exec: st("DONE"), review: clean }));
+    eq(r.result?.tier, "standard", "sprint-flow: with a pre-1.14 routing.json a routine sprint runs as standard");
 
     // 3. BLOCKED → arbiter decides (taste) → a fresh executor continues with the answer
     r = await run(c, A(), play({ exec: [BLOCKED, st("DONE")], arbiter: taste, review: clean }));
@@ -349,13 +367,19 @@ for (const rel of scripts) {
     // 8. ESCALATE → the next routing tier continues from the branch
     const ESC = (reason) => st("ESCALATE", { escalation: { reason, tried: "two attempts at the race", state: "wip committed", next: "needs a lock redesign" } });
     r = await run(c, A(), play({ exec: [ESC("repeated-failure"), st("DONE")], review: clean }));
-    eq([r.calls[0].model, r.calls[1].model, r.result?.tier, r.result?.escalations], ["sonnet", "opus", "executor.complex", [{ from: "executor.standard", to: "executor.complex", reason: "repeated-failure" }]], "sprint-flow: ESCALATE re-dispatches on the next tier and records it");
-    check(r.calls[1].prompt.includes("TRIED: two attempts at the race") && r.calls[1].prompt.includes("tier: complex"), "sprint-flow: the stronger executor gets the handover");
+    eq([r.calls[0].model, r.calls[1].model, r.result?.tier, r.result?.tier_assigned, r.result?.escalations], ["sonnet", "opus", "complex", "standard", [{ from: "standard", to: "complex", reason: "repeated-failure" }]], "sprint-flow: ESCALATE re-dispatches on the next tier and records it");
+    check(r.calls[1].prompt.includes("TRIED: two attempts at the race") && r.calls[1].prompt.includes("Leave the sprint file's `tier:` as the planner assigned it"), "sprint-flow: the stronger executor gets the handover and leaves the assigned tier alone");
+    eq([r.calls[2].agentType, r.calls[2].effort, r.result?.outcome], ["reviewer", "xhigh", "assigned=standard final=complex runs=1 escalations=1 arbiter=0 fix_rounds=0 findings=0/0"], "sprint-flow: an escalated sprint is reviewed at the tier it finished on, and the outcome records both tiers");
+    // a routine sprint escalates one rung at a time: routine → standard
+    r = await run(c, A({}, { tier: "routine" }), play({ exec: [ESC("beyond-capability"), st("DONE")], review: clean }));
+    eq([r.calls[0].effort, r.calls[1].effort, r.result?.escalations[0].to], ["medium", "high", "standard"], "sprint-flow: routine escalates to standard, not straight to the top");
     check(!labels(r).some((l) => l.startsWith("arbiter")), "sprint-flow: a plain capability escalation does not consult the arbiter");
 
     // 9. escalation past the top of the ladder → parked
-    r = await run(c, A({}, { tier: "complex" }), play({ exec: ESC("beyond-capability") }));
+    r = await run(c, A({}, { tier: "critical" }), play({ exec: ESC("beyond-capability") }));
     eq([r.result?.status, /escalation exhausted/.test(r.result?.question.reason)], ["PARKED", true], "sprint-flow: nowhere left to escalate → parked for the user");
+    r = await run(c, A({}, { tier: "complex" }), play({ exec: [ESC("beyond-capability"), st("DONE")], review: clean }));
+    eq([r.result?.status, r.result?.tier, r.calls[1].effort], ["READY_TO_LAND", "critical", "xhigh"], "sprint-flow: complex still has one rung above it");
 
     // 10. carve-out uncertainty → the arbiter's read first
     r = await run(c, A(), play({ exec: [ESC("carve-out-uncertainty"), st("DONE")], arbiter: taste, review: clean }));
@@ -385,7 +409,8 @@ for (const rel of scripts) {
     // 14. a confirmed finding is fixed, re-checked, and recorded with its commit
     r = await run(c, A(), play({ exec: st("DONE"), review: { findings: [F("Critical"), F("Minor", "src/a.ts:9", "naming")], summary: "one bug" }, verify: { verdict: "confirmed", evidence: "src/a.ts:3", note: "real" }, fix: st("DONE", { commits: ["abc S-001: thing", "def S-001: address review — null path"], fixes: [{ id: "F1", disposition: "fixed", detail: "def" }] }), recheck: { resolved: true, evidence: "src/a.ts:3 guarded" } }));
     eq(labels(r), ["exec:S-001", "review:S-001:review", "verify:S-001#1", "fix:S-001 r1", "recheck:S-001:F1"], "sprint-flow: review → verify (not the Minor) → fix → re-check");
-    eq([r.result?.status, r.result?.review.rounds, r.result?.review.counts], ["READY_TO_LAND", 1, { raised: 2, fixed: 1, refuted: 0, overturned: 0, noted: 1, open: 0 }], "sprint-flow: fixed finding → READY_TO_LAND");
+    eq([r.result?.status, r.result?.review.rounds, r.result?.review.counts], ["READY_TO_LAND", 1, { raised: 2, confirmed: 1, fixed: 1, refuted: 0, overturned: 0, noted: 1, open: 0 }], "sprint-flow: fixed finding → READY_TO_LAND");
+    eq(r.result?.outcome, "assigned=standard final=standard runs=1 escalations=0 arbiter=0 fix_rounds=1 findings=1/2", "sprint-flow: the outcome counts fix rounds and confirmed findings");
     check(/^- Critical \(review\) src\/a\.ts:3 — null path — fixed def$/.test(r.result?.review_record[0]) && /Minor.*declined: minor, noted/.test(r.result.review_record[1]), `sprint-flow: record lines carry severity, location and disposition: ${JSON.stringify(r.result?.review_record)}`);
     check(r.calls[3].prompt.includes("F1 [Critical] src/a.ts:3") && r.calls[3].prompt.includes("Do not touch the sprint file's `### Review` section"), "sprint-flow: the fix round names each finding and leaves the Review section to the orchestrator");
     eq(r.result?.commits, ["abc S-001: thing", "def S-001: address review — null path"], "sprint-flow: commits include the fix");
@@ -418,6 +443,8 @@ for (const rel of scripts) {
     eq(r.result?.review.counts.raised, 1, "sprint-flow: duplicate findings across lenses are de-duplicated");
 
     // 20. resume and train mode
+    r = await run(c, A({ resume: "answer: yes" }, { tier: "complex", assignedTier: "standard", attempt: 3 }), play({ exec: st("DONE"), review: clean }));
+    eq([r.result?.tier, r.result?.tier_assigned, /assigned=standard final=complex runs=3 /.test(r.result?.outcome)], ["complex", "standard", true], "sprint-flow: a re-launch keeps the escalated tier, the assigned tier and the run count");
     r = await run(c, A({ resume: "claim granted for src/b.ts" }), play({ exec: st("DONE"), review: clean }));
     check(r.calls[0].prompt.includes("claim granted for src/b.ts") && r.calls[0].prompt.includes("You are continuing this sprint"), "sprint-flow: a resumed run tells the executor what was resolved");
     r = await run(c, A({ mode: "train" }, { diffBase: "abc123" }), play({ exec: st("DONE"), review: clean }));

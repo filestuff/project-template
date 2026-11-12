@@ -28,6 +28,14 @@ repository. Walk the deliverables in order and, for each, try to begin:
   criterion lands in?
 - Does anything depend on a `Consumes` contract that the dependency's `Produces` does not
   actually state?
+- **If the frontmatter says `tier: routine`**, check the claim — a brief's author
+  under-rates its own difficulty, and a routine sprint runs on the cheapest setting. Open
+  the pattern its `tier_reason` / `Reference:` cites: does it exist, and is this sprint
+  really the same shape with different nouns? Does any criterion in
+  `docs/sprints/tier-rubric.md`'s routine checklist fail (a new interface, an open
+  decision, concurrency, schema, auth, more than 5 files)? One failing criterion is a
+  **blocking** item: `tier: routine does not hold — <criterion> (<file:line>)`. Do not
+  second-guess any other tier; raising is cheap and is the planner's call.
 
 Classify what you find:
 
@@ -50,5 +58,6 @@ ASSUMPTIONS:
 - <deliverable n> — <the assumption you would make>
 ```
 
-`INSUFFICIENT` iff there is at least one blocking item or the lint failed. `BLOCKING: none`
+`INSUFFICIENT` iff there is at least one blocking item (including a `routine` tier that
+does not hold) or the lint failed. `BLOCKING: none`
 and `ASSUMPTIONS: none` are valid.

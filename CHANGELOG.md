@@ -4,6 +4,65 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.14.0] - 2026-11-12
+
+**Model and effort follow the difficulty of the work.** Until now a sprint was `standard`
+or `complex` by proxy — story points, risk — every executor ran at the same reasoning
+effort, reviewers ran at one fixed setting, and nothing recorded whether the choice had
+been right. Tiers are now four, each fixes model *and* effort for both the executor and
+its reviewers, the planner assigns them from the code with a recorded reason, and every
+landed sprint feeds a calibration view. No migrations: existing sprint files keep working
+(`standard` and `complex` mean what they meant; a missing tier is `standard`).
+
+- **Four tiers** (`docs/sprints/tier-rubric.md`, new, both tiers): `routine` (mechanical —
+  repeats an existing pattern), `standard`, `complex` (design under constraints, subtle
+  state, cross-module), `critical` (hard *and* unforgiving). The tier is about difficulty;
+  `risk:` (what is exposed) and `story_points` (size) are separate questions, and story
+  points no longer set the tier.
+- **Routing per tier** (full: `scripts/sprint/routing.json`): executor — routine
+  sonnet/medium, standard sonnet/high, complex opus/high, critical opus/xhigh; reviewer —
+  routine sonnet/high, standard opus/high, complex and critical opus/xhigh. A reviewer is
+  never weaker than the executor it reviews, and an escalated sprint is reviewed at the
+  tier it *finished* on. The escalation ladder now has four rungs, climbed one per
+  ESCALATE.
+- **The planner assigns the tier, at certification** (`/sprint plan`, the `sprint-planner`
+  agent). It has just read the code the sprint touches; `/plan`'s tier is provisional and
+  is only ever `standard` or `complex`. The planner writes `tier:` and a one-line
+  `tier_reason:` (new frontmatter key) and may lower a provisional tier when the code shows
+  the work is simpler — with the reason on the record.
+- **Asymmetric by design.** Going *down* to `routine` requires every criterion on a
+  checklist: an existing pattern cited as `file:line` and followed, no new interface,
+  `risk: low`, no open question, no schema/concurrency/caching/auth/trust-boundary work,
+  ≤ 5 files, ≤ 3 points. `plan-check.mjs` enforces the ones a lint can see (new rule
+  `tier-unjustified`), and the `brief-auditor` — which has not seen the planner's
+  reasoning — checks the claim against the code and blocks a `routine` that does not
+  hold. Going *up* needs one signal. Unsure means the higher tier. After a sprint starts,
+  its tier only rises.
+- **Outcome tracking** (full). Each `sprint-flow` run returns an `outcome` line —
+  `assigned=… final=… runs=… escalations=… arbiter=… fix_rounds=… findings=confirmed/raised`
+  — which the orchestrator writes into the done-file's frontmatter at land.
+  **`scripts/sprint/tiers.mjs`** (new) aggregates them per assigned tier and flags `UNDER`
+  (≥ 25% of a tier's sprints escalated), `STRAINED` (≥ 40% needed two fix rounds, a
+  re-launch, or had ≥ 2 confirmed findings) and `OVER?` (a top tier that has run clean for
+  8+ sprints). Nothing is flagged below 4 sprints. `/sprint board` shows it, and the wave
+  close relays its flags to you — changing the rubric or the table is your call.
+- **Upgrade notes.**
+  - `routing.json` changes shape: `roles.reviewer` is now a table by tier, and
+    `roles.executor` and `escalation` gain `routine` and `critical`. If you edited the
+    file, the upgrade three-way-merges it; `sprint-flow` also accepts the old shape (one
+    reviewer entry; a `critical` sprint then starts at the top of the old ladder, a
+    `routine` one runs as `standard`) so a half-merged file degrades safely rather than
+    cheaply.
+  - **Cost moves in both directions.** Mechanical sprints get cheaper (medium effort, and a
+    Sonnet reviewer); `complex` sprints get a more expensive review (Opus at extra-high);
+    `critical` is new and is the most expensive setting. Nothing becomes `routine` unless
+    a planner assigns it and the lint and the cold reader agree.
+  - Briefs certified before this release have no `tier_reason:`. That is a warning for
+    `complex`, never a failure; re-certifying a sprint (`/sprint plan`) assigns its tier
+    under the new rubric.
+  - Where `fable` is available to you, `executor.critical`, `reviewer.critical` and
+    `arbiter` in `routing.json` are the places to use it.
+
 ## [1.13.0] - 2026-11-12
 
 **Flow orchestration (full tier).** A wave used to move in barriers: plan everything, then

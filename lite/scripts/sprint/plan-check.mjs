@@ -17,7 +17,7 @@
 // Per-sprint rules:
 //   frontmatter-invalid     sprint is S-NNN and matches the filename prefix; story_points is
 //                           one of 1,2,3,5,8,13 (0/missing fails); risk (if present) low|high;
-//                           tier (if present) standard|complex; depends_on/blocks are flow
+//                           tier (if present) routine|standard|complex|critical; depends_on/blocks are flow
 //                           arrays of S-NNN ids (a key that is absent counts as empty)
 //   dependency-unknown      a depends_on id has no sprint file anywhere
 //   dependency-rejected     a depends_on id lives in rejected/
@@ -35,6 +35,12 @@
 //   open-question-vague     an unchecked `- [ ]` under ## Open Questions lacks `options:`
 //   citation-unresolved     a `path/file.ext:LINE[-LINE]` citation (an `L` before the number is
 //                           accepted) whose file is missing under --root or too short
+//   tier-unjustified        `tier: routine` — the cheapest execution setting — without what
+//                           docs/sprints/tier-rubric.md demands for it: a `tier_reason:`,
+//                           risk low, at most 3 story points, no open question. (The rubric
+//                           is asymmetric: lowering needs every criterion; the ones a lint
+//                           can see are checked here, the brief-auditor checks the rest.)
+//   tier-unreasoned         WARN only: `tier: complex|critical` with no `tier_reason:`
 //   touches-empty           WARN only, and only when <root>/scripts/sprint/claims.mjs exists
 //                           (full tier): `touches:` has no entries
 // Plan record (--record <file>), a proposal or plan doc:
@@ -279,7 +285,7 @@ for (const t of targets) {
     const risk = fm.get("risk");
     if (risk && !["low", "high"].includes(risk.value)) fail("frontmatter-invalid", risk.line, `risk: ${risk.value} — must be low | high`);
     const tier = fm.get("tier");
-    if (tier && !["standard", "complex"].includes(tier.value)) fail("frontmatter-invalid", tier.line, `tier: ${tier.value} — must be standard | complex`);
+    if (tier && !["routine", "standard", "complex", "critical"].includes(tier.value)) fail("frontmatter-invalid", tier.line, `tier: ${tier.value} — must be routine | standard | complex | critical`);
     for (const key of ["depends_on", "blocks"]) {
       const h = fm.get(key);
       if (!h) continue;
@@ -290,6 +296,24 @@ for (const t of targets) {
   }
   const riskVal = fm.ok ? fm.get("risk")?.value ?? null : null;
   const tierVal = fm.ok ? fm.get("tier")?.value ?? null : null;
+
+  // tier-unjustified — the rubric is asymmetric (docs/sprints/tier-rubric.md): going DOWN
+  // to routine needs every criterion and a recorded reason, so the mechanical ones are
+  // checked here; a complex/critical tier with no reason only warns (raising is cheap,
+  // and pre-1.14 briefs carry `tier: complex` with no tier_reason key at all).
+  if (fm.ok && tierVal) {
+    const tierLine = fm.get("tier").line;
+    const reason = (fm.get("tier_reason")?.value ?? "").trim();
+    const hasReason = reason !== "" && reason !== "null" && reason !== "~";
+    if (tierVal === "routine") {
+      if (!hasReason) fail("tier-unjustified", tierLine, "tier: routine needs tier_reason: naming the existing pattern it follows (file:line)");
+      if (riskVal === "high") fail("tier-unjustified", tierLine, "tier: routine with risk: high — a high-risk sprint is at least complex");
+      const pts = Number(fm.get("story_points")?.value);
+      if (pts > 3) fail("tier-unjustified", tierLine, `tier: routine with story_points: ${pts} — routine is at most 3 points`);
+    } else if ((tierVal === "complex" || tierVal === "critical") && !hasReason) {
+      warn("tier-unreasoned", tierLine, `tier: ${tierVal} has no tier_reason: — record the signal that decided it`);
+    }
+  }
 
   // dependency-unknown / dependency-rejected
   const depLine = fm.ok ? fm.get("depends_on")?.line ?? 0 : 0;
@@ -388,6 +412,7 @@ for (const t of targets) {
         let tx = lines[i];
         for (let j = i + 1; j < oq.end && !doc.isBlank(j) && !/^\s*[-*]\s+\[/.test(lines[j]) && !doc.hset.has(j); j++) tx += " " + lines[j];
         if (!tx.toLowerCase().includes("options:")) fail("open-question-vague", i, `${lines[i].trim()}  ← no \`options:\``);
+        if (tierVal === "routine") fail("tier-unjustified", i, "tier: routine with an open question — a sprint with an undecided choice is at least standard");
       }
     }
   }

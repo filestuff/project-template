@@ -104,7 +104,10 @@ Print the current kanban state:
    longer than its type's usual duration is the sign of a dead session; cross-check the
    wave ledger before acting. `node scripts/sprint/claims.mjs ready` shows what could
    start right now and why each other backlog sprint cannot.
-10. **Decisions made on your behalf**: `node scripts/sprint/decisions.mjs --class taste
+10. **Tier calibration**: `node scripts/sprint/tiers.mjs` — per assigned tier, how often
+    sprints escalated or finished uncleanly, with `UNDER` / `STRAINED` / `OVER?` flags
+    (`docs/sprints/tier-rubric.md` says what to do about each).
+11. **Decisions made on your behalf**: `node scripts/sprint/decisions.mjs --class taste
     --limit 5` — the latest taste decisions and where they are recorded.
 
 Format as a concise board view. (Ignore `.gitkeep` files when counting.)
@@ -199,9 +202,16 @@ past briefs failed; don't repeat those gaps.
    Decisions now.
 9. **Mechanical lint**: `node scripts/sprint/plan-check.mjs S-NNN` exits 0 (dependencies
    exist, Consumes matches the dependency's Produces, no template placeholders, every
-   `file:line` citation resolves, `risk: high` carries Production notes). Re-check `risk`
-   and `tier` against what the deepened Files lists now touch — raise them when the
-   sprint turned out to reach a risk-tier surface or to need architecture; never lower.
+   `file:line` citation resolves, `risk: high` carries Production notes; a `routine` tier meets its checklist). Re-check
+   `risk` against what the deepened Files lists now touch — raise it when the sprint
+   turned out to reach a risk-tier surface; never lower it. Then **assign the tier** by
+   `docs/sprints/tier-rubric.md` — you have just read the code, which is the only place
+   difficulty can be judged from: `routine` only if EVERY routine criterion holds;
+   `complex` or `critical` on any ONE of their signals; `standard` otherwise; unsure
+   between two → the higher. Write `tier:` and a one-line `tier_reason:` naming the signal
+   or the pattern (`follows src/x.ts:12-40 — same handler shape`). You may lower `/plan`'s
+   provisional tier when the code shows the work is simpler than the plan implied — with
+   the reason on the record.
 10. **Independent cold read** — you wrote this brief, so you cannot certify it. Dispatch
    one `brief-auditor` subagent (Agent tool; prompt: the sprint file path and the repo
    root — nothing else, least of all your reasoning). `SUFFICIENT` → certify.
@@ -262,11 +272,13 @@ Run the backlog's parallel-safe work as a **rolling wave**. **Defer to
    answer into the sprint files (two locked `[skip ci]` commits).
 4. **Start** each member (`start.sh --wave W-<id> --no-push` + its worktree) — checkpoint P2.
 5. **Run**: one `sprint-flow` workflow run **per sprint, all launched in one message**. Each
-   executes on the model its `tier:` routes to, is reviewed independently, has its
-   findings verified and fixed, and notifies you on its own when it ends.
+   executes on the model and effort its `tier:` routes to (`routine` / `standard` /
+   `complex` / `critical` — assigned by the planner, `docs/sprints/tier-rubric.md`), is
+   reviewed independently at that tier's reviewer setting, has its findings verified and
+   fixed, and notifies you on its own when it ends.
 6. **Land what is ready, in batches, while the rest still run**:
    `assemble-train.sh` → one `gate.sh` run → `merge-sprint.sh prepare / land --sprints /
-   finish` (paste each run's `review_record` into the done-file). Act on `PARKED`,
+   finish` (paste each run's `review_record` into the done-file and record its `outcome`). Act on `PARKED`,
    `NEEDS_CLAIM`, `PLAN_GAP` returns as ORCHESTRATION "What a run returns" says.
 7. **Admit** newly unblocked sprints into the same wave after every landing
    (`claims.mjs ready --wave` → `reserve-wave.sh --add` → plan → start → run).
@@ -285,8 +297,8 @@ Drive a **serial chain** of sprints — members that cannot parallelize (each de
 previous, or their `touches:` overlap) — through one long-lived worktree with batched
 landings. **Defer to `docs/sprints/ORCHESTRATION.md` "The serial train"** — it is the source
 of truth for this command. In short: you are the master (this session, strongest model);
-subagents dispatch by agent name (models per `scripts/sprint/routing.json`; a `tier: complex`
-member's executor gets the routed model). Validate the user's ordered
+subagents dispatch by agent name (models and effort per `scripts/sprint/routing.json`; each
+member's executor and reviewers follow its `tier:`). Validate the user's ordered
 chain (deps in `done/` or earlier in the chain; warn on pairs that would parallelize —
 suggest `/sprint wave`), ask the **checkpoint push policy** at T1 (ask at each checkpoint /
 auto-push / hold until train end — ORCHESTRATION "Train protocol" T1), **reserve the whole
