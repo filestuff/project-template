@@ -132,11 +132,13 @@ past briefs failed; don't repeat those gaps.
    turned out to reach a risk-tier surface; never lower it. Then **assign the tier** by
    `docs/sprints/tier-rubric.md` — you have just read the code, which is the only place
    difficulty can be judged from: `routine` only if EVERY routine criterion holds;
-   `complex` or `critical` on any ONE of their signals; `standard` otherwise; unsure
-   between two → the higher. Write `tier:` and a one-line `tier_reason:` naming the signal
-   or the pattern (`follows src/x.ts:12-40 — same handler shape`). You may lower `/plan`'s
-   provisional tier when the code shows the work is simpler than the plan implied — with
-   the reason on the record.
+   `complex` or `critical` only on a signal from the rubric's lists that the brief itself
+   shows; `standard` otherwise, and whenever you are unsure — its reviewer runs on the
+   stronger model and an executor out of its depth escalates. `risk: high` is not a
+   signal: it buys review depth, not a stronger executor. Write `tier:` and a one-line
+   `tier_reason:` naming the signal or the pattern (`follows src/x.ts:12-40 — same handler
+   shape`). You may lower `/plan`'s provisional tier when the code shows the work is
+   simpler than the plan implied — with the reason on the record.
 9. **Independent cold read** — you wrote this brief, so you cannot certify it. Dispatch
    one `brief-auditor` subagent (Agent tool; prompt: the sprint file path and the repo
    root — nothing else, least of all your reasoning). `SUFFICIENT` → certify.

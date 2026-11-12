@@ -392,7 +392,9 @@ hand):
 2. **Review** — independent of the author by construction: one `reviewer` over the branch
    diff, or three focused lenses (correctness, security and data, tests) when the sprint
    is `risk: high`. Reviewers run on the reviewer setting of the tier the sprint
-   **finished** on — never weaker than the executor that did the work. The executor
+   **finished** on — never weaker than the executor that did the work; the one exception
+   is the tests lens, which runs on routing.json's `reviewer_lens.tests` on every tier
+   below `critical`. The executor
    neither spawns nor briefs them.
 3. **Verify** — each Critical/Important finding goes to a `finding-verifier` told to
    refute it; refuted findings are dropped and recorded as such.
@@ -456,7 +458,8 @@ order and the rules are identical; only the dispatcher changes:
   as a fix round; re-check each fix with a `finding-verifier`. Two rounds at most, then
   it is the user's.
 - Dispatch reviewers with the model routing.json's `reviewer.<tier>` gives for the tier
-  the sprint finished on.
+  the sprint finished on — except the tests lens of a three-lens review, which takes
+  `reviewer_lens.tests`' model unless the tier is in its `except` list.
 - Compose the sprint's `outcome` line yourself, in the same grammar the runs use:
   `assigned=<tier> final=<tier> runs=<n> escalations=<n> arbiter=<n> fix_rounds=<n>
   findings=<confirmed>/<raised>`.
@@ -724,16 +727,21 @@ recorded reason:
 |---|---|---|---|
 | `routine` | mechanical — repeats an existing pattern | sonnet / medium | sonnet / high |
 | `standard` | ordinary engineering within one module | sonnet / high | opus / high |
-| `complex` | design under constraints, subtle state, cross-module | opus / high | opus / xhigh |
+| `complex` | design under constraints, subtle state, cross-module | opus / high | opus / high |
 | `critical` | hard and unforgiving — data loss, security, irreversible | opus / xhigh | opus / xhigh |
 
 Three properties of this table are deliberate. **A tier fixes effort as well as model** —
 effort is the cheaper lever, and running everything at the same effort either overpays for
 mechanical work or under-thinks the hard work. **A reviewer is never weaker than the
-executor it reviews.** And **assignment is asymmetric**: `routine` needs every criterion
-on a checklist (the lint and the cold reader both check it), while one signal is enough to
-go up — a hard sprint run too low costs a failed run, an escalation and a subtler bug; an
-easy sprint run too high costs tokens.
+executor it reviews** — with one routed exception: in the three-lens review of a
+`risk: high` sprint, the tests lens (do the tests assert the new behaviour; was one
+loosened) runs on `reviewer_lens.tests`, the cheaper model, on every tier below
+`critical`. And **both ends of the tier scale are earned, with `standard` the default**:
+`routine` needs every criterion on a checklist, `complex` and `critical` need a rubric
+signal the brief shows, and the lint and the cold reader check both. `risk: high` is not
+such a signal — risk buys the three lenses, not a stronger executor. A sprint wrongly left
+at `standard` costs one cheap run before ESCALATE lifts it, under a reviewer on the
+stronger model; a sprint wrongly raised is paid in full every time.
 
 `sprint-flow` applies the table itself from the `routing` and `sprint.tier` you pass it,
 and climbs `routing.escalation` one rung per ESCALATE. On the hand-dispatch fallback the

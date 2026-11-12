@@ -1,6 +1,6 @@
 ---
 name: sprint-executor
-description: Use during /sprint wave Step 4 or a /sprint train sprint loop to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree. Dispatched by the sprint-flow workflow or by the wave/train orchestrator, which passes a stronger model for sprints marked tier complex or after an ESCALATE, and which reviews the result independently; not for solo /sprint start flows.
+description: Use during /sprint wave Step 4 or a /sprint train sprint loop to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree. Dispatched by the sprint-flow workflow or by the wave/train orchestrator, which passes the model and effort routing.json gives the sprint's tier (and the next tier's after an ESCALATE), and which reviews the result independently; not for solo /sprint start flows.
 tools: Read, Grep, Glob, Bash, Edit, Write, Agent
 model: sonnet
 effort: high

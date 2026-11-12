@@ -6,11 +6,16 @@ is where cost and quality are traded. `risk:` is a different question (what is e
 it goes wrong) and drives review *breadth*; `story_points` is size. A two-point fix to a
 race condition is harder than a thirteen-point CRUD screen.
 
+**Risk never sets the tier.** A `risk: high` sprint already buys a deeper, three-lens
+review on the stronger model; that is what exposure calls for. It does not make the work
+harder to write: a sprint that follows an existing pattern and adds a `Produces` another
+sprint will consume is high-risk **and** `standard`.
+
 | Tier | The work is… | Executor | Reviewer |
 |---|---|---|---|
 | `routine` | mechanical: it repeats a pattern the codebase already has | cheaper model, medium effort | cheaper model, high effort |
 | `standard` | ordinary engineering: a clear brief, judgment within one module | cheaper model, high effort | stronger model, high effort |
-| `complex` | design under constraints: new boundaries, subtle state, cross-module change | stronger model, high effort | stronger model, extra-high effort |
+| `complex` | design under constraints: new boundaries, subtle state, cross-module change | stronger model, high effort | stronger model, high effort |
 | `critical` | hard **and** unforgiving: a wrong answer loses data, breaks security, or cannot be undone | stronger model, extra-high effort | stronger model, extra-high effort |
 
 The models behind "cheaper" and "stronger" are in `scripts/sprint/routing.json` (full
@@ -19,26 +24,36 @@ to run the sprint's session on.
 
 ## Who sets it, and when
 
-1. **`/plan`** sets a **provisional** tier while cutting sprints: `complex` if the sprint
-   is `risk: high` or the source plan describes it as introducing a new boundary;
-   otherwise `standard`. `/plan` works from the plan document, not from the code, so it
-   never sets `routine` or `critical`.
+1. **`/plan`** sets a **provisional** tier while cutting sprints: `complex` if the source
+   plan describes the sprint as introducing a new boundary, abstraction or cross-module
+   change; otherwise `standard`. `/plan` works from the plan document, not from the code,
+   so it never sets `routine` or `critical`.
 2. **The planner assigns the tier at certification** (`/sprint plan`, or the
    `sprint-planner` agent in a wave) — it has just read the code the sprint touches, which
    is the only position from which difficulty can be judged. It writes `tier:` and a
-   one-line `tier_reason:` naming the signal or criteria that decided it.
-3. **After the sprint starts, the tier only goes up**: an executor that meets work beyond
+   one-line `tier_reason:` naming the signal or criteria that decided it. It may lower
+   `/plan`'s provisional tier, with the reason on the record.
+3. **The brief's cold reader checks the claim** — a `routine` tier against its checklist,
+   a `complex` or `critical` tier against the signal its `tier_reason` names. A tier the
+   brief does not support is sent back to the planner.
+4. **After the sprint starts, the tier only goes up**: an executor that meets work beyond
    it returns ESCALATE and the next tier continues from its branch.
 
-## The rules are asymmetric — on purpose
+## Both ends are checked — the middle is the default
 
-Under-classifying a hard sprint costs a failed run, an escalation and often a subtly
-wrong result that review has to catch. Over-classifying costs some tokens. So:
+`standard` is where a sprint lands unless something specific moves it. The cheapest
+setting and the expensive ones each have to be earned:
 
-- **Unsure between two tiers → the higher one.**
-- **Going up needs one signal. Going down to `routine` needs every criterion.**
-- A model judging its own task's difficulty errs low. That is why `routine` is a
-  checklist, not a judgment, and why the brief's cold reader checks it independently.
+- **Down to `routine` needs every criterion.** A model judging its own task's difficulty
+  errs low, so `routine` is a checklist, not a judgment. Unsure between `routine` and
+  `standard` → `standard`.
+- **Up to `complex` or `critical` needs one signal from the lists below, named in
+  `tier_reason` and visible in the brief** — "feels hard", size, and `risk: high` are not
+  signals. Unsure between `standard` and `complex` → `standard`.
+- Starting at `standard` is safe because two things stand behind it: its reviewer runs on
+  the stronger model, and an executor that meets work beyond it returns ESCALATE and the
+  next tier continues from its branch. A wrong `standard` costs one cheap run; a wrong
+  `complex` is paid in full on every sprint and nothing ever reports it.
 
 ### `routine` — ALL of these must hold
 
@@ -62,16 +77,14 @@ names the pattern it follows (`follows src/routes/users.ts:12-40 — same handle
 - A non-trivial algorithm, or a performance-sensitive path with a stated budget.
 - A change that must stay consistent across more than one module or service.
 - It modifies code that has no tests, or a subsystem with no pattern to follow.
-- The cold read of the brief came back with three or more assumptions — the brief cannot
-  carry all the judgment, so the executor must.
-- `risk: high`.
+- The cold read of the brief came back with three or more assumptions that survive a
+  repair round — the brief cannot carry all the judgment, so the executor must.
 
 ### `critical` — ANY one of these
 
 - An irreversible migration or transformation of stored data.
 - Authentication, authorization, cryptography, or payment logic itself (not merely a
   screen that sits behind them).
-- A `complex` signal **on** a `risk: high` surface — hard and exposed at once.
 - A correctness failure would silently corrupt or lose data.
 - A public contract others depend on changes shape.
 
@@ -89,7 +102,8 @@ confirmed. `node scripts/sprint/tiers.mjs` (full tier) aggregates them per tier 
   `routing.json`;
 - a tier whose sprints need **repeated fix rounds** or yield confirmed Critical findings —
   the same, one notch milder;
-- a top tier that runs clean for a long stretch — possibly over-provisioned; try the tier
-  below on the next comparable sprint before changing a rule.
+- a top tier with four or more sprints, none of which escalated or strained — possibly
+  over-provisioned; try the tier below on the next comparable sprint before changing a
+  rule.
 
 Change the rubric or the routing on evidence from that view, not on a single bad sprint.

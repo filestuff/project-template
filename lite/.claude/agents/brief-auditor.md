@@ -34,8 +34,16 @@ repository. Walk the deliverables in order and, for each, try to begin:
   really the same shape with different nouns? Does any criterion in
   `docs/sprints/tier-rubric.md`'s routine checklist fail (a new interface, an open
   decision, concurrency, schema, auth, more than 5 files)? One failing criterion is a
-  **blocking** item: `tier: routine does not hold — <criterion> (<file:line>)`. Do not
-  second-guess any other tier; raising is cheap and is the planner's call.
+  **blocking** item: `tier: routine does not hold — <criterion> (<file:line>)`.
+- **If the frontmatter says `tier: complex` or `tier: critical`**, check that claim too —
+  those tiers run on the most expensive setting and nothing else ever questions them.
+  `tier_reason` must name a signal from that tier's list in
+  `docs/sprints/tier-rubric.md`, and the brief must show it: the new interface is in a
+  deliverable, the state machine or cross-module change is in the Files lists, the
+  migration is irreversible as written. `risk: high`, a `Produces` contract, size, or
+  "hard" are not signals. A reason that names no rubric signal, or a signal the brief
+  does not show, is a **blocking** item: `tier: <tier> is not supported — <why>; the
+  brief reads as <tier you would assign>`. Leave `tier: standard` alone.
 
 Classify what you find:
 
@@ -58,6 +66,6 @@ ASSUMPTIONS:
 - <deliverable n> — <the assumption you would make>
 ```
 
-`INSUFFICIENT` iff there is at least one blocking item (including a `routine` tier that
-does not hold) or the lint failed. `BLOCKING: none`
+`INSUFFICIENT` iff there is at least one blocking item (including a `routine`, `complex` or
+`critical` tier the brief does not support) or the lint failed. `BLOCKING: none`
 and `ASSUMPTIONS: none` are valid.

@@ -226,6 +226,12 @@ const reviewerRole = () => {
   const r = routing.roles.reviewer
   return r && (r.model || r.effort) ? r : (r && (r[tier()] || r.standard)) || undefined
 }
+// One lens of the high-risk three-lens review may be routed apart from the tier's reviewer
+// (routing.roles.reviewer_lens.<lens key>) — except on the tiers its `except` lists.
+const lensRole = (lens) => {
+  const o = routing.roles.reviewer_lens && routing.roles.reviewer_lens[lens.key]
+  return o && (o.model || o.effort) && !(Array.isArray(o.except) && o.except.includes(tier())) ? o : reviewerRole()
+}
 const attempt = Number.isInteger(sprint.attempt) && sprint.attempt > 0 ? sprint.attempt : 1
 
 const decisions = []
@@ -383,7 +389,7 @@ You have been given nothing of the author's reasoning, on purpose. Return your f
 const key = (f) => `${f.location}::${f.description}`.toLowerCase().replace(/\s+/g, ' ').slice(0, 160)
 
 async function reviewAndVerify(round) {
-  const reviews = await parallel(LENSES.map((lens) => () => agent(reviewPrompt(lens), { agentType: 'reviewer', schema: REVIEW_SCHEMA, label: `review:${id}:${lens.key}${round > 1 ? ` r${round}` : ''}`, phase: 'Review', ...pick(reviewerRole()) })))
+  const reviews = await parallel(LENSES.map((lens) => () => agent(reviewPrompt(lens), { agentType: 'reviewer', schema: REVIEW_SCHEMA, label: `review:${id}:${lens.key}${round > 1 ? ` r${round}` : ''}`, phase: 'Review', ...pick(lensRole(lens)) })))
   const ran = LENSES.map((lens, i) => ({ lens: lens.key, ok: Boolean(reviews[i]), summary: reviews[i] ? reviews[i].summary : 'reviewer did not return' }))
   const seen = new Set()
   const raised = []

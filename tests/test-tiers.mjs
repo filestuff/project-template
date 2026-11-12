@@ -55,21 +55,24 @@ try {
   out = run();
   check(/^STRAINED routine: 2\/4 routine sprints/m.test(out) && !/UNDER routine/.test(out), `STRAINED when ≥40% finish uncleanly:\n${out}`);
 
-  // OVER?: 8 clean complex sprints — and never for 7, never for a lower tier
-  for (let i = 0; i < 7; i++) landed("complex", O("complex", "complex"), { dir: i % 2 ? "done/archive" : "done" });
-  check(!/OVER\?/.test(run()), "seven clean complex sprints are not yet enough to question the tier");
+  // OVER?: 4 complex sprints, none escalated or strained — never for 3, never for a lower tier
+  for (let i = 0; i < 3; i++) landed("complex", O("complex", "complex"), { dir: i % 2 ? "done/archive" : "done" });
+  check(!/OVER\?/.test(run()), "three clean complex sprints are not yet enough to question the tier");
   landed("complex", O("complex", "complex"));
   out = run();
-  check(/^OVER\? complex: 8 complex sprints ran clean/m.test(out), `OVER? after 8 clean sprints of a top tier (archive included):\n${out}`);
+  check(/^OVER\? complex: 4 complex sprints ran clean/m.test(out), `OVER? after 4 clean sprints of a top tier (archive included):\n${out}`);
+  check(!/OVER\? (routine|standard)/.test(out), "OVER? is never raised for routine or standard");
   landed("complex", O("complex", "complex", { findings: "1/2" }));
-  check(!/OVER\?/.test(run()), "one confirmed finding withdraws OVER? — the tier is earning its cost");
+  check(/^OVER\? complex: 5 complex sprints/m.test(run()), "one confirmed finding does not withdraw OVER? — review finds things at every tier");
+  landed("complex", O("complex", "complex", { findings: "2/2" }));
+  check(!/OVER\?/.test(run()), "a strained sprint withdraws OVER? — the tier is earning its cost");
 
   // untracked sprints, malformed outcomes, --since
   landed("standard", null);                                    // solo / pre-1.14: no outcome
   landed("standard", "assigned=huge final=standard");          // unknown tier → ignored, counted as untracked
   landed("critical", O("critical", "critical"), { end: "2026-12-05" });
   j = JSON.parse(run("--json"));
-  check(j.untracked === 2 && j.tracked === 18, `untracked and malformed outcomes are counted apart: tracked ${j.tracked}, untracked ${j.untracked}`);
+  check(j.untracked === 2 && j.tracked === 15, `untracked and malformed outcomes are counted apart: tracked ${j.tracked}, untracked ${j.untracked}`);
   j = JSON.parse(run("--json", "--since", "2026-12-01"));
   check(j.tracked === 1 && j.tiers.critical?.sprints === 1 && !j.tiers.standard, "--since filters on end_date");
   check(spawnSync("node", [SCRIPT, "--root", tmp, "--since", "soon"], { encoding: "utf8" }).status === 1, "bad --since exits 1");

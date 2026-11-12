@@ -1,5 +1,5 @@
 {
-  "$comment": "Which model and reasoning effort each role runs on. Read by the orchestrator (/sprint wave, /sprint train) and passed to the workflow scripts; the agent definitions in .claude/agents/ carry the same defaults for the fixed roles and for the `standard` tier, so change the two together. Use model aliases (sonnet | opus | fable | haiku) — never dated model ids. executor and reviewer are routed PER SPRINT by its frontmatter `tier:` (docs/sprints/tier-rubric.md says how a tier is assigned): each tier fixes model AND effort for both roles, and a reviewer is never weaker than the executor it reviews. `escalation` is the ladder an executor climbs when it returns ESCALATE — one rung per escalation; past the top the sprint is parked for the user. Keep the arbiter at least as strong as the strongest executor: it settles their disputes. Where `fable` is available, the `critical` tier and the arbiter are the places to use it. Tune this table on evidence: `node scripts/sprint/tiers.mjs` shows, per tier, how often sprints escalated or needed fix rounds.",
+  "$comment": "Which model and reasoning effort each role runs on. Read by the orchestrator (/sprint wave, /sprint train) and passed to the workflow scripts; the agent definitions in .claude/agents/ carry the same defaults for the fixed roles and for the `standard` tier, so change the two together. Use model aliases (sonnet | opus | fable | haiku) — never dated model ids. executor and reviewer are routed PER SPRINT by its frontmatter `tier:` (docs/sprints/tier-rubric.md says how a tier is assigned): each tier fixes model AND effort for both roles, and a reviewer is never weaker than the executor it reviews. `reviewer_lens` overrides that setting for one named lens of the three-lens review a `risk: high` sprint gets (correctness | security | tests), on every tier not listed in its `except`: the tests lens checks that tests assert the new behaviour and none was loosened — narrow and checkable — so it runs on the cheaper model, while correctness and security stay on the tier's reviewer. Delete the entry to run every lens on the tier's reviewer. `escalation` is the ladder an executor climbs when it returns ESCALATE — one rung per escalation; past the top the sprint is parked for the user. Keep the arbiter at least as strong as the strongest executor: it settles their disputes. Where `fable` is available, the `critical` tier and the arbiter are the places to use it. Tune this table on evidence: `node scripts/sprint/tiers.mjs` shows, per tier, how often sprints escalated or needed fix rounds.",
   "roles": {
     "planner": { "model": "opus", "effort": "high" },
     "wave-planner": { "model": "opus", "effort": "high" },
@@ -13,8 +13,11 @@
     "reviewer": {
       "routine": { "model": "sonnet", "effort": "high" },
       "standard": { "model": "opus", "effort": "high" },
-      "complex": { "model": "opus", "effort": "xhigh" },
+      "complex": { "model": "opus", "effort": "high" },
       "critical": { "model": "opus", "effort": "xhigh" }
+    },
+    "reviewer_lens": {
+      "tests": { "model": "sonnet", "effort": "high", "except": ["critical"] }
     },
     "finding-verifier": { "model": "sonnet", "effort": "medium" },
     "arbiter": { "model": "opus", "effort": "xhigh" },

@@ -124,6 +124,13 @@ for (const [rel, needles] of Object.entries(SHADOWED)) {
     }
   }
   for (const t of TIER_NAMES) check(geq(strength(routing.roles.reviewer?.[t]), strength(routing.roles.executor?.[t])), `routing.json: at tier ${t} the reviewer is weaker than the executor it reviews`);
+  // reviewer_lens: the one routed exception to "reviewer ≥ executor" — a named lens of the
+  // three-lens review may run cheaper, but never on the top tier.
+  for (const [lens, r] of Object.entries(routing.roles.reviewer_lens ?? {})) {
+    check(["correctness", "security", "tests"].includes(lens), `routing.json: reviewer_lens.${lens} is not a lens sprint-flow runs`);
+    check(r.model in MODEL_RANK && r.effort in EFFORT_RANK, `routing.json: reviewer_lens.${lens} must set a known model alias and effort (has ${JSON.stringify(r)})`);
+    check(Array.isArray(r.except) && r.except.includes("critical") && r.except.every((t) => TIER_NAMES.includes(t)), `routing.json: reviewer_lens.${lens}.except must list tiers and include "critical" — the top tier is reviewed in full on its own reviewer`);
+  }
   check(geq(strength(routing.roles.arbiter), strength(routing.roles.executor?.critical)), "routing.json: the arbiter must be at least as strong as the strongest executor — it settles their disputes");
   eqList(routing.escalation, TIER_NAMES.map((t) => `executor.${t}`), "routing.json: escalation must climb the four tiers in order");
   // the rubric, the template comment and the lint must name the same four tiers

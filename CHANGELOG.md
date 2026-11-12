@@ -4,6 +4,56 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.16.0] - 2026-11-12
+
+**Risk no longer sets the tier, and the expensive tiers have to be earned.** Since v1.14.0
+nearly every sprint came out `complex` or `critical`, so the stronger model executed almost
+everything. In ai-todo, 10 of 11 tiered sprints were above `standard`. The cause was the
+rubric, not the planner: `risk: high` was itself a `complex` signal, any `complex` signal
+on a high-risk sprint made it `critical`, and a sprint is high-risk as soon as another
+sprint consumes its `Produces`. On top of that, "unsure → the higher tier" was the rule
+everywhere and nothing ever questioned a high tier. No migrations.
+
+- **`risk: high` is not a tier signal.** Removed from the `complex` list, and "a complex
+  signal on a risk-high surface" removed from the `critical` list
+  (`docs/sprints/tier-rubric.md`). Risk still buys what exposure calls for: the three-lens
+  deep review and mandatory Production notes. A sprint that follows an existing pattern and
+  adds a `Produces` is high-risk **and** `standard`. `/plan`'s provisional tier is
+  `complex` only for a new boundary, abstraction or cross-module change.
+- **`standard` is the default; unsure means `standard`.** `complex` and `critical` need a
+  signal from the rubric's lists that the brief itself shows. A sprint wrongly left at
+  `standard` costs one cheaper run before `ESCALATE` lifts it, and its reviewer is on the
+  stronger model either way. `routine` is unchanged: every checklist item, or `standard`.
+- **High tiers are checked like `routine` is.**
+  - `plan-check.mjs`: `tier-unreasoned` (a `complex` or `critical` tier with no
+    `tier_reason:`) is now a failure, not a warning. A sprint that fails it cannot be
+    certified until it names its signal or drops to `standard`.
+  - `brief-auditor`: checks that the signal named in `tier_reason` is a rubric signal and
+    is visible in the brief; an unsupported tier is a blocking item, so the existing
+    repair round sends it back to the planner. The cold read now happens before the tier
+    is final, which is also when the "three or more assumptions" signal can be applied.
+  - `sprint-planner` may now lower `/plan`'s provisional tier (the `/sprint plan` skill
+    already could).
+- **Cheaper review** (`scripts/sprint/routing.json`, full tier):
+  - `reviewer.complex` is `opus / high` (was `xhigh`). Extra-high effort is kept for
+    `critical`.
+  - New `reviewer_lens.tests`: in the three-lens review of a `risk: high` sprint, the tests
+    lens runs on `sonnet / high` on every tier except `critical`. Correctness and security
+    stay on the tier's reviewer. Delete the entry to put every lens back on it.
+- **`tiers.mjs` questions a top tier sooner.** `OVER?` fires for `complex` / `critical`
+  once the tier has 4 sprints with none escalated and none strained (was 8, and a single
+  confirmed finding used to withdraw it).
+
+**Upgrading.**
+- If you edited `routing.json`, the three-way merge keeps your values; check that
+  `reviewer.complex` and `reviewer_lens` came out as you want them.
+- Sprints already certified keep their tier. Backlog sprints carrying `/plan`'s old
+  provisional `tier: complex` with `tier_reason: null` will fail `tier-unreasoned` the next
+  time they are linted — `/sprint plan` (or the wave's planning pass) re-assigns the tier
+  and writes the reason. To re-tier a certified backlog sprint, run `/sprint plan` on it.
+- Expect fewer `complex` sprints and a few more `ESCALATE`s. `node scripts/sprint/tiers.mjs`
+  shows `UNDER standard` if `standard` is now being given work that is too hard.
+
 ## [1.15.1] - 2026-11-12
 
 **Shipped scripts are Biome-clean.** Before this release, a repo in link mode whose worktree

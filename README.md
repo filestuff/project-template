@@ -86,10 +86,11 @@ stronger executor continues from its branch.
 `complex` or `critical` — that says how *hard* it is (not how big, and not how risky), and
 the tier fixes both the model and the reasoning effort of the executor and of its
 reviewers. The planner assigns it when it certifies the brief, having just read the code,
-and records why. The rule is deliberately lopsided: a sprint is `routine` only if it meets
-every item on a checklist — which a lint and an independent cold reader both verify —
-while one signal is enough to move it up, because under-powering hard work costs far more
-than over-powering easy work. Every landed sprint records how it went, and
+and records why. `standard` is the default and both ends are earned: a sprint is `routine` only if it
+meets every item on a checklist, and `complex` or `critical` only on a named signal the
+brief shows — a lint and an independent cold reader verify both. Risk does not set the
+tier: a `risk: high` sprint gets a deeper three-lens review, not a stronger executor, and
+an executor that meets work beyond its tier escalates. Every landed sprint records how it went, and
 `node scripts/sprint/tiers.mjs` shows per tier how often sprints escalated or finished
 uncleanly, so the table is tuned on evidence. `node scripts/sprint/decisions.mjs --class
 taste` lists what was decided on your behalf.

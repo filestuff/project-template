@@ -14,9 +14,11 @@
 //             assigned to it: tighten the rubric's criteria, or route the tier one step up.
 //   STRAINED  ≥ 40% needed two fix rounds, a re-launch, or had ≥ 2 confirmed
 //             Critical/Important findings — it finishes, but not cleanly.
-//   OVER?     complex/critical only, ≥ 8 sprints, none escalated, none strained, no
-//             confirmed finding — possibly over-provisioned. A question, not a verdict:
-//             try the tier below on the next comparable sprint before changing a rule.
+//   OVER?     complex/critical only, none escalated and none strained — possibly
+//             over-provisioned. A question, not a verdict: try the tier below on the
+//             next comparable sprint before changing a rule. (A single confirmed finding
+//             does not withdraw it: review finds things at every tier, and two or more
+//             on one sprint already count as strain.)
 // Exit 0 always. Sprints with no `outcome:` (solo, lite-era, pre-1.14) are counted apart.
 import { allSprints, repoRoot } from "./frontmatter.mjs";
 
@@ -72,7 +74,7 @@ for (const t of TIERS) {
   if (r.length < MIN_N) continue;
   if (st.escalated_pct >= 25) flags.push({ flag: "UNDER", tier: t, text: `${st.escalated}/${r.length} ${t} sprints escalated (${escalated.map((x) => x.sprint).join(", ")}) — the tier is being assigned to work that is harder than the rubric admits: tighten its criteria, or route ${t} one step up in routing.json` });
   else if (st.strained_pct >= 40) flags.push({ flag: "STRAINED", tier: t, text: `${st.strained}/${r.length} ${t} sprints needed two fix rounds, a re-launch, or had ≥2 confirmed findings (${strained.map((x) => x.sprint).join(", ")}) — they finish, but not cleanly` });
-  else if ((t === "complex" || t === "critical") && r.length >= 8 && st.escalated === 0 && st.strained === 0 && st.confirmed_findings === 0) flags.push({ flag: "OVER?", tier: t, text: `${r.length} ${t} sprints ran clean — possibly over-provisioned; try the tier below on the next comparable sprint before changing a rule` });
+  else if ((t === "complex" || t === "critical") && st.escalated === 0 && st.strained === 0) flags.push({ flag: "OVER?", tier: t, text: `${r.length} ${t} sprints ran clean — possibly over-provisioned; try the tier below on the next comparable sprint before changing a rule` });
 }
 
 if (json) {
