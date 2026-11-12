@@ -157,6 +157,17 @@ Rollback: {how it is undone, and what undoing costs}
 - Gate: … (the LAST stage needs no Gate — its completion flips the proposal to delivered)
 - Status: pending
 
+## Decision log
+
+<!-- OPTIONAL — delete if empty. Decisions made while drafting that the user was NOT asked
+     (docs/DECISION_POLICY.md): mechanical ones, and taste ones decided in gated mode.
+     One line each, in the policy's grammar:
+     - YYYY-MM-DD (<interactive|gated>, <mechanical|taste>, <agent|arbiter>): <decision> —
+       principle: <which> — rejected: <option> — undo: <how>
+     The direction and scope appetite are never here — they are the user's and are
+     recorded in Alternatives. `node scripts/sprint/decisions.mjs` lists these across
+     proposals and sprints. -->
+
 ## Open questions
 
 <!-- Decision-ready only: each with 2–4 concrete options, a recommended one, and the

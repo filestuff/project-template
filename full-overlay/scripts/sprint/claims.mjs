@@ -7,9 +7,13 @@
 //   claims.mjs check --sprint S-NNN              # that sprint's touches vs all OTHER in-flight sprints
 //   claims.mjs check --paths a,b [--sprint S-NNN] # explicit paths vs in-flight (excluding own sprint)
 //   claims.mjs add S-NNN <path...> [--no-push]   # locked main commit appending to touches
+//   claims.mjs covers --sprints S-A,S-B           # paths on stdin (one per line) vs those
+//                                                 # sprints' touches; prints the uncovered ones
 //
 // Claim grammar: exact repo-relative path | directory prefix ending in /** |
 // token (defined in claims-tokens.json). Exit codes: 0 free · 2 overlap · 1 error.
+// `covers`: 0 every path is claimed · 2 some are not (listed) · 3 a named sprint has no
+// touches at all, so nothing can be verified.
 
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +45,14 @@ function patternsOverlap(a, b) {
     return a.value.startsWith(b.value) || b.value.startsWith(a.value);
   const [exact, prefix] = a.kind === "exact" ? [a, b] : [b, a];
   return exact.value.startsWith(prefix.value);
+}
+
+// Is a concrete repo-relative path inside any of these claims? (The land-time check:
+// claims are only a guarantee if what a branch actually changed is held against them.)
+export function pathCovered(path, claims) {
+  for (const claim of claims)
+    for (const p of expand(claim)) if (p.kind === "prefix" ? path.startsWith(p.value) : path === p.value) return true;
+  return false;
 }
 
 export function claimsOverlap(claimA, claimB) {
@@ -151,6 +163,7 @@ function parseArgs(argv) {
     if (argv[i] === "--sprint") args.sprint = argv[++i];
     else if (argv[i] === "--paths") args.paths = argv[++i].split(",").map((s) => s.trim());
     else if (argv[i] === "--wave") args.wave = argv[++i];
+    else if (argv[i] === "--sprints") args.sprints = argv[++i].split(",").map((s) => s.trim()).filter(Boolean);
     else if (argv[i] === "--no-push") args.noPush = true;
     else args.positional.push(argv[i]);
   }
@@ -269,6 +282,32 @@ if (cmd === "check") {
   } finally {
     execFileSync(lockSh, ["release", token]);
   }
+} else if (cmd === "covers") {
+  // Land-time guarantee: every path a branch changed must be inside its roster's touches.
+  if (!args.sprints?.length) {
+    console.error("usage: <paths on stdin> | claims.mjs covers --sprints S-A,S-B");
+    process.exit(1);
+  }
+  const claims = [];
+  const unclaimed = [];
+  for (const id of args.sprints) {
+    const file = findSprintFile(root, id);
+    if (!file) {
+      console.error(`${id}: no sprint file in in-progress/ or backlog/ on the ledger`);
+      process.exit(1);
+    }
+    const touches = readSprintFile(file).touches ?? [];
+    if (touches.length === 0) unclaimed.push(id);
+    claims.push(...touches);
+  }
+  if (unclaimed.length) {
+    console.log(`NO-CLAIMS: ${unclaimed.join(", ")} — no touches: to check against`);
+    process.exit(3);
+  }
+  const paths = readFileSync(0, "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
+  const outside = paths.filter((p) => !pathCovered(p, claims));
+  for (const p of outside) console.log(p);
+  process.exit(outside.length ? 2 : 0);
 } else if (cmd === "waves") {
   // Derived parallel schedule over backlog + in-progress (deps + claim-disjointness).
   const sprints = allSprints(root);
@@ -296,7 +335,7 @@ if (cmd === "check") {
       `Unscheduled (dependency cycle?): ${unscheduled.map((s) => s.sprint).join(", ")}`,
     );
 } else {
-  console.error("usage: claims.mjs check|add|waves ...");
+  console.error("usage: claims.mjs check|add|covers|waves ...");
   process.exit(1);
 }
 }

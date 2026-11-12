@@ -4,6 +4,90 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.12.0] - 2026-11-12
+
+**Decisions, routing and enforcement.** Three things that were prose become mechanisms.
+Who decides what is now one policy every skill and agent defers to, instead of ~20
+separate "ask the user" rules and an autonomy contract that existed only in train mode.
+Which model runs which role is a table, with an escalation path for agents that hit
+something beyond them. And the rules agents were asked to follow — stay inside your
+claims, never run lifecycle scripts, never push — are enforced by hooks and by `land`.
+No migrations. **Read the upgrade notes: this release changes how sessions behave.**
+
+- **`docs/DECISION_POLICY.md`** (new, both tiers). Three classes, tested in order:
+  *reserved* (direction and scope, overturning you, irreversible or destructive changes,
+  security posture, spend, public contracts, superseding an ADR, weakening a test or the
+  gate, deploys, Manual criteria) is **always asked, in every mode**; *mechanical* (the
+  brief, an ADR, the decision ladder or the code's convention gives one answer) is decided
+  and recorded without asking; *taste* (reasonable people differ, reversible, contained)
+  is decided, recorded with the option not taken and how to undo it, and listed at **one
+  approval gate per phase** where you accept all with a word or overturn any by number.
+- **Defaults by flow.** `/plan` and `/sprint wave` run *gated* (you now get one brief at
+  the end of a breakdown or a decision round instead of a question per boundary);
+  `/sprint train` runs *unattended* as before, with its auto-answers now made by the
+  arbiter and recorded in the policy's grammar; `/proposal` stays *interactive* — its
+  direction and appetite are always yours — unless you ask it to run gated; solo
+  `/sprint start` stays interactive. Say "ask me everything" to any of them for
+  interactive.
+- **`arbiter` agent** (new, both tiers; opus / xhigh). Planners' and executors' questions
+  go to it before they go to you: it reads the record and the code, classifies the
+  decision, answers mechanical and taste ones with a recorded rationale, and returns
+  reserved ones shaped as a decision brief. It never decides a reserved question.
+- **`scripts/sprint/decisions.mjs`** (new): lists every recorded decision across sprints
+  and proposals — `--class taste` is "what was decided on my behalf", `--since` narrows
+  it. Decisions still live only in the artifact they concern; this is a view. It flags a
+  taste decision recorded without a rejected option or an undo.
+- **Model routing** (full: `scripts/sprint/routing.json`; both tiers: every agent
+  definition now pins `model`, `effort` and `maxTurns`). Planners, reviewers and the
+  arbiter move to **opus**; executors stay on sonnet for `tier: standard` sprints and run
+  on opus for `tier: complex` ones; auditors, verifiers and doc-sync stay on sonnet. The
+  old rule "all wave subagents are sonnet, never pass a model" is replaced by "pass a
+  spawn-time model only for the executor, only from routing.json".
+- **Escalation path.** `sprint-executor` gains a fifth status, **ESCALATE**
+  (`repeated-failure` / `beyond-capability` / `carve-out-uncertainty`), with a handover
+  block; it commits its work in progress first, and the master re-dispatches on the next
+  routing tier, then the arbiter, then you. **BLOCKED** now means "a decision I may not
+  make" and is answered by the arbiter first. Escalation is one-way.
+- **Guard hooks** (new: `scripts/hooks/guard.mjs`, wired in `.claude/settings.json`).
+  Before every Bash and file-edit call, for the main session and every subagent:
+  *both tiers* — force-pushing or deleting the main branch is refused (feature branches
+  are untouched). *Full tier* — an edit inside a sprint worktree outside that sprint's
+  `touches:` is refused, with the way out in the message; a subagent running a lifecycle
+  script, pushing, or committing with `--no-verify` is refused; and under the workflow
+  variant an executor's DONE is refused (at most three times) while its Completion Log
+  fails `close-check.mjs`. `scripts/hooks/agent-log.mjs` records subagent start/stop times
+  in `.claude/sprint-orchestration/events.jsonl` (full tier, gitignored).
+- **Claims bind at `land`** (full). `merge-sprint.sh land` now refuses a branch that
+  changed any path outside its roster's `touches:` — **exit 6**, lock kept, `main`
+  untouched, paths listed (the sprint's own file, its evidence directory and the generated
+  docs are exempt). Recovery: `abort`, `claims.mjs add`, `prepare`, `land`.
+  `--allow-outside-claims "<reason>"` is the audited escape, written into Deviations. It
+  also prints a `GATE-SENSITIVE:` list when a branch changes the commit gate, CI config or
+  deletes tests. New `claims.mjs covers --sprints …` does the check.
+- **Fix: `/template-upgrade` dropped template hooks and env.** `merge-settings` copied any
+  top-level key other than `permissions` only when your `settings.json` lacked it — so a
+  repo that already had `env` (bootstrap writes `env.SPRINT_MAIN_BRANCH` for a non-`main`
+  default branch) or its own `hooks` would never have received this release's hooks. It
+  now merges `hooks` per event and `env` per variable (yours win), and is idempotent.
+- **Upgrade notes.**
+  - *Hooks change session behaviour.* After upgrading, every Bash and edit call runs
+    `guard.mjs` (≈50 ms). Hooks you added yourself are kept; the upgrade owns only groups
+    whose handlers all run scripts under `scripts/hooks/`. Emergency off-switch:
+    `SPRINT_GUARD=off` in the environment. Node ≥ 18 is now required in the lite tier too.
+  - *In-flight sprints (full tier).* A sprint started before the upgrade whose branch
+    already strays outside its `touches:` will now stop at `land` with exit 6 — claim the
+    paths (`claims.mjs add`) rather than override. Sprints with empty `touches:` are
+    unaffected (a warning).
+  - *Cost.* Planners and reviewers now run on opus. To keep the old behaviour, set their
+    `model:` back to `sonnet` in `.claude/agents/*.md` **and** in
+    `scripts/sprint/routing.json` (a test in the template keeps the two in step; your
+    copies are yours to change).
+  - *Unattended runs.* Claude Code ignores `permissions.defaultMode: "auto"` in a project
+    settings file; set it in `~/.claude/settings.json` if you want waves and trains to run
+    without permission prompts.
+  - *CLAUDE.md block* gains one line (the policy doc); as always the block between the
+    `project-template` markers is replaced whole.
+
 ## [1.11.0] - 2026-11-12
 
 **Planning rigor.** Until now a proposal was scored by one generic reviewer whose result

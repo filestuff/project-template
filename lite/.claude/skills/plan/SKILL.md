@@ -36,6 +36,30 @@ the assembled set; mutually exclusive choices narrow to the top 3 plus an explic
 of these — show the rest", then decide. A wall-of-text question the user must parse for
 options is a protocol violation, not a style choice.
 
+## Autonomy (`docs/DECISION_POLICY.md`)
+
+`/plan` runs in the policy's **gated** mode by default: it decides what the rules settle,
+decides reversible details in the open, and asks the user once.
+
+- **Mechanical — decide and record, never ask:** reuse-vs-rebuild where the decision
+  ladder names existing code; deferring work the plan's goal does not need (to
+  `docs/TODOS.md`); story points; `risk` and `tier`; `depends_on` edges the code dictates.
+- **Taste — decide, record with the rejected option, list at the gate:** where a sprint
+  boundary falls between two workable seams; whether two small sprints merge; the order
+  of independent sprints; the wording of an Open Question's recommended option.
+- **Reserved — always asked:** dropping or adding scope the source plan asked for; the
+  complexity-smell reduce-or-proceed call (Phase 2); a phased split of a breakdown past
+  ~10 sprints; an unresolved review decision; a due stage gate; breaking down an
+  unreviewed proposal; a conflict with an accepted ADR; a panel blocker that survives.
+
+Every mechanical and taste decision goes into the Plan record's scope-decisions table
+(Phase 4) with its class — that table is the record the policy requires. The **approval
+gate** is one brief at the end of Phase 4, before the commit: "decided for you" (the taste
+rows, numbered — accept all, or overturn by number) and "yours to decide" (each reserved
+question via AskUserQuestion). When the user asks to be consulted on everything
+("interactive", "ask me about the boundaries"), ask the taste decisions as they arise
+instead — Phase 2 step 4 then confirms the boundaries as it always did.
+
 ## Pipeline
 
 ### Phase 1: Context Gathering
@@ -134,7 +158,13 @@ options is a protocol violation, not a style choice.
      features into one mega-sprint.
    - **Boundary test**: a reviewer could accept one sprint while rejecting its
      neighbor. If rejecting sprint B necessarily reopens sprint A, the seam is wrong.
-4. **Confirm boundaries via AskUserQuestion** — present the proposed split as a numbered list
+4. **Settle the boundaries.** Gated mode (the default): the split is a set of taste
+   decisions — make them by the policy's principles (disjoint file regions first, fewest
+   `depends_on` edges, the boundary test above), note each non-obvious seam with the
+   alternative you rejected, and carry the numbered split to the approval gate at the end
+   of Phase 4; do not stop here. Stop and ask now only for what is reserved (see
+   Autonomy). Interactive mode: **confirm via AskUserQuestion** — present the proposed
+   split as a numbered list
    with goals + the dependency chain, calling out which sprints are meant to run in parallel;
    then decide per the Question protocol: "accept as proposed" (recommended) plus the
    concrete adjustments as options — 5+ contested boundaries go through the per-item split
@@ -285,6 +315,14 @@ as a decision-ready item and listed under `UNRESOLVED DECISIONS:` in the Plan re
 surviving blocker is never waved through. Fail-soft, honestly: if subagents cannot run,
 record "plan panel: could not run ([why])" — never as a pass.
 
+**Approval gate (gated mode — before the commit).** Present the breakdown once: the
+numbered sprint list with goals, the dependency chain and what runs in parallel; then
+"decided for you" — the scope-decisions table's taste rows, numbered, accept all or
+overturn by number; then "yours to decide" — each reserved question still open, via
+AskUserQuestion. Apply what the user overturns (re-run `plan-check.mjs`, and the failing
+panel lenses if a boundary moved), update the table, then commit. Nothing to decide →
+say so in one line and commit.
+
 When the source is a proposal, include its status write-back in the same commit: flip
 `**Status**: draft` → `active (stage k/N)` on first consumption (`1/1` for un-staged
 proposals), and set the consumed stage's status line to `planned (S-{first}..S-{last})`
@@ -297,8 +335,12 @@ file if absent) in the same commit:
 - Heading: `### YYYY-MM-DD — stage k breakdown (S-{first}..S-{last})` (or `— recut …`,
   see Recut flow).
 - The coverage map table from the exit gate (requirement/task → sprint ID).
-- A scope-decisions table: `# | item | ACCEPTED / DEFERRED / CUT | one-line reasoning` —
-  every Phase 2 scope-gate outcome, DEFERRED rows carrying their `docs/TODOS.md` backlink.
+- A scope-decisions table: `# | item | ACCEPTED / DEFERRED / CUT | class | decided by |
+  one-line reasoning (principle; for taste rows also the rejected option)` — every Phase 2
+  scope-gate outcome and every boundary decision, DEFERRED rows carrying their
+  `docs/TODOS.md` backlink. `class` is `mechanical`, `taste` or `reserved`; `decided by`
+  is `agent` or `user`. A taste row the user overturned at the gate is rewritten as
+  `reserved | user`.
 - Review inputs consumed (the report section's name, or "none").
 - Plan panel: one line per lens — `lens score/10 — kept n, refuted m, fixed k` — or
   `skipped — [why]` / `could not run — [why]`.

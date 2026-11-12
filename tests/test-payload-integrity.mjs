@@ -82,11 +82,44 @@ for (const [rel, needles] of Object.entries(SHADOWED)) {
   }
 }
 
+// 3b. routing.json and the agent definitions state the same model/effort — the table is
+// what the orchestrator passes, the frontmatter is what a by-name dispatch gets; if they
+// drift, "which model ran this sprint?" has two answers.
+{
+  const routing = JSON.parse(readFileSync(join(REPO, "full-overlay/scripts/sprint/routing.json"), "utf8"));
+  const ROLE_AGENT = { planner: "sprint-planner", "wave-planner": "wave-planner", "brief-auditor": "brief-auditor", reviewer: "reviewer", "finding-verifier": "finding-verifier", arbiter: "arbiter", "doc-sync": "doc-sync" };
+  const front = (name) => {
+    const p = TIERS.map((t) => join(REPO, t, ".claude/agents", `${name}.md`)).find(existsSync);
+    check(!!p, `routing.json names role agent ${name}, which has no definition`);
+    if (!p) return {};
+    const head = readFileSync(p, "utf8").split("\n---")[0];
+    return { model: (head.match(/^model:\s*(\S+)/m) ?? [])[1], effort: (head.match(/^effort:\s*(\S+)/m) ?? [])[1], maxTurns: (head.match(/^maxTurns:\s*(\S+)/m) ?? [])[1] };
+  };
+  for (const [role, agent] of Object.entries(ROLE_AGENT)) {
+    const want = routing.roles[role];
+    check(!!want, `routing.json has no role "${role}"`);
+    if (!want) continue;
+    const got = front(agent);
+    check(got.model === want.model && got.effort === want.effort, `.claude/agents/${agent}.md pins ${got.model}/${got.effort} but routing.json says ${want.model}/${want.effort} for "${role}"`);
+  }
+  const ex = front("sprint-executor");
+  check(ex.model === routing.roles.executor.standard.model && ex.effort === routing.roles.executor.standard.effort, "sprint-executor.md must pin routing.json's executor.standard (complex is passed at dispatch)");
+  for (const step of routing.escalation) check(step.split(".").reduce((o, k) => o?.[k], routing.roles)?.model, `routing.json escalation step "${step}" does not resolve to a role`);
+  // every agent definition states model, effort and a turn cap — an unset model silently
+  // inherits the session's (most expensive) one.
+  for (const f of files.filter((f) => /\.claude\/agents\/[\w-]+\.md$/.test(f))) {
+    const name = f.match(/([\w-]+)\.md$/)[1];
+    const got = front(name);
+    check(got.model && got.effort && got.maxTurns, `${relative(REPO, f)}: must set model, effort and maxTurns (has ${JSON.stringify(got)})`);
+    check(!/^(claude-|.*-\d{8})/.test(got.model ?? ""), `${relative(REPO, f)}: use a tier alias (sonnet/opus/fable/haiku), not a dated model id`);
+  }
+}
+
 // 4. exec bits (git mode, since that is what reaches a clone)
 const modes = execFileSync("git", ["-C", REPO, "ls-files", "-s", "--", ...TIERS], { encoding: "utf8" }).trim().split("\n");
 for (const l of modes) {
   const [mode, , , path] = l.split(/\s+/);
-  if (path.endsWith(".sh")) check(mode === "100755", `${path}: shell script committed with mode ${mode}, expected 100755`);
+  if (path.endsWith(".sh") || /scripts\/hooks\/[^/]+\.mjs$/.test(path)) check(mode === "100755", `${path}: committed with mode ${mode}, expected 100755`);
 }
 
 if (failed) { console.error(`test-payload-integrity: ${failed} check(s) failed`); process.exit(1); }

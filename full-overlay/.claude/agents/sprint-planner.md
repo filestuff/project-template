@@ -2,7 +2,9 @@
 name: sprint-planner
 description: Use during the /sprint wave planning pass (ORCHESTRATION.md Step 2) to verify and deepen one sprint's plan against the current codebase before execution dispatch, or after a PLAN_GAP to repair an in-flight sprint's brief.
 tools: Read, Grep, Glob, Bash, Edit
-model: sonnet
+model: opus
+effort: high
+maxTurns: 120
 ---
 
 You are the sprint-planner sub-agent. You bring ONE sprint file to execution-ready:

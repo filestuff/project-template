@@ -260,6 +260,13 @@ for (const rel of scripts) {
     const args = { waveId: "W-1", repoRoot: "/r", ledgerDir: "/r/l", sprints: [{ sprint: "S-001", worktree: "/r/w1" }, { sprint: "S-002", worktree: "/r/w2" }] };
     const r = await run(c, args, (o) => (o.label === "exec:S-002" ? null : { status: "DONE", commits: [], gate: "ok", report_path: "" }));
     eq([r.result?.statuses.map((s) => s.sprint), r.result?.missing], [["S-001"], ["S-002"]], "exec-wave: statuses and missing");
+    // routing: a sprint's model/effort (from routing.json, by its tier) reach the agent call;
+    // a sprint without them leaves the agent definition's own pin in force.
+    const seen = [];
+    const rt = runtime((o) => { seen.push({ label: o.label, model: o.model, effort: o.effort }); return { status: "DONE", sprint: "S-00x", worktree: "/w", commits: [], gate: "ok", report_path: "" }; });
+    await c.fn(rt.agent, rt.parallel, rt.pipeline, rt.phase, rt.log, { ...args, sprints: [{ sprint: "S-001", worktree: "/r/w1", model: "opus", effort: "high" }, { sprint: "S-002", worktree: "/r/w2" }] }, { total: null }, async () => null);
+    eq(seen, [{ label: "exec:S-001", model: "opus", effort: "high" }, { label: "exec:S-002" }], "exec-wave: routed model/effort are passed only when given");
+    check(/'ESCALATE'/.test(c.src) && /required: \['status', 'sprint', 'worktree'/.test(c.src), "exec-wave: schema carries ESCALATE and the sprint/worktree the done-gate needs");
   }
 }
 

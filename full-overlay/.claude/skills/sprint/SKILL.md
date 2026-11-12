@@ -242,14 +242,19 @@ if stale. Commit on main under the lock: `docs: regenerate sprint roadmap`.
 Fan the current parallel-safe wave out to subagents. **Defer to
 `docs/sprints/ORCHESTRATION.md`** — it is the source of truth for this command (as `PROTOCOL.md`
 is for the rest). In short: you are the **master/orchestrator** (this session, strongest model);
-every wave subagent has a pinned `model: sonnet` agent definition — dispatch by agent name only.
+every wave subagent has an agent definition that pins its model and effort — dispatch by agent
+name; the executor alone is routed per sprint by its `tier:` (`scripts/sprint/routing.json`).
+Decisions follow `docs/DECISION_POLICY.md` — a wave runs **gated** by default.
 Compute the wave (`claims.mjs waves` — skip members reserved by another session's wave), confirm
-the startable backlog members with the user, **reserve the roster**
+the startable backlog members with the user — settling the autonomy mode and the push policy
+in the same confirmation — **reserve the roster**
 (`reserve-wave.sh S-A S-B…` — a locked commit that makes concurrent sessions safe and mints the
 wave id — its commit carries `[skip ci]`, this is checkpoint P1), **plan the wave** in a
 per-wave planning worktree (fan out one `sprint-planner` subagent per unplanned / stale member
-to verify + deepen its file against current code — the primary checkout stays clean; batch all
-open decisions into one AskUserQuestion round, write the answers into the sprint files as
+to verify + deepen its file against current code, then a `brief-auditor` cold-reads each —
+the primary checkout stays clean; classify the open decisions: the `arbiter` decides the
+mechanical and taste ones, reserved ones go to the user in one batched AskUserQuestion round
+with the taste decisions listed for acceptance; write every answer into the sprint files as
 Pre-Sprint Decisions — two short locked commits, both `[skip ci]`, neither pushed), then run
 **`start.sh --wave W-<id> --no-push` + worktree creation per sprint yourself** (serialized, on
 `main`, under the lock — you stay parked on `main` and never EnterWorktree; after the last
@@ -257,18 +262,24 @@ start, checkpoint P2 — `bash scripts/sprint/push-main.sh`, a ledger-only push,
 **dispatch one `sprint-executor` subagent per sprint** (single message = parallel) to run
 **Phase 2 only** in its worktree via `git -C` — each runs a `reviewer` child over its branch
 and writes the Completion Log into its sprint file before returning (DONE / BLOCKED /
-NEEDS_CLAIM / **PLAN_GAP** + a pointer report; the master checks the record with
+NEEDS_CLAIM / **PLAN_GAP** / **ESCALATE** + a pointer report; the master checks the record with
 `close-check.mjs --json`, never by reading the file). **Advise
-blocked executors yourself** (answer from plan/repo context and continue the same agent via
-SendMessage; escalate to the user only for genuine tradeoffs), then **complete finished
+blocked executors** (answer from the record, else ask the `arbiter`, and continue the same
+agent via SendMessage; only decisions the policy reserves go to the user), **re-dispatch an
+ESCALATE on the next routing tier** with its handover, then **complete finished
 sprints one at a time** with `merge-sprint.sh finish <branch> --no-push` (Phase 3 is
-lock-serialized and cannot be fanned out; pre-draft the semantic docs before taking the lock).
+lock-serialized and cannot be fanned out; pre-draft the semantic docs before taking the lock;
+`land` exit 6 means the branch changed files outside its claims — abort, `claims.mjs add`,
+prepare and land again).
 Keep the durable ledger in `.claude/sprint-orchestration/W-<id>/`. Optional `N` caps the wave
 size. After the wave lands, dispatch a `reviewer` subagent over the merged result (adjudicate
 its findings — don't read the diffs yourself; ORCHESTRATION Step 6 adds a conditional
 second "outside voice" reviewer for high-risk waves), release any leftover reservations,
-then run **checkpoint P3 (mandatory)** — ask the deploy-gate question (Push now (deploy) /
-Hold — ORCHESTRATION "Push policy"), and on confirmation `bash scripts/sprint/push-main.sh`,
+show the user the taste decisions made on their behalf
+(`node scripts/sprint/decisions.mjs --class taste --since <wave start>`),
+then run **checkpoint P3 (mandatory)** — per the push policy chosen at the start: ask the
+deploy-gate question (Push now (deploy) / Hold — ORCHESTRATION "Push policy"), auto-push, or
+hold — and when pushing, `bash scripts/sprint/push-main.sh`,
 the wave's single CI-triggering push — and verify CI green against it (PROTOCOL Phase 3
 Step 6, run once for the whole wave; see ORCHESTRATION Step 6 for red-run recovery).
 Recompute the next wave. Multiple
@@ -281,7 +292,8 @@ Drive a **serial chain** of sprints — members that cannot parallelize (each de
 previous, or their `touches:` overlap) — through one long-lived worktree with batched
 landings. **Defer to `docs/sprints/ORCHESTRATION.md` "The serial train"** — it is the source
 of truth for this command. In short: you are the master (this session, strongest model);
-subagents dispatch by agent name only (pinned `model: sonnet`). Validate the user's ordered
+subagents dispatch by agent name (models per `scripts/sprint/routing.json`; a `tier: complex`
+member's executor gets the routed model). Validate the user's ordered
 chain (deps in `done/` or earlier in the chain; warn on pairs that would parallelize —
 suggest `/sprint wave`), ask the **checkpoint push policy** at T1 (ask at each checkpoint /
 auto-push / hold until train end — ORCHESTRATION "Train protocol" T1), **reserve the whole
@@ -292,8 +304,10 @@ round for the entire chain — after it the train runs unattended), create **one
 worktree/branch (`train-W-<id>`), then loop strictly serially: `start.sh S-i --wave W-<id>
 --no-push` + a ledger-sync merge into the branch, a mechanical delta-refresh screen, one
 fresh `sprint-executor` per sprint (pass the predecessor's boundary SHA as the reviewer
-diff base), advise BLOCKED executors yourself (SendMessage continuation; decision-ladder
-auto-answers recorded as `(train, auto)`). Every K sprints (default 3, `--every K` to
+diff base), advise BLOCKED executors through the `arbiter` (SendMessage continuation; its
+mechanical and taste decisions recorded as `(train, <class>, arbiter)` — the train runs in
+the policy's unattended mode, and a reserved decision is a hard stop), re-dispatch an
+ESCALATE on the next routing tier. Every K sprints (default 3, `--every K` to
 change) and at the end: a **checkpoint** — `merge-sprint.sh prepare` → `land --sprints
 S-A,S-B,…` → apply pre-drafted docs → `finish --sprints … --no-push` → push **per the T1
 push policy** (`push-main.sh` is the segment's single CI push; "ask-each" pauses for the

@@ -2,7 +2,9 @@
 name: reviewer
 description: Use when implementation is complete and PR-ready to review the current diff for correctness, security, and quality (DRY, simplicity, abstraction, YAGNI/KISS/SOLID).
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: opus
+effort: high
+maxTurns: 100
 ---
 
 You are the reviewer sub-agent.

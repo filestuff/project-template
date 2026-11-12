@@ -10,8 +10,9 @@ for **driving serial sprint chains autonomously** (`/sprint train`: one worktree
 whole chain, front-loaded decisions, landings batched into one CI push per few sprints).
 
 **Requirements:** [Claude Code](https://claude.com/claude-code) (the skills and agents are
-Claude Code skills), git, bash. Node ≥ 18 for the full tier and for `/template-upgrade`
-(the `.mjs` helper scripts).
+Claude Code skills), git, bash, and Node ≥ 18 (the lints, the guard hooks and
+`/template-upgrade` are zero-dependency `.mjs` scripts; the full tier's orchestration
+scripts need it too).
 
 ## Install
 
@@ -19,7 +20,7 @@ Run `/bootstrap-project` in a Claude Code session inside (or pointed at) the tar
 asks the questions, copies the right tier, fills placeholders, merges CLAUDE.md/settings.json
 safely, and validates the result. Manual install: copy `lite/` into the repo root, then (for
 full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
-`template.config.json`), and `chmod +x scripts/sprint/*.sh`.
+`template.config.json`), and `chmod +x scripts/sprint/*.sh scripts/hooks/*.mjs`.
 
 ## Workflow at a glance
 
@@ -63,6 +64,19 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
 The sprint file is the executor's **entire brief** — every gate above exists to make that
 single file sufficient for an agent (or developer) with zero conversation context.
 
+**Who decides what.** `docs/DECISION_POLICY.md` sorts every decision into one of three
+classes. *Mechanical* ones — settled by the brief, an ADR, the decision ladder or the
+code's own convention — are made and recorded without asking. *Taste* ones — reversible,
+contained — are made in the open, recorded with the option not taken, and listed at one
+approval gate per phase where you can overturn any of them. *Reserved* ones — direction,
+security posture, irreversible changes, spend, public contracts, weakening a check,
+deploys — are always yours, in every mode. `/plan` and `/sprint wave` run gated by
+default; `/sprint train` runs unattended after its opening confirmation; `/proposal` asks
+unless you tell it not to. An agent that meets a decision it may not make returns it to
+the `arbiter` (a stronger model); one that meets work beyond it returns `ESCALATE` and a
+stronger executor continues from its branch. `node scripts/sprint/decisions.mjs --class
+taste` lists what was decided on your behalf.
+
 ## Tiers
 
 | | lite | full |
@@ -78,6 +92,10 @@ single file sufficient for an agent (or developer) with zero conversation contex
 | Independent review panels for proposals and plans (`design-reviewer` per lens, verified findings, pass mark) | ✅ | ✅ |
 | Planning lints (`proposal-check.mjs`, `plan-check.mjs`) + cold-read brief certification (`brief-auditor`) | ✅ | ✅ (also inside the wave planning pass) |
 | Learnings read back into review (`learnings.mjs`, recurring-rule promotion) | ✅ | ✅ |
+| Decision policy (`docs/DECISION_POLICY.md`: mechanical / taste / reserved, one approval gate, `arbiter` agent, `decisions.mjs` audit view) | ✅ | ✅ (waves run gated, trains unattended) |
+| Guard hooks (`scripts/hooks/guard.mjs`) | main-branch force-push / delete protection | + claim-guard, lifecycle-guard, done-gate, subagent event log |
+| Claims enforced (edit-time hook + `land` exit 6 on paths outside `touches:`) | — | ✅ |
+| Model routing + escalation (`routing.json`, sprint `tier:`, executor `ESCALATE` → stronger executor → arbiter → user) | agent definitions pin model/effort | ✅ |
 | Completion record (structured Completion Log, inline `Evidence:` lines, `close-check.mjs` lint, `docs/sprints/evidence/`) | ✅ (lint before the `done/` move) | ✅ (lint gates `merge-sprint.sh land`; commits stamped at land) |
 | Concurrent sprints | one at a time | many, in parallel agents |
 | Wave orchestration (`/sprint wave` + `sprint-planner`/`sprint-executor`/`wave-planner` agents) | — | ✅ |

@@ -11,6 +11,7 @@ Entry points (discover the rest by listing `docs/`):
 - `docs/decisions/` — ADRs · `docs/proposals/` — RFCs
 - `docs/DOC_HEALTH.md` — doc staleness tracker (read first during pre-sprint)
 - `docs/TODOS.md` — deferred-work ledger
+- `docs/DECISION_POLICY.md` — who decides what: mechanical decisions are made and recorded, reversible "taste" decisions are made in the open and shown at one approval gate, reserved decisions (direction, security posture, irreversible changes, spend, weakening a check) are always the user's
 - `docs/ENGINEERING_PRINCIPLES.md` — design defaults: the decision ladder (reuse before build), YAGNI/KISS/DRY/SOLID, root-cause-over-symptom, hard safety carve-outs (planning, execution, review)
 - `docs/sprints/testing-anti-patterns.md` — test-first traps to avoid
 

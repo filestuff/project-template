@@ -347,6 +347,27 @@ need auto mode set in **user** settings (F14).
 - `merge-settings` tests above. `decisions.mjs` test over fixture artifacts.
 - A fixture run with a live subagent confirms claim-guard denies and done-gate refuses.
 
+### 4.7 As built (v1.12.0) — deviations from the text above
+
+- **One guard script, shipped in lite.** `scripts/hooks/guard.mjs` dispatches on the tool
+  name and holds all four guards; the full-tier ones are inert without
+  `scripts/sprint/claims.mjs`. Separate per-guard files would have needed a second
+  `settings.json` for the full tier, and lite has only one.
+- **No `permissions.deny` rule for force-push.** A permission pattern cannot tell `main`
+  from a feature branch, and force-pushing a feature branch is legitimate. The hook
+  parses the command and the checkout's branch instead.
+- **`merge-settings` owns template hook groups** (every handler runs something under
+  `scripts/hooks/`) and replaces them wholesale, so a changed or dropped template hook
+  never leaves a stale twin; other groups are the repo's and are kept.
+- **done-gate keys on `sprint` and `worktree` in the executor's structured output**, which
+  `exec-wave.mjs`'s schema now requires. On the Agent-tool path there is no structured
+  output to gate; the master's `close-check --json` + SendMessage loop remains.
+- **The lifecycle guard matches the script being run**, not any mention of it — reading
+  `start.sh` is not running it.
+- **Verified live** in a rendered full-tier fixture: a real subagent's claimed edit went
+  through, its out-of-claim edit and its `lock.sh acquire` were refused with the shipped
+  messages, and the event log recorded its start and stop.
+
 ## 5. Phase 3 — flow orchestration (v1.13.0, full tier)
 
 ### 5.1 One workflow per sprint

@@ -1,8 +1,10 @@
 ---
 name: sprint-executor
-description: Use during /sprint wave Step 4 or a /sprint train sprint loop to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree, including a pre-completion review by a reviewer child. Dispatched by the wave/train orchestrator; not for solo /sprint start flows.
+description: Use during /sprint wave Step 4 or a /sprint train sprint loop to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree, including a pre-completion review by a reviewer child. Dispatched by the wave/train orchestrator (which passes a stronger model for sprints marked tier complex, or after an ESCALATE); not for solo /sprint start flows.
 tools: Read, Grep, Glob, Bash, Edit, Write, Agent
 model: sonnet
+effort: high
+maxTurns: 400
 ---
 
 You are the sprint-executor sub-agent for one sprint. Your dispatch prompt names: the
@@ -120,9 +122,36 @@ never edit, outside it"; and "do not commit — the parent commits". Children ar
 leaves — never delegate Agent-spawning duties to them. Needing more children than
 this is a PLAN_GAP smell: the brief is too thin, not the fleet too small.
 
+## Decisions and escalation
+
+`docs/DECISION_POLICY.md` governs what you may decide. In short:
+
+- **Mechanical** — the brief, an ADR, the decision ladder or the code's own convention
+  settles it: decide, and record it in Pre-Sprint Decisions as
+  `- YYYY-MM-DD (wave, mechanical, agent): <decision> — principle: <which>`.
+- **Anything else is not yours.** A taste call that changes the work, and every Reserved
+  decision (security posture, irreversible data change, a public contract, new spend,
+  weakening a test or the gate, overturning a recorded decision), goes back as **BLOCKED**
+  — commit your work in progress first (`S-NNN: wip — blocked on <question>`), so whoever
+  continues starts from your branch, not from your memory. If you have the Agent tool you
+  may instead consult the `arbiter` subagent directly (prompt: the question, your options
+  and default, the sprint file path, the repo root, mode `wave`) and act on its DECISION —
+  record its RECORD line verbatim; if it returns `CLASS: reserved`, return BLOCKED with
+  its ASK_USER block as your question.
+- **ESCALATE when the work is beyond you**, not when it is merely hard. Return it — do not
+  thrash — when: you have made two root-cause attempts at the same failure and it still
+  fails (`repeated-failure`); the design the brief calls for needs judgment you cannot
+  ground in the code (`beyond-capability`); or you are unsure whether a change is safe at
+  a hard carve-out — a trust boundary, a data-loss path, auth (`carve-out-uncertainty`).
+  Commit your work in progress (`S-NNN: wip — escalating: <reason>`), then return ESCALATE
+  with what you tried, what you learned, and where the branch stands. A stronger executor
+  continues from your branch. Escalating early is cheap; a wrong guess committed at a
+  carve-out is not.
+
 ## Return (≤15 lines)
 
-Status (**DONE** / **BLOCKED** / **NEEDS_CLAIM** / **PLAN_GAP**), the deliverable
+Status (**DONE** / **BLOCKED** / **NEEDS_CLAIM** / **PLAN_GAP** / **ESCALATE**), your
+sprint id and worktree path, the deliverable
 commits (`git -C "<worktree>" log --oneline`), a one-line gate/test result, the
 `close-check.mjs` SUMMARY line, the report path, and any concerns — do not paste the
 report or the Completion Log.
@@ -135,6 +164,16 @@ QUESTION: <one line>
 CONTEXT: <file:line, what was tried>
 OPTIONS: (a) … (b) … — with plan/touches implications
 DEFAULT: <what you would do if forced to choose>
+```
+
+For **ESCALATE**, use this structure:
+
+```
+ESCALATE
+REASON: repeated-failure | beyond-capability | carve-out-uncertainty
+TRIED: <what you attempted, and what each attempt showed — file:line>
+STATE: <last commit on the branch; what is done, what is half-done>
+NEXT: <what you would try with more capability, or the question to settle>
 ```
 
 You may be **continued in place** with an ANSWER (the orchestrator advises blocked

@@ -38,6 +38,30 @@ candidates): split into sequential per-item calls (include / defer / cut), then 
 call confirming the set. Mutually exclusive choices (a direction): two rounds — first
 narrow to the top 3 plus an explicit "none of these — show the rest", then decide.
 
+## Autonomy (`docs/DECISION_POLICY.md`)
+
+A proposal's **direction** and **scope appetite** are always the user's — reserved in
+every mode; Steps 1.5 and 3 ask them no matter what. Everything else defaults to the
+policy's **interactive** mode here: taste decisions (a contested but reversible scope
+call, how to stage, which lens findings to take) are asked, one at a time, as this
+skill's steps describe.
+
+When the user asks for less interruption ("run it gated", "don't ask me the small stuff",
+"decide the details yourself"), switch to **gated**: classify each decision first;
+*mechanical* ones (the Rigor tier, anything an ADR or the decision ladder settles) are
+decided and recorded; *taste* ones are decided by the policy's ordered principles and
+recorded with the rejected option and how to undo it; Step 5's "does this capture it?"
+confirmation is skipped; and the user gets ONE approval gate after the review panel
+(Step 6) — "decided for you" (the taste decisions, numbered, accept all or overturn by
+number) and "yours to decide" (direction, if not yet asked, and every reserved question).
+Reserved decisions are never auto-decided: an ADR being superseded, a surviving blocker
+accepted, anything touching security posture, irreversible data change, a public contract
+or spend.
+
+In either mode every non-reserved decision made while drafting is written into the
+proposal's `## Decision log` in the policy's record grammar — a decision that lives only
+in this conversation is lost to `/plan`.
+
 ## Entry gates — pick exactly one
 
 1. **Idea only** (no document exists): run the method below.
@@ -229,7 +253,8 @@ user's input.
 
 ### Step 5 — Draft review with the user
 
-Present the draft, then confirm via AskUserQuestion — "Does this capture what you want?
+(Interactive mode. In gated mode skip this step — the approval gate after Step 6 replaces
+it.) Present the draft, then confirm via AskUserQuestion — "Does this capture what you want?
 **What did I get wrong?**" — options: **"Looks right — proceed to reviewer"** (recommended)
 / **"Needs changes"** (the tool's built-in Other carries free-text critique). Iterate until
 confirmed.
@@ -274,6 +299,12 @@ scored ≥ 7. Otherwise:
    waved through: the user either changes the proposal or accepts it by name, via
    AskUserQuestion (stakes: the blocker's claim; options: revise / accept the risk
    and proceed / stop). An accepted blocker is recorded verbatim with the date.
+
+**The approval gate (gated mode).** After the panel's rounds, present the one brief the
+policy describes — the taste decisions from the `## Decision log`, numbered, then each
+reserved question via AskUserQuestion (a material change the reviewers motivated, a
+surviving blocker, the direction if it was not asked yet). Apply what the user overturns
+before recording the review.
 
 **Record it.** Append `## Review record` to the proposal: per round, a dated entry with one
 row per lens (score; findings kept / refuted / fixed) and the last line exactly

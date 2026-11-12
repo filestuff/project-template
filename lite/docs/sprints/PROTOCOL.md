@@ -71,13 +71,22 @@ do not re-ask them. Then read Scope and Technical Details, cross-reference the c
 surface only the **non-obvious** decisions still open via AskUserQuestion (2–4 max, grouped in
 one call) — starting with any Open Questions items explicitly deferred to start.
 
+**Classify before asking** (`docs/DECISION_POLICY.md`). A question the brief, an ADR, the
+decision ladder or the code's convention already settles is *mechanical*: decide it and
+record it — do not ask. What is left is *taste* (reversible, contained) or *reserved*
+(security posture, irreversible data change, public contract, spend, weakening a test or
+the gate, overturning a recorded decision). A solo start runs in the policy's interactive
+mode, so both are asked here; reserved decisions are asked in every mode.
+
 **Qualifies:** architectural tradeoffs with real alternatives; rate limits / quotas / resource
 constraints; module boundary decisions; data-model choices hard to reverse.
 **Does not:** anything answerable by reading the sprint file; single-reasonable-approach
 details; "should I proceed" (the user already said start).
 
 **Record every answer** as a dated entry in the sprint file's Pre-Sprint Decisions section
-(`- YYYY-MM-DD (start): [decision] — [rationale]`) and check off the resolved Open Questions
+(`- YYYY-MM-DD (interactive, <mechanical|taste|reserved>, <agent|user>): [decision] —
+principle: [which] — rejected: [option] — undo: [how]`; `node scripts/sprint/decisions.mjs`
+lists them across sprints) and check off the resolved Open Questions
 item. An answer that lives only in this conversation is lost to any later session that picks
 the sprint up.
 

@@ -191,4 +191,59 @@ grep -q 'landed incomplete — train close$' "$D5" || { echo "override reason mi
 grep -q 'landed incomplete' "$D4" && { echo "override reason written to a COMPLETE member"; exit 1; }
 bash "$MS" finish train-W-1 --sprints S-004,S-005 --no-push >/dev/null
 
+# --- 6. claims bind at land: a path outside the roster's touches blocks (exit 6) ------
+# `touches:` was advisory end to end — nothing ever compared what a branch changed with
+# what its sprint claimed, so two "disjoint" sprints could both edit an unclaimed file.
+sprint_file S-006 zeta complete >docs/sprints/in-progress/S-006-zeta.md
+git add -A && git commit -qm "start S-006"
+git worktree add -q "$R/.claude/worktrees/S-006-zeta" -b S-006-zeta main
+Z="$R/.claude/worktrees/S-006-zeta"
+mkdir -p "$Z/src" "$Z/docs/sprints/evidence/S-006"
+echo z >"$Z/src/zeta.txt"; echo stray >"$Z/src/stray.txt"; echo shot >"$Z/docs/sprints/evidence/S-006/out.txt"
+git -C "$Z" add -A && git -C "$Z" commit -qm "S-006: zeta plus a stray file"
+prep S-006-zeta
+HEAD6=$(git rev-parse HEAD)
+set +e; out=$(bash "$MS" land S-006-zeta 2>&1); code=$?; set -e
+[[ $code -eq 6 ]] || { echo "expected land exit 6 for a path outside claims, got $code:"; echo "$out"; exit 1; }
+echo "$out" | grep -qx '  src/stray.txt' || { echo "exit 6 did not list the unclaimed path:"; echo "$out"; exit 1; }
+echo "$out" | grep -q 'src/zeta.txt\|evidence/S-006\|S-006-zeta.md' && { echo "exit 6 listed a claimed path, the evidence dir, or the sprint's own file:"; echo "$out"; exit 1; }
+[[ $(git rev-parse HEAD) == "$HEAD6" ]] || { echo "main moved on a failed claims check"; exit 1; }
+[[ -f docs/sprints/in-progress/S-006-zeta.md ]] || { echo "sprint file moved on a failed claims check"; exit 1; }
+bash "$R/scripts/sprint/lock.sh" continue land-S-006-zeta >/dev/null || { echo "lock not kept after exit 6"; exit 1; }
+# the audited escape lands it and records why, in the file
+set +e; out=$(bash "$MS" land S-006-zeta --allow-outside-claims "generated fixture, no other sprint touches it" 2>&1); code=$?; set -e
+[[ $code -eq 4 ]] || { echo "expected land exit 4 with --allow-outside-claims, got $code:"; echo "$out"; exit 1; }
+grep -q '^- [0-9-]\{10\} landed outside claims — generated fixture, no other sprint touches it: src/stray.txt' docs/sprints/done/S-006-zeta.md ||
+  { echo "outside-claims reason not recorded in Deviations:"; sed -n '/### Deviations/,/### Deferred/p' docs/sprints/done/S-006-zeta.md; exit 1; }
+bash "$MS" finish S-006-zeta --no-push >/dev/null
+
+# --- 7. prefix + token claims cover what they should; an unclaimed sprint only warns ---
+node -e '
+const fs=require("fs"),f=process.argv[1];const j=JSON.parse(fs.readFileSync(f,"utf8"));
+j.tokens={deps:["package.json","lock.yaml"]};fs.writeFileSync(f,JSON.stringify(j));' scripts/sprint/claims-tokens.json
+sprint_file S-007 eta complete | sed 's#^  - src/eta.txt#  - src/eta/**\n  - deps\n  - scripts/sprint/gate.sh#' >docs/sprints/in-progress/S-007-eta.md
+sprint_file S-008 theta complete | sed '/^touches:/,/^---/{/^  - /d;s/^touches:.*/touches: []/;}' >docs/sprints/in-progress/S-008-theta.md
+grep -q '^touches: \[\]' docs/sprints/in-progress/S-008-theta.md || { echo "fixture: S-008 should have empty touches"; exit 1; }
+git add -A && git commit -qm "start S-007 + S-008 + tokens"
+E="$R/.claude/worktrees/S-007-eta"
+git worktree add -q "$E" -b S-007-eta main
+mkdir -p "$E/src/eta/deep" "$E/scripts/sprint"
+echo e >"$E/src/eta/deep/x.txt"; echo '{}' >"$E/package.json"; echo "# gate" >"$E/scripts/sprint/gate.sh"
+git -C "$E" add -A && git -C "$E" commit -qm "S-007: eta under a prefix claim, a token claim, and the gate"
+prep S-007-eta
+set +e; out=$(bash "$MS" land S-007-eta 2>&1); code=$?; set -e
+[[ $code -eq 4 ]] || { echo "prefix/token-claimed paths should land (exit 4), got $code:"; echo "$out"; exit 1; }
+echo "$out" | grep -q 'GATE-SENSITIVE' && echo "$out" | grep -qx '  scripts/sprint/gate.sh' || { echo "a change to the commit gate was not flagged GATE-SENSITIVE:"; echo "$out"; exit 1; }
+bash "$MS" finish S-007-eta --no-push >/dev/null
+T8="$R/.claude/worktrees/S-008-theta"
+git worktree add -q "$T8" -b S-008-theta main
+mkdir -p "$T8/src"; echo t >"$T8/src/anything.txt"
+git -C "$T8" add -A && git -C "$T8" commit -qm "S-008: unclaimed sprint"
+prep S-008-theta
+set +e; out=$(bash "$MS" land S-008-theta 2>&1); code=$?; set -e
+[[ $code -eq 4 ]] || { echo "a sprint with no touches cannot be verified and must still land (exit 4), got $code:"; echo "$out"; exit 1; }
+echo "$out" | grep -q 'WARNING: claims not checked — NO-CLAIMS: S-008' || { echo "no warning for an unverifiable (unclaimed) sprint:"; echo "$out"; exit 1; }
+echo "$out" | grep -q 'GATE-SENSITIVE' && { echo "GATE-SENSITIVE fired with nothing sensitive changed:"; echo "$out"; exit 1; }
+bash "$MS" finish S-008-theta --no-push >/dev/null
+
 echo "merge-sprint land: all checks passed"

@@ -18,8 +18,9 @@
 //     waveId: "W-…",
 //     repoRoot: "/abs/repo/root",
 //     ledgerDir: "/abs/repo/root/.claude/sprint-orchestration/W-…/",
-//     sprints: [{ sprint: "S-NNN", worktree: "/abs/repo/root/.claude/worktrees/S-NNN-…" }]
-//   } })
+//     sprints: [{ sprint: "S-NNN", worktree: "/abs/repo/root/.claude/worktrees/S-NNN-…",
+//                model: "opus", effort: "high" }]   // model/effort optional: from
+//   } })                                            // scripts/sprint/routing.json by the sprint's `tier:`
 export const meta = {
   name: 'exec-wave',
   description: 'Fan out one sprint-executor per started sprint; return structured statuses',
@@ -29,9 +30,11 @@ export const meta = {
 const STATUS_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['status', 'commits', 'gate', 'report_path'],
+  required: ['status', 'sprint', 'worktree', 'commits', 'gate', 'report_path'],
   properties: {
-    status: { enum: ['DONE', 'BLOCKED', 'NEEDS_CLAIM', 'PLAN_GAP'] },
+    status: { enum: ['DONE', 'BLOCKED', 'NEEDS_CLAIM', 'PLAN_GAP', 'ESCALATE'] },
+    sprint: { type: 'string', description: 'your sprint id, S-NNN' },
+    worktree: { type: 'string', description: 'the absolute worktree path you worked in (the done-gate hook checks the record there)' },
     commits: { type: 'array', items: { type: 'string' }, description: 'git log --oneline lines for deliverable commits' },
     gate: { type: 'string', description: 'one-line gate/test result' },
     report_path: { type: 'string', description: 'the report file written in the wave ledger dir (or "" if not written)' },
@@ -51,6 +54,18 @@ const STATUS_SCHEMA = {
     },
     needs_claim_paths: { type: 'array', items: { type: 'string' }, description: 'NEEDS_CLAIM only: the unclaimed paths' },
     plan_gap: { type: 'string', description: 'PLAN_GAP only: gaps + evidence + proposed correction (≤10 lines)' },
+    escalation: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['reason', 'tried', 'state', 'next'],
+      description: 'ESCALATE only: the handover for a stronger executor',
+      properties: {
+        reason: { enum: ['repeated-failure', 'beyond-capability', 'carve-out-uncertainty'] },
+        tried: { type: 'string', description: 'what was attempted and what each attempt showed (file:line)' },
+        state: { type: 'string', description: 'last commit on the branch; what is done and what is half-done' },
+        next: { type: 'string', description: 'what to try with more capability, or the question to settle' },
+      },
+    },
   },
 }
 
@@ -68,7 +83,9 @@ const results = await parallel(
 - Wave ledger dir (your report goes here): ${ledgerDir}
 
 Execute the sprint per your instructions and return your status via the structured output.`,
-      { agentType: 'sprint-executor', schema: STATUS_SCHEMA, label: `exec:${s.sprint}`, phase: 'Execute' },
+      // Routing: the agent definition's own model/effort unless the master passed the
+      // sprint's tier from routing.json (a `tier: complex` sprint, or a re-dispatch after ESCALATE).
+      { agentType: 'sprint-executor', schema: STATUS_SCHEMA, label: `exec:${s.sprint}`, phase: 'Execute', ...(s.model ? { model: s.model } : {}), ...(s.effort ? { effort: s.effort } : {}) },
     // A dead executor resolves to null — spreading it would yield a truthy `{ sprint }`
     // with no status, and `missing` below would never see it.
     ).then((r) => (r ? { sprint: s.sprint, ...r } : null)),

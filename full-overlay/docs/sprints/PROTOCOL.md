@@ -74,9 +74,14 @@ touches:
 - **What to claim:** files the sprint will *modify*, plus its likely doc-sync targets.
   Always exempt: the sprint's own file, its own `docs/sprints/evidence/S-NNN/` directory,
   and the three generated docs.
-- Claims are **advisory but protocol-enforced**: nothing technically blocks an edit — the
-  Phase 2 claims-discipline rule is the enforcement, and `claims.mjs check` makes compliance
-  a one-command habit.
+- Claims are **enforced twice**. While a sprint runs, `scripts/hooks/guard.mjs` refuses an
+  Edit/Write inside the sprint's worktree to a path outside its `touches:` — early
+  feedback, with the way out in the message (a subagent returns NEEDS_CLAIM; the main
+  session runs `claims.mjs add`). A shell command can still write a file no hook sees, so
+  the binding check is at `merge-sprint.sh land`: a branch that changed any path outside
+  its claims does not land (exit 6, Phase 3 Step 5). `claims.mjs check` keeps compliance a
+  one-command habit; a sprint with empty `touches:` is unclaimed and neither check applies
+  to it — which is why it cannot join a wave.
 - **Claim holders** are the in-flight sprints (`in-progress/`) *plus* any backlog sprints
   reserved by a live wave (`wave:` set) — `claims.mjs check`/`add` treat both as conflicts,
   so a reservation protects files another wave has planned against but not yet started.
@@ -213,6 +218,13 @@ do not re-ask them. Then read Scope and Technical Details, cross-reference the c
 surface only the **non-obvious** decisions still open via AskUserQuestion (2–4 max, grouped
 in one call) — starting with any Open Questions items explicitly deferred to start:
 
+**Classify before asking** (`docs/DECISION_POLICY.md`). A question the brief, an ADR, the
+decision ladder or the code's convention already settles is *mechanical*: decide it and
+record it — do not ask. What is left is *taste* (reversible, contained) or *reserved*
+(security posture, irreversible data change, public contract, spend, weakening a test or
+the gate, overturning a recorded decision). A solo start runs in the policy's interactive
+mode, so both are asked here; reserved decisions are asked in every mode.
+
 **Qualifies:** architectural tradeoffs with real alternatives; rate limits / quotas /
 resource constraints; module boundary decisions; data-model choices hard to reverse.
 
@@ -220,7 +232,9 @@ resource constraints; module boundary decisions; data-model choices hard to reve
 details; "should I proceed" (the user already said start).
 
 **Record every answer** as a dated entry in the sprint file's Pre-Sprint Decisions section
-(`- YYYY-MM-DD (start): [decision] — [rationale]`) in the **worktree's copy** (invariant 3
+(`- YYYY-MM-DD (interactive, <mechanical|taste|reserved>, <agent|user>): [decision] —
+principle: [which] — rejected: [option] — undo: [how]`; `node scripts/sprint/decisions.mjs`
+lists them across sprints) in the **worktree's copy** (invariant 3
 permits the branch editing its own sprint file in place) and check off the resolved Open
 Questions item. The sprint file is the entire brief for whoever executes — an answer that
 lives only in this conversation never reaches them. (In wave flows this step is normally
@@ -426,7 +440,17 @@ the sprint branch.
    kept; fix the record on the branch (commit `S-NNN: completion log`) and re-run `land`
    without a new `prepare`. `--allow-incomplete "<reason>"` lands anyway and writes the
    reason under the file's `### Deviations from brief` — an auditable exception, not a
-   habit. Then it merges `--no-ff` into `main`, moves the sprint file
+   habit. **Then it checks claims**: every path the branch changed (other than the
+   sprint's own file, its `docs/sprints/evidence/S-NNN/` directory and the generated docs)
+   must be inside the sprint's `touches:`. Exit 6 lists the ones that are not — `main`
+   untouched, lock kept. Those files were never checked against other in-flight sprints:
+   `merge-sprint.sh abort <branch>`, then `claims.mjs add S-NNN <path…>` (exit 2 = another
+   sprint holds it — a real conflict to resolve, not to override), then `prepare` and
+   `land` again. `--allow-outside-claims "<reason>"` is the audited escape, also written
+   to Deviations; using it, like `--allow-incomplete`, is a *reserved* decision
+   (`docs/DECISION_POLICY.md`) — ask the user. A `GATE-SENSITIVE:` list in the output
+   (the commit gate, CI config or deleted tests changed) needs the user's confirmation
+   before `finish`. Then it merges `--no-ff` into `main`, moves the sprint file
    `in-progress/ → done/`, flips `status: done` + `end_date`, **stamps the sprint's `S-NNN:`
    deliverable commits + merge SHA under `### Commits`**, rotates the archive (keeps the 10
    most recent in `done/`; archived sprints stay in INDEX.md and dependency checks read

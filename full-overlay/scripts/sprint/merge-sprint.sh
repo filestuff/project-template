@@ -8,11 +8,17 @@
 #       exit 3 = merge brought changes — re-run the commit gate in the
 #       worktree, then call `land`.
 #   merge-sprint.sh land <branch> [--sprints S-A,S-B,…] [--allow-incomplete <reason>]
+#                                 [--allow-outside-claims <reason>]
 #       FIRST lint every roster member's Completion Log on the branch
 #       (close-check.mjs, before anything mutates): exit 5 lists what is missing
 #       — fix the record on the branch and re-run `land` (no new `prepare`
 #       needed), or pass --allow-incomplete "<reason>" to land anyway with the
-#       reason written into the file's Deviations. Then merge --no-ff into main,
+#       reason written into the file's Deviations. THEN check claims: every path the
+#       branch changed must be inside the roster's `touches:` (exit 6 lists the ones
+#       that are not — `abort`, grant them with `claims.mjs add`, and prepare/land again;
+#       or pass --allow-outside-claims "<reason>" to land anyway, recorded in
+#       Deviations). Claims are advisory everywhere else; this is where they bind.
+#       Then merge --no-ff into main,
 #       move the sprint file(s) in-progress/ → done/, flip status/end_date, stamp
 #       the `S-NNN:` deliverable commits + merge SHA under `### Commits`, rotate
 #       the archive, regenerate. Exits 4: author the semantic docs on main
@@ -31,6 +37,7 @@
 #
 # Exit codes: 0 ok · 1 error (lock kept — fix and re-run, or abort) ·
 # 3 gate re-run needed · 4 paused for doc authoring · 5 completion log incomplete
+# (lock kept, main untouched) · 6 branch changed paths outside the roster's claims
 # (lock kept, main untouched) · 75 lock busy
 #
 # Must run under macOS /bin/bash 3.2: no mapfile/readarray/associative arrays,
@@ -46,13 +53,14 @@ MAIN=${SPRINT_MAIN_BRANCH:-main}
 CMD=${1:?usage: merge-sprint.sh prepare|land|finish|abort <branch>}
 BRANCH=${2:?usage: merge-sprint.sh $CMD <branch>}
 shift 2
-NO_PUSH=0 WAIT=300 SPRINTS_CSV="" ALLOW_INCOMPLETE=""
+NO_PUSH=0 WAIT=300 SPRINTS_CSV="" ALLOW_INCOMPLETE="" ALLOW_OUTSIDE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --no-push) NO_PUSH=1; shift ;;
   --wait) WAIT=$2; shift 2 ;;
   --sprints) SPRINTS_CSV=$2; shift 2 ;;
   --allow-incomplete) ALLOW_INCOMPLETE=${2:?--allow-incomplete needs a reason}; shift 2 ;;
+  --allow-outside-claims) ALLOW_OUTSIDE=${2:?--allow-outside-claims needs a reason}; shift 2 ;;
   *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
 done
@@ -114,10 +122,12 @@ stamp_commits() { # $1 = sprint id, $2 = absolute done-file path
   fi
 }
 
-# --allow-incomplete: record the override in the file itself, under Deviations.
-note_incomplete() { # $1 = absolute done-file path
+# An audited override (--allow-incomplete / --allow-outside-claims) is recorded in the
+# file itself, under Deviations.
+note_incomplete() { note_deviation "$1" "landed incomplete — $ALLOW_INCOMPLETE"; }
+note_deviation() { # $1 = absolute done-file path, $2 = note text
   local file=$1
-  NOTE="- $(date +%F) landed incomplete — $ALLOW_INCOMPLETE"
+  NOTE="- $(date +%F) $2"
   export NOTE
   if grep -q '^### Deviations from brief' "$file"; then
     # drop a `— none` directly under the heading, then insert the note after the heading
@@ -234,6 +244,52 @@ land)
     echo "WARNING: landing with an incomplete completion log for ${INCOMPLETE[*]} — reason recorded in each file: $ALLOW_INCOMPLETE" >&2
   fi
 
+  # Claims check — still before any mutation. `touches:` is advisory while a sprint runs
+  # (a hook gives early feedback, a shell redirect can dodge it); here it binds: what the
+  # branch actually changed is held against what its roster claimed. Excluded: the
+  # roster's own sprint files and evidence directories, and the generated docs.
+  OUTSIDE_NOTE=""
+  CHANGED=$(git -C "$ROOT" diff --name-only "$MAIN" "$BRANCH")
+  for ((i = 0; i < ${#SPRINTS[@]}; i++)); do
+    CHANGED=$(printf '%s\n' "$CHANGED" | grep -vxF "docs/sprints/in-progress/${BASENAMES[i]}" | grep -v "^docs/sprints/evidence/${SPRINTS[i]}/" || true)
+  done
+  for g in "${GENERATED[@]}"; do CHANGED=$(printf '%s\n' "$CHANGED" | grep -vxF "$g" || true); done
+  if [[ -n $CHANGED ]]; then
+    set +e
+    OUTSIDE=$(printf '%s\n' "$CHANGED" | node "$SELF_DIR/claims.mjs" covers --sprints "$CSV" 2>&1)
+    covers_rc=$?
+    set -e
+    case $covers_rc in
+    0) ;;
+    2)
+      if [[ -z $ALLOW_OUTSIDE ]]; then
+        echo "$BRANCH changed paths outside the claims of $CSV (lock kept, $MAIN untouched):" >&2
+        printf '%s\n' "$OUTSIDE" | sed 's/^/  /' >&2
+        echo "these files were never checked against other in-flight sprints. Either:" >&2
+        echo "  merge-sprint.sh abort $BRANCH   # releases the lock" >&2
+        echo "  node scripts/sprint/claims.mjs add <S-NNN> <path…> --no-push   # exit 2 = another sprint holds it: a real conflict" >&2
+        echo "  merge-sprint.sh prepare $BRANCH && merge-sprint.sh land $BRANCH$FINISH_ARGS" >&2
+        echo "— or land anyway with: --allow-outside-claims \"<reason>\" (written into each file's Deviations)" >&2
+        exit 6
+      fi
+      echo "WARNING: landing paths outside the roster's claims — reason recorded in each file: $ALLOW_OUTSIDE" >&2
+      printf '%s\n' "$OUTSIDE" | sed 's/^/  /' >&2
+      OUTSIDE_NOTE="landed outside claims — $ALLOW_OUTSIDE: $(printf '%s' "$OUTSIDE" | tr '\n' ' ')"
+      ;;
+    3) echo "WARNING: claims not checked — $OUTSIDE" >&2 ;;
+    *) echo "WARNING: claims check could not run (exit $covers_rc) — landing unverified: $OUTSIDE" >&2 ;;
+    esac
+  fi
+  # Changes to the gate itself are a decision for the user, never a detail of a sprint.
+  SENSITIVE=$( {
+    git -C "$ROOT" diff --name-only "$MAIN" "$BRANCH" | grep -E '^(scripts/sprint/(gate|pre-push-gate)\.sh|\.github/workflows/.*)$' || true
+    git -C "$ROOT" diff --name-only --diff-filter=D "$MAIN" "$BRANCH" | grep -E '(^|/)(tests?|__tests__|spec)/|[._](test|spec)\.[A-Za-z]+$' || true
+  } | sort -u)
+  if [[ -n $SENSITIVE ]]; then
+    echo "GATE-SENSITIVE: $BRANCH changes the commit gate, CI config, or deletes tests — confirm with the user (DECISION_POLICY: reserved):" >&2
+    printf '%s\n' "$SENSITIVE" | sed 's/^/  /' >&2
+  fi
+
   if [[ ${#SPRINTS[@]} -eq 1 ]]; then
     git -C "$ROOT" merge --no-ff "$BRANCH" -m "sprint: merge ${SPRINTS[0]} — ${TITLES[0]}"
   else
@@ -251,6 +307,7 @@ land)
     if [[ -n $ALLOW_INCOMPLETE ]] && printf '%s\n' ${INCOMPLETE[@]+"${INCOMPLETE[@]}"} | grep -qx "$s"; then
       note_incomplete "$DONE_FILE"
     fi
+    if [[ -n $OUTSIDE_NOTE ]]; then note_deviation "$DONE_FILE" "$OUTSIDE_NOTE"; fi
   done
 
   # Archive rotation: keep the 10 most recent (highest-numbered) in done/.
