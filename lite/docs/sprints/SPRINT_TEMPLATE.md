@@ -10,6 +10,9 @@ depends_on: []
 blocks: []
 tags: []
 story_points: 0
+risk: low
+tier: standard
+tier_reason: null
 plan_date: null
 start_date: null
 end_date: null
@@ -34,6 +37,25 @@ touches: []
      over the sprint before dispatching it. A plan_date older than a
      dependency's end_date renders as "stale plan" in the waves output — the
      plan's file:line premises predate landed work and need re-verification. -->
+
+<!-- risk: low | high — set by /plan, raised (never lowered) by /sprint plan. high =
+     the sprint touches a surface in the risk-tier table of
+     docs/sprints/review-calibration.md (auth/permissions, schema/migrations, public or
+     cross-sprint contracts, secrets, payment or irreversible mutation, trust-boundary
+     parsing). It makes `## Production notes` below mandatory and deepens the review.
+     tier: routine | standard | complex | critical — how HARD the work is (not how big,
+     not how risky): it decides which model and how much reasoning effort executes and
+     reviews the sprint. docs/sprints/tier-rubric.md is the rule. /plan sets a provisional
+     standard or complex; the PLANNER assigns the real tier at certification (/sprint
+     plan, or the wave's planning pass) and writes tier_reason: — one line naming the
+     signal that decided it (`follows src/routes/users.ts:12-40 — same handler shape`;
+     `new retry state machine across two services`). routine needs every criterion in the
+     rubric; anything above standard needs one signal; unsure means the higher tier. After
+     the sprint starts the tier only goes up (ESCALATE). A file with none of these keys
+     (pre-1.11 sprints) is read as risk: low, tier: standard.
+     outcome: is written by the orchestrator when a wave or train lands the sprint —
+     assigned/final tier, escalations, fix rounds, findings — and read by
+     scripts/sprint/tiers.mjs to calibrate the rubric. Never set it by hand. -->
 
 <!-- proposal:/stage: are informational backlinks, ignored by scripts — set by /plan
      when the source is a proposal (proposal: NNN, stage: k; stage: 1 for un-staged
@@ -181,6 +203,16 @@ touches: []
 | Risk | Mitigation |
 |------|-----------|
 | Description | How to handle |
+
+## Production notes
+
+<!-- MANDATORY when frontmatter `risk: high`; otherwise delete this section. The executor
+     reads these as binding. Each line is a concrete answer or `n/a — [why]` (a bare
+     "n/a" fails plan-check.mjs). -->
+
+- Rollback: {how this sprint's change is undone after it lands — flag, revert, down-migration — and what undoing loses}
+- Observability: {the log line, metric or alert that shows it working, and the one that shows it failing}
+- Security: {the trust boundary or permission this touches and what enforces it}
 
 ## Open Questions
 

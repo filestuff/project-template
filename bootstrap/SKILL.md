@@ -59,13 +59,16 @@ direct binary). Also ask which untracked env files a worktree needs copied (e.g.
 ## Step 3: Copy
 
 1. Copy `TEMPLATE/lite/` contents into the repo root — **except** `CLAUDE.project-block.md`
-   (handled in step 6).
+   (handled in step 6), and **except `.claude/settings.json` when the repo already has
+   one**: never overwrite it. Copy the template's file to a scratch path instead (e.g.
+   `"$TMPDIR/template-settings.json"`), apply the step-4 placeholders to that copy, and
+   merge it in step 8.
 2. Full tier: copy `TEMPLATE/full-overlay/` contents on top (it overwrites
    `docs/sprints/PROTOCOL.md`, `docs/sprints/INDEX.md`, `.claude/skills/sprint/SKILL.md`
    and adds the scripts, `ROADMAP.md` (with its Parallel Waves block), and
    `docs/sprints/ORCHESTRATION.md`).
-3. `chmod +x scripts/sprint/*.sh scripts/template/*.sh` (the `postCopy.chmod+x` globs in
-   `template.config.json`).
+3. `chmod +x scripts/sprint/*.sh scripts/template/*.sh scripts/hooks/*.mjs` (the
+   `postCopy.chmod+x` globs in `template.config.json`).
 
 ## Step 4: Replace placeholders (deterministic)
 
@@ -105,8 +108,10 @@ placeholder is a bootstrap bug, not a cosmetic issue.
   mode keeps `links: []`. The two worktree gate placeholders (`{{WORKTREE_GATE_COMMANDS}}`,
   `{{WORKTREE_PREPUSH_GATE_COMMANDS}}`) got the reduced commands in step 4 — blank in install
   mode and in the lite tier (blank = run the normal gate).
-- Default branch ≠ main: add to `.claude/settings.json`:
-  `"env": { "SPRINT_MAIN_BRANCH": "<branch>" }`.
+- Default branch ≠ main: set `SPRINT_MAIN_BRANCH` in the `env` object of
+  `.claude/settings.json` — add the key to the existing `env` object if there is one,
+  otherwise add `"env": { "SPRINT_MAIN_BRANCH": "<branch>" }`. The full-tier scripts and
+  the main-branch guard hook (`scripts/hooks/guard.mjs`) both read it.
 
 ## Step 5.5: Write the installed manifest
 
@@ -185,8 +190,24 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
 ## Step 8: settings.json merge
 
 - Absent → the copied skeleton stands.
-- Pre-existing → union the `permissions.allow` arrays (copied skeleton ∪ existing), keep all
-  other existing keys, show the diff, ask before writing.
+- Pre-existing → merge the template's rendered copy (set aside in step 3) with the engine,
+  never by hand:
+  `node scripts/template/upgrade.mjs merge-settings --new "$TMPDIR/template-settings.json"`.
+  It unions `permissions.allow` / `deny` / `ask`, adds the template's hook groups after
+  the repo's own (hooks the repo already had are kept untouched), merges `env` per variable
+  with the repo's values winning, and adds other keys only where absent. Show the user
+  `git diff .claude/settings.json` (or the before/after for an untracked file) and ask
+  before keeping it.
+- Either way, tell the user what the hooks do — they change how every session behaves:
+  `scripts/hooks/guard.mjs` runs before each Bash and file-edit call and refuses a
+  force-push or deletion of the main branch (both tiers); in the full tier it also refuses
+  edits outside a sprint's `touches:` inside its worktree, lifecycle scripts and pushes run
+  by subagents, and a `sprint-executor`'s DONE while its completion record fails the lint.
+  `scripts/hooks/agent-log.mjs` records subagent start/stop times (full tier). Off-switch
+  for an emergency: `SPRINT_GUARD=off` in the environment.
+- Unattended wave/train runs need auto mode, and Claude Code ignores
+  `permissions.defaultMode: "auto"` in a project settings file — tell the user to set it in
+  `~/.claude/settings.json` if they want it.
 
 ## Step 9: Validate
 
@@ -194,6 +215,12 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
   four sprint dirs + `docs/sprints/evidence/` + their `.gitkeep`s exist;
   `node scripts/sprint/close-check.mjs docs/sprints/SPRINT_TEMPLATE.md` exits 5 (the lint
   reads the shipped grammar — it must reject the unfilled template).
+- Hooks (all tiers): `.claude/settings.json` parses and its `hooks.PreToolUse` contains the
+  `scripts/hooks/guard.mjs` group;
+  `echo '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}' | SPRINT_MAIN_BRANCH=main node scripts/hooks/guard.mjs`
+  prints a `"permissionDecision":"deny"` JSON (the guard is live), and
+  `echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | node scripts/hooks/guard.mjs`
+  prints nothing and exits 0.
 - Manifest (all tiers):
   - `.claude/template-manifest.json` parses
     (`node -e 'JSON.parse(require("fs").readFileSync(".claude/template-manifest.json","utf8"))'`)
@@ -285,7 +312,8 @@ sprints out to subagents.
    `/template-upgrade` first — tier-upgrading from a stale version would install a
    full-overlay newer than the lite base and desync the manifest's merge base. (No manifest
    at all → run the **Adopt** section below first.)
-2. Copy `TEMPLATE/full-overlay/` contents over the repo; `chmod +x scripts/sprint/*.sh`;
+2. Copy `TEMPLATE/full-overlay/` contents over the repo;
+   `chmod +x scripts/sprint/*.sh scripts/hooks/*.mjs`;
    re-apply the `{{PROJECT_NAME}}` / `{{PACKAGE_MANAGER}}` placeholders to the overwritten/added
    markdown files (PROTOCOL.md, INDEX.md, ROADMAP.md, ORCHESTRATION.md, sprint SKILL.md) and
    re-run the step-4 grep check.

@@ -63,7 +63,7 @@
     }
   },
   "postCopy": {
-    "chmod+x": ["scripts/sprint/*.sh", "scripts/template/*.sh"],
+    "chmod+x": ["scripts/sprint/*.sh", "scripts/template/*.sh", "scripts/hooks/*.mjs"],
     "writePerProject": [
       "scripts/sprint/claims-tokens.json (full tier — from stack answers)",
       "scripts/sprint/ci-gates.json (full tier — required CI workflows {name,file} + optional deployEnvironment, from stack answers)",

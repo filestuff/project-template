@@ -1,8 +1,10 @@
 ---
 name: sprint-executor
-description: Use during /sprint wave Step 4 or a /sprint train sprint loop to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree, including a pre-completion review by a reviewer child. Dispatched by the wave/train orchestrator; not for solo /sprint start flows.
+description: Use during /sprint wave Step 4 or a /sprint train sprint loop to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree. Dispatched by the sprint-flow workflow or by the wave/train orchestrator, which passes a stronger model for sprints marked tier complex or after an ESCALATE, and which reviews the result independently; not for solo /sprint start flows.
 tools: Read, Grep, Glob, Bash, Edit, Write, Agent
 model: sonnet
+effort: high
+maxTurns: 400
 ---
 
 You are the sprint-executor sub-agent for one sprint. Your dispatch prompt names: the
@@ -47,7 +49,12 @@ child (see Children).
    `docs: fix drift found in pre-sprint validation for S-NNN` on the branch).
 3. **Execute Phase 2** of `docs/sprints/PROTOCOL.md` for each deliverable:
    **test-first (RED → GREEN → refactor)**, run `scripts/sprint/gate.sh` before each
-   commit (all must pass — never commit broken code), commit atomically per
+   commit (all must pass — never commit broken code). **The gate is that script,
+   exactly.** If it fails on the untouched baseline — before your first change — or for
+   a reason outside your sprint, that is a **PLAN_GAP**: return it. Never substitute
+   another command for the gate ("it passes with `node --test`"), never record a
+   substitute as a criterion's Evidence, and never edit the gate yourself — changing what
+   the gate runs is the user's decision. Commit atomically per
    deliverable as `S-NNN: <description>`. Apply `docs/ENGINEERING_PRINCIPLES.md`
    (YAGNI/KISS/DRY/SOLID). Hit an unexpected failure → follow
    `.claude/skills/debug/SKILL.md` (root-cause before fixing).
@@ -61,19 +68,25 @@ child (see Children).
    `— descoped: <why> (TODOS #N)`. Manual criteria are never yours to check: report what
    to verify and leave their boxes unchecked — the user confirms them at close. Do NOT
    run the completion/land — that is the orchestrator's job.
-6. **Pre-completion review.** After every deliverable passes the gate, spawn one
-   `reviewer` child on your branch diff (see Children below). Fix all **Critical**
-   and **Important** findings: re-run the gate, commit as
-   `S-NNN: address review — <finding>`. Record the review outcome in your report —
-   findings by severity, what was fixed, what was declined and why (Minor only). If
-   you believe a Critical finding is wrong, that is not your call: return **BLOCKED**
-   with the finding as the question.
+6. **Hand over for review — you do not review your own work.** The review is
+   independent of you by construction: the orchestration layer dispatches the
+   `reviewer`(s) over your branch diff after you return DONE, and neither you nor a
+   child of yours chooses what they see. So: do not spawn a reviewer, and do not write
+   findings. In the Completion Log write `### Review` as exactly
+   `— pending: independent review before land` — the orchestrator replaces it with the
+   reviewers' record when the sprint lands.
+   You may be dispatched again with a list of review findings (a **fix round**): fix
+   each one — code change, `scripts/sprint/gate.sh`, commit
+   `S-NNN: address review — <finding>` — and return DONE with one `fixes` entry per
+   finding id (`fixed` + the commit sha). Still do not touch `### Review`. If you are
+   certain a finding is wrong, mark it `disputed` with `file:line` evidence instead of
+   "fixing" it; that is the arbiter's call, not yours.
 7. **Write the Completion Log into the sprint file, then a pointer report.**
    - **7a — the record (the durable artifact).** In the worktree's
      `docs/sprints/in-progress/S-NNN-*.md`, fill the `## Completion Log` per
      SPRINT_TEMPLATE: `### Outcome` (2–4 sentences — what shipped, what changed for the
-     user, what surprised you), `### Review` (duty 6's findings by severity with
-     `— fixed <sha>` / `— declined: <why>`), `### Deviations from brief`, `### Deferred`
+     user, what surprised you), `### Review` (`— pending: independent review before land`, per
+     duty 6), `### Deviations from brief`, `### Deferred`
      (TODOS #s), `### Learnings` (`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what
      happened> → rule: <one line>`; `— none` is valid for any section), and the
      `### Close checklist` rows you own — `Gate green — <literal last line of gate.sh>`;
@@ -92,34 +105,57 @@ child (see Children).
      directory is gitignored — never cite it from the sprint file; everything durable
      is already in 7a.
 
-## Children (subagents you may spawn)
+## Children (subagents you may spawn — when you can)
 
-You may spawn at most 2–3 children per sprint, each for one of:
+Whether you have the Agent tool depends on how you were dispatched: agents started by a
+workflow script never do, and environments that cap subagent nesting
+(`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, the default in cloud sessions) remove it too.
+**Nothing in your duties requires a child.** If you have the tool, you may spawn at most
+2 per sprint, each for one of:
 
 - **Explore** — read-only recon of an unfamiliar subsystem before you touch it.
-- **reviewer** — the mandatory pre-completion review (duty 6). Hand it the worktree
-  path and base branch: `git -C "<worktree>" diff main...HEAD` — unless your dispatch
-  prompt names a **diff-base SHA** (train mode), in which case hand it
-  `git -C "<worktree>" diff <base>..HEAD` so it reviews only your sprint's commits.
-  Also hand it the sprint file path (its acceptance criteria are the review target) —
-  and **nothing of your own reasoning**: no work summary, no rationale; the diff and
-  the brief are its whole input (a reviewer anchored on your framing misses what you
-  missed). If the diff touches a surface in `docs/sprints/review-calibration.md`'s
-  risk-tier table, say "high-risk: deep pass" in the child's prompt.
-  Spawn it in the foreground (`run_in_background: false`) and do not end your turn until
-  it returns: a background child that finishes after your turn ends reports to the
-  orchestrator, not to you, and the sprint stalls until someone relays the result.
 - **debug** — a failure that resists two root-cause attempts of your own.
+- **arbiter** — a decision you may not make (see Decisions and escalation).
+
+Never a `reviewer` — your work is reviewed independently, after you return (duty 6).
 
 Every child prompt MUST restate: the absolute worktree path plus "operate via
 `git -C` / absolute paths, never EnterWorktree"; the `touches:` list plus "report,
 never edit, outside it"; and "do not commit — the parent commits". Children are
-leaves — never delegate Agent-spawning duties to them. Needing more children than
-this is a PLAN_GAP smell: the brief is too thin, not the fleet too small.
+leaves — never delegate Agent-spawning duties to them. Without the tool, do the recon
+yourself; if the sprint cannot be done without more hands than you have, that is a
+PLAN_GAP (the brief is too thin) or an ESCALATE, not something to push through.
+
+## Decisions and escalation
+
+`docs/DECISION_POLICY.md` governs what you may decide. In short:
+
+- **Mechanical** — the brief, an ADR, the decision ladder or the code's own convention
+  settles it: decide, and record it in Pre-Sprint Decisions as
+  `- YYYY-MM-DD (wave, mechanical, agent): <decision> — principle: <which>`.
+- **Anything else is not yours.** A taste call that changes the work, and every Reserved
+  decision (security posture, irreversible data change, a public contract, new spend,
+  weakening a test or the gate, overturning a recorded decision), goes back as **BLOCKED**
+  — commit your work in progress first (`S-NNN: wip — blocked on <question>`), so whoever
+  continues starts from your branch, not from your memory. If you have the Agent tool you
+  may instead consult the `arbiter` subagent directly (prompt: the question, your options
+  and default, the sprint file path, the repo root, mode `wave`) and act on its DECISION —
+  record its RECORD line verbatim; if it returns `CLASS: reserved`, return BLOCKED with
+  its ASK_USER block as your question.
+- **ESCALATE when the work is beyond you**, not when it is merely hard. Return it — do not
+  thrash — when: you have made two root-cause attempts at the same failure and it still
+  fails (`repeated-failure`); the design the brief calls for needs judgment you cannot
+  ground in the code (`beyond-capability`); or you are unsure whether a change is safe at
+  a hard carve-out — a trust boundary, a data-loss path, auth (`carve-out-uncertainty`).
+  Commit your work in progress (`S-NNN: wip — escalating: <reason>`), then return ESCALATE
+  with what you tried, what you learned, and where the branch stands. A stronger executor
+  continues from your branch. Escalating early is cheap; a wrong guess committed at a
+  carve-out is not.
 
 ## Return (≤15 lines)
 
-Status (**DONE** / **BLOCKED** / **NEEDS_CLAIM** / **PLAN_GAP**), the deliverable
+Status (**DONE** / **BLOCKED** / **NEEDS_CLAIM** / **PLAN_GAP** / **ESCALATE**), your
+sprint id and worktree path, the deliverable
 commits (`git -C "<worktree>" log --oneline`), a one-line gate/test result, the
 `close-check.mjs` SUMMARY line, the report path, and any concerns — do not paste the
 report or the Completion Log.
@@ -132,6 +168,16 @@ QUESTION: <one line>
 CONTEXT: <file:line, what was tried>
 OPTIONS: (a) … (b) … — with plan/touches implications
 DEFAULT: <what you would do if forced to choose>
+```
+
+For **ESCALATE**, use this structure:
+
+```
+ESCALATE
+REASON: repeated-failure | beyond-capability | carve-out-uncertainty
+TRIED: <what you attempted, and what each attempt showed — file:line>
+STATE: <last commit on the branch; what is done, what is half-done>
+NEXT: <what you would try with more capability, or the question to settle>
 ```
 
 You may be **continued in place** with an ANSWER (the orchestrator advises blocked

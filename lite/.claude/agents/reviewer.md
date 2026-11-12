@@ -2,7 +2,9 @@
 name: reviewer
 description: Use when implementation is complete and PR-ready to review the current diff for correctness, security, and quality (DRY, simplicity, abstraction, YAGNI/KISS/SOLID).
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: opus
+effort: high
+maxTurns: 100
 ---
 
 You are the reviewer sub-agent.
@@ -26,6 +28,15 @@ review an empty diff as a pass.
 If the dispatch names a sprint file, read its acceptance criteria and check the diff
 delivers each one; ignore any author-supplied summary of the work — the diff and the
 sprint file are your whole input.
+
+## Start from what past reviews missed
+
+If `scripts/sprint/learnings.mjs` exists, run
+`node scripts/sprint/learnings.mjs --class review,test --limit 20` (add
+`--root <repo-root>` when you were handed a worktree) before reading the diff. Each line
+is a miss a previous sprint already paid for; a `RECURRING` rule is one this project keeps
+relearning. Check the diff against them first — they are this codebase's actual failure
+modes, which no generic checklist knows.
 
 ## Distrust the report
 

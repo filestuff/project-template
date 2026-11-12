@@ -1,0 +1,153 @@
+#!/usr/bin/env node
+// Whole-payload guards — the failures here never show up in a single file's own test:
+//   1. Leftover tokens. `upgrade.mjs render` exits 3 on any `{{…}}` that is not a declared
+//      placeholder, in ANY text file (a JS object literal or a shell `${{…}}` counts), so
+//      one stray token makes every downstream install and upgrade fail.
+//   2. Dangling references. A skill, agent or doc that tells Claude to run
+//      `scripts/sprint/<x>` or to dispatch `.claude/agents/<x>.md` that the payload does
+//      not ship fails silently at run time, in someone else's repo.
+//   3. Tier parity of the three files full-overlay shadows: a rule added to the lite copy
+//      and forgotten in the overlay never reaches a full install.
+//   4. Exec bits: every shell script in the payload is committed executable.
+import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { join, dirname, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+
+const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
+let failed = 0;
+const check = (c, m) => { if (!c) { failed++; console.error(`FAIL ${m}`); } };
+const eqList = (a, b, m) => check(JSON.stringify(a) === JSON.stringify(b), `${m} (got ${JSON.stringify(a)})`);
+
+const walk = (dir) =>
+  readdirSync(dir).flatMap((n) => {
+    const p = join(dir, n);
+    return statSync(p).isDirectory() ? walk(p) : [p];
+  });
+const TIERS = ["lite", "full-overlay"];
+const files = TIERS.flatMap((t) => walk(join(REPO, t)));
+const isText = (p) => !/\.(png|jpg|jpeg|gif|ico|pdf|zip|gz|woff2?)$/i.test(p);
+const config = JSON.parse(readFileSync(join(REPO, "template.config.json"), "utf8"));
+const known = new Set(Object.keys(config.placeholders));
+
+// 1. leftover tokens
+for (const f of files.filter(isText)) {
+  const text = readFileSync(f, "utf8");
+  for (const m of text.matchAll(/\{\{[^}]*\}\}/g)) {
+    if (!known.has(m[0])) {
+      const line = text.slice(0, m.index).split("\n").length;
+      check(false, `${relative(REPO, f)}:${line}: undeclared token ${m[0]} — render would exit 3`);
+    }
+  }
+}
+
+// 2. dangling references (resolved against the union of both tiers = a full install)
+const shipped = (rel) => TIERS.some((t) => existsSync(join(REPO, t, rel)));
+const docs = files.filter((f) => /\.(md|mjs|sh|json)$/.test(f));
+for (const f of docs) {
+  const text = readFileSync(f, "utf8");
+  const rel = relative(REPO, f);
+  for (const m of text.matchAll(/(?<![\w/.-])(scripts\/(?:sprint|template|hooks)\/[\w./-]+\.(?:mjs|sh|json))/g)) {
+    // `scripts/sprint/*.sh` style globs and <placeholder> paths are not references.
+    if (/[*<>]/.test(m[1])) continue;
+    check(shipped(m[1]), `${rel}: references ${m[1]}, which neither tier ships`);
+  }
+  for (const m of text.matchAll(/\.claude\/agents\/([\w-]+)\.md/g)) check(shipped(`.claude/agents/${m[1]}.md`), `${rel}: references .claude/agents/${m[1]}.md, which neither tier ships`);
+  for (const m of text.matchAll(/\.claude\/workflows\/([\w-]+)\.(m?js)/g)) check(shipped(`.claude/workflows/${m[1]}.${m[2]}`), `${rel}: references .claude/workflows/${m[1]}.${m[2]}, which neither tier ships`);
+  // Saved workflows are found by name only as `.js` (a `.mjs` there is invisible).
+  for (const m of text.matchAll(/Workflow\(\{\s*name:\s*"([\w-]+)"/g)) check(shipped(`.claude/workflows/${m[1]}.js`), `${rel}: invokes saved workflow "${m[1]}", but neither tier ships .claude/workflows/${m[1]}.js`);
+  for (const m of text.matchAll(/"Workflow\(([\w-]+)\)"/g)) check(shipped(`.claude/workflows/${m[1]}.js`), `${rel}: allows Workflow(${m[1]}), but neither tier ships .claude/workflows/${m[1]}.js`);
+}
+// A lite-only install must not be told to run something only the overlay ships, unless
+// the sentence is explicitly full-tier. Checked for the lite skills and agents.
+for (const f of files.filter((f) => f.includes(`${join("lite", ".claude")}`) && f.endsWith(".md"))) {
+  const lines = readFileSync(f, "utf8").split("\n");
+  lines.forEach((line, i) => {
+    for (const m of line.matchAll(/`[^`]*?(scripts\/sprint\/[\w.-]+\.(?:mjs|sh))[^`]*`/g)) {
+      if (existsSync(join(REPO, "lite", m[1]))) continue;
+      const context = lines.slice(Math.max(0, i - 6), i + 1).join(" ");
+      check(/full tier|full-tier|if .{0,40}exists|only if/i.test(context), `${relative(REPO, f)}:${i + 1}: lite file runs ${m[1]} (full-tier only) without a full-tier guard nearby`);
+    }
+  });
+}
+
+// 3. tier parity for shadowed files — each must mention the same mechanisms.
+const SHADOWED = { ".claude/skills/sprint/SKILL.md": ["plan-check.mjs", "brief-auditor", "close-check.mjs"], "docs/sprints/PROTOCOL.md": ["learnings.mjs", "close-check.mjs", "PLANNING_LEARNINGS.md"] };
+for (const [rel, needles] of Object.entries(SHADOWED)) {
+  for (const t of TIERS) {
+    const p = join(REPO, t, rel);
+    check(existsSync(p), `${t}/${rel} is missing (expected in both tiers)`);
+    if (!existsSync(p)) continue;
+    const text = readFileSync(p, "utf8");
+    for (const n of needles) check(text.includes(n), `${t}/${rel}: does not mention ${n} (the other tier's copy does — shadowed files must stay in step)`);
+  }
+}
+
+// 3b. routing.json and the agent definitions state the same model/effort — the table is
+// what the orchestrator passes, the frontmatter is what a by-name dispatch gets; if they
+// drift, "which model ran this sprint?" has two answers.
+{
+  const routing = JSON.parse(readFileSync(join(REPO, "full-overlay/scripts/sprint/routing.json"), "utf8"));
+  const ROLE_AGENT = { planner: "sprint-planner", "wave-planner": "wave-planner", "brief-auditor": "brief-auditor", "finding-verifier": "finding-verifier", arbiter: "arbiter", "doc-sync": "doc-sync" };
+  const front = (name) => {
+    const p = TIERS.map((t) => join(REPO, t, ".claude/agents", `${name}.md`)).find(existsSync);
+    check(!!p, `routing.json names role agent ${name}, which has no definition`);
+    if (!p) return {};
+    const head = readFileSync(p, "utf8").split("\n---")[0];
+    return { model: (head.match(/^model:\s*(\S+)/m) ?? [])[1], effort: (head.match(/^effort:\s*(\S+)/m) ?? [])[1], maxTurns: (head.match(/^maxTurns:\s*(\S+)/m) ?? [])[1] };
+  };
+  for (const [role, agent] of Object.entries(ROLE_AGENT)) {
+    const want = routing.roles[role];
+    check(!!want, `routing.json has no role "${role}"`);
+    if (!want) continue;
+    const got = front(agent);
+    check(got.model === want.model && got.effort === want.effort, `.claude/agents/${agent}.md pins ${got.model}/${got.effort} but routing.json says ${want.model}/${want.effort} for "${role}"`);
+  }
+  // Per-tier roles: the agent definition pins the `standard` tier (what a by-name dispatch
+  // gets); every tier is present for both roles; a tier never routes a reviewer weaker
+  // than its executor; and effort never falls as the tier rises.
+  const TIER_NAMES = ["routine", "standard", "complex", "critical"];
+  const MODEL_RANK = { haiku: 0, sonnet: 1, opus: 2, fable: 3 };
+  const EFFORT_RANK = { low: 0, medium: 1, high: 2, xhigh: 3, max: 4 };
+  const strength = (r) => [MODEL_RANK[r?.model] ?? -1, EFFORT_RANK[r?.effort] ?? -1];
+  const geq = (a, b) => a[0] > b[0] || (a[0] === b[0] && a[1] >= b[1]);
+  for (const [role, agent] of [["executor", "sprint-executor"], ["reviewer", "reviewer"]]) {
+    const got = front(agent);
+    const std = routing.roles[role]?.standard;
+    check(std && got.model === std.model && got.effort === std.effort, `.claude/agents/${agent}.md must pin routing.json's ${role}.standard (other tiers are passed at dispatch)`);
+    let prev = null;
+    for (const t of TIER_NAMES) {
+      const r = routing.roles[role]?.[t];
+      check(r && r.model in MODEL_RANK && r.effort in EFFORT_RANK, `routing.json: ${role}.${t} must set a known model alias and effort (has ${JSON.stringify(r)})`);
+      if (r && prev) check(geq(strength(r), strength(prev)), `routing.json: ${role}.${t} is weaker than the tier below it`);
+      prev = r ?? prev;
+    }
+  }
+  for (const t of TIER_NAMES) check(geq(strength(routing.roles.reviewer?.[t]), strength(routing.roles.executor?.[t])), `routing.json: at tier ${t} the reviewer is weaker than the executor it reviews`);
+  check(geq(strength(routing.roles.arbiter), strength(routing.roles.executor?.critical)), "routing.json: the arbiter must be at least as strong as the strongest executor — it settles their disputes");
+  eqList(routing.escalation, TIER_NAMES.map((t) => `executor.${t}`), "routing.json: escalation must climb the four tiers in order");
+  // the rubric, the template comment and the lint must name the same four tiers
+  for (const rel of ["lite/docs/sprints/tier-rubric.md", "lite/docs/sprints/SPRINT_TEMPLATE.md", "lite/scripts/sprint/plan-check.mjs", "full-overlay/docs/sprints/ORCHESTRATION.md"]) {
+    const text = readFileSync(join(REPO, rel), "utf8");
+    for (const t of TIER_NAMES) check(text.includes(t), `${rel}: does not mention tier "${t}"`);
+  }
+  for (const step of routing.escalation) check(step.split(".").reduce((o, k) => o?.[k], routing.roles)?.model, `routing.json escalation step "${step}" does not resolve to a role`);
+  // every agent definition states model, effort and a turn cap — an unset model silently
+  // inherits the session's (most expensive) one.
+  for (const f of files.filter((f) => /\.claude\/agents\/[\w-]+\.md$/.test(f))) {
+    const name = f.match(/([\w-]+)\.md$/)[1];
+    const got = front(name);
+    check(got.model && got.effort && got.maxTurns, `${relative(REPO, f)}: must set model, effort and maxTurns (has ${JSON.stringify(got)})`);
+    check(!/^(claude-|.*-\d{8})/.test(got.model ?? ""), `${relative(REPO, f)}: use a tier alias (sonnet/opus/fable/haiku), not a dated model id`);
+  }
+}
+
+// 4. exec bits (git mode, since that is what reaches a clone)
+const modes = execFileSync("git", ["-C", REPO, "ls-files", "-s", "--", ...TIERS], { encoding: "utf8" }).trim().split("\n");
+for (const l of modes) {
+  const [mode, , , path] = l.split(/\s+/);
+  if (path.endsWith(".sh") || /scripts\/hooks\/[^/]+\.mjs$/.test(path)) check(mode === "100755", `${path}: committed with mode ${mode}, expected 100755`);
+}
+
+if (failed) { console.error(`test-payload-integrity: ${failed} check(s) failed`); process.exit(1); }
+console.log(`test-payload-integrity: all checks passed (${files.length} files)`);
