@@ -26,7 +26,7 @@ try {
 
 - 2026-11-10 (gated, taste, arbiter): use the existing retry helper — principle: decision ladder rung 2 — rejected: a new backoff module — undo: swap the call in src/x.ts
 - 2026-11-11 (wave, mechanical, agent): keep the v2 schema — principle: ADR-004
-- 2026-11-12 (gated, taste, orchestrator): name the table sessions_v2 — principle: explicit over clever
+- 2026-11-12 (gated wave, taste, orchestrator): name the table sessions_v2 — principle: explicit over clever
 - 2026-11-09 (wave): batch size 50 — rationale from the planner
 - 2026-11-08 (train, auto): reuse the queue — smaller blast radius
 - 2026-11-07 (Tuesday): not a decision line
@@ -49,6 +49,7 @@ try {
   check(/THIN docs\/sprints\/in-progress\/S-005-a\.md:\d+ — taste decision without a rejected option/.test(out), `a taste decision with no rejected option must be flagged THIN:\n${out}`);
   check((out.match(/^THIN /gm) ?? []).length === 1, "the pre-policy (train, auto) line is not THIN — it predates the grammar");
   check(/2026-11-08\s+taste\s+orchestrator\s+S-005: reuse the queue/.test(out), "(train, auto) reads as taste by the orchestrator");
+  check(/2026-11-12\s+taste\s+orchestrator\s+S-005: name the table sessions_v2/.test(out), `a space-separated mode tag ("gated wave") must still be read — seen in a live run:\n${out}`);
   check(/principle: decision ladder rung 2 · rejected: a new backoff module · undo: swap the call in src\/x\.ts/.test(out), "principle / rejected / undo are parsed out");
   check(/docs\/proposals\/003-thing\.md:3/.test(out) && /003-thing: one queue not two/.test(out), "proposal decision logs are read, with file:line");
 

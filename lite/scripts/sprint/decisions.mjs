@@ -57,9 +57,12 @@ for (const dir of DIRS) {
       if (skip) return;
       const m = raw.match(LINE);
       if (!m) return;
-      const tags = m[2].split(",").map((s) => s.trim().toLowerCase());
-      // Only lines whose parenthetical is a decision tag — not `- 2026-01-02 (Tuesday): …`.
-      const MODES = ["interactive", "gated", "unattended", "wave", "train", "in-flight", "auto", "solo", "plan", "proposal", "recut"];
+      // Tags are comma-separated, but agents also write `(gated wave, taste, arbiter)` —
+      // a decision that is recorded and then invisible here is worse than a loose parse,
+      // so split on spaces too. Only lines whose parenthetical is made of decision tags
+      // count — not `- 2026-01-02 (Tuesday): …`.
+      const tags = m[2].toLowerCase().split(/[,\s]+/).filter(Boolean);
+      const MODES = ["interactive", "gated", "unattended", "wave", "train", "in-flight", "auto", "solo", "start", "plan", "proposal", "recut"];
       if (!tags.every((t) => MODES.includes(t) || CLASSES.includes(t) || DECIDERS.includes(t))) return;
       let cls = tags.find((t) => ["mechanical", "taste", "reserved"].includes(t)) ?? "unclassified";
       let decider = tags.find((t) => ["agent", "arbiter", "orchestrator", "user"].includes(t)) ?? "unknown";

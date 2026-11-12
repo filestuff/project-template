@@ -177,7 +177,8 @@ A sprint-planner left this question open while planning **${m.sprint}**. Classif
 
 - Sprint file: ${m.file}
 - Repo root: ${repoRoot}
-- Autonomy mode of this run: ${autonomy} (wave planning)
+- Autonomy mode of this run: ${autonomy}
+- Mode tag for your RECORD line (one word, exactly): wave
 - Question ${q.id}: ${q.question}
 - Options: ${(q.options || []).join(' | ')}
 - The planner recommends: ${q.recommended}

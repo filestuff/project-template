@@ -58,6 +58,11 @@ apart from two extra allow rules.
   hook-written event log: who is running, for how long; finished counts and durations per
   agent type) and the latest decisions made on your behalf. Wall-clock only — Claude Code
   does not expose token cost to hooks, so none is shown.
+- **Verified with live agents** before release: in a rendered full-tier fixture, three
+  sprints ran as three concurrent workflow runs, hit a broken gate (two stopped
+  correctly), had a deliberately undecided behaviour settled by the arbiter and recorded,
+  were reviewed independently (three lenses for the high-risk one), and landed as one
+  batch with one gate run, each done-file carrying its own commits and review record.
 - **`ORCHESTRATION.md` is restructured** around this: Step 4 launches runs, "What a run
   returns" says what to do with each status, Step 5 lands in batches, Step 5.5 admits. A
   "Without the Workflow tool" section keeps the hand-dispatch path — same roles, same

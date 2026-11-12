@@ -1,6 +1,6 @@
 # Build spec — planning rigor, decision policy, flow orchestration (v1.11 → v1.13)
 
-Status: **approved to build** (owner go-ahead 2026-11-12, all three phases).
+Status: **built** — v1.11.0, v1.12.0 and v1.13.0 on branch `claude/nifty-dirac-th4tke` (owner go-ahead 2026-11-12, all three phases). Each phase has an "As built" subsection recording where the build departed from the text.
 This file is the maintainer-side build spec for the template itself. It lives outside
 `lite/` and `full-overlay/`, so it is never installed downstream and changing it needs no
 `VERSION` bump.
@@ -484,6 +484,40 @@ their manifest entries.
   now pinned by a test).
 - **`agents.mjs`** summarises the hook event log for `/sprint board`; cost is not shown
   because hooks cannot see it.
+
+### 5.8 Acceptance run (live agents, 2026-11-12)
+
+A rendered full-tier install in a throwaway repo, three sprints, every role on the cheaper
+tier at low/medium effort, subagent nesting capped at depth 1 (the cloud default), three
+`sprint-flow` runs launched in one message. What happened:
+
+- **The fixture's gate was broken** (my mistake: `node --test tests/` fails on Node 22).
+  One executor returned PLAN_GAP and one NEEDS_CLAIM, each refusing to edit the gate
+  ("changing the gate is a reserved decision"); the third verified with a different
+  command and carried on. The executor definition now forbids that substitution. The
+  orchestrator repaired the gate on `main`, merged it into the branches, and re-launched
+  the two parked sprints with `resume`.
+- **The forced decision** (S-002's brief left a behaviour undecided): BLOCKED → arbiter
+  ruled it taste, with principle, rejected option and undo → a fresh executor continued
+  from the branch and wrote the record line into the sprint file → independent review →
+  `READY_TO_LAND`.
+- **The high-risk sprint** got all three review lenses; six Minor findings, none gating.
+  The same gap was raised by all three lenses in different words — de-duplication only
+  merges identical location + description, so the record carries it three times. Left as
+  is: merging on location alone could drop a distinct finding, and noise in a record is
+  the cheaper error.
+- **Landing:** `assemble-train.sh` merged all three; **one** gate run (8 tests); `prepare`
+  was a no-op; `land --sprints` passed the completion lint and the claims check for all
+  three; each done-file was stamped with its own commits; the review records were pasted;
+  `finish`; lock free; cleanup.
+- 13 agents in total (6 executor dispatches, 5 reviewers, 1 verifier, 1 arbiter), about
+  one US dollar at these settings. The shipped routing (opus for reviewers and the
+  arbiter, higher effort) will cost several times that per sprint.
+
+Two defects found and fixed from this run: `decisions.mjs` ignored a record whose mode tag
+was written `gated wave` (the arbiter now gets its one-word tag in the prompt, and the
+parser splits on spaces too); and reviewers raised the deliberately pending
+Completion-Log rows as findings (the review prompt now says they are not).
 
 ## 6. Build order and checkpoints
 

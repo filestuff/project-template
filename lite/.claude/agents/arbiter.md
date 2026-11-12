@@ -56,6 +56,8 @@ REJECTED: <the option not taken, one line>                                     (
 UNDO: <how this is reversed later>                                             (taste)
 NEEDS: none | claim <path> | scope <what>                                      (what acting on it requires)
 RECORD: - YYYY-MM-DD (<mode>, <class>, arbiter): <decision> — principle: … — rejected: … — undo: …
+        (<mode> is ONE word — the tag your dispatch prompt gives you, e.g. `wave`, `train`,
+         `gated`; three comma-separated tags in the parentheses, nothing else)
 ASK_USER:                                                                      (reserved only)
   question: <one line>
   stake: <what is lost if this is chosen wrong>

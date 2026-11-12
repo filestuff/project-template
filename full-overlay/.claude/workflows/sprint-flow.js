@@ -248,7 +248,8 @@ const askArbiter = (question, where) =>
 ${where}
 - Sprint file: the single file matching ${wt}/docs/sprints/in-progress/${id}-*.md
 - Repo root: ${repoRoot}
-- Autonomy mode of this run: ${autonomy} (${mode})
+- Autonomy mode of this run: ${autonomy}
+- Mode tag for your RECORD line (one word, exactly): ${mode}
 
 ${question}
 
@@ -337,6 +338,8 @@ const reviewPrompt = (lens) =>
 - Sprint file (its acceptance criteria are the review target): the single file matching ${wt}/docs/sprints/in-progress/${id}-*.md
 - Repo root: ${repoRoot}
 - Focus: ${lens.focus}
+
+Not findings: in the sprint file's Completion Log, the \`### Review\` line and the Close-checklist rows annotated \`pending\` (docs synced, new docs, ADR check, deployed) are settled by the orchestrator at land — they are pending by design.
 
 You have been given nothing of the author's reasoning, on purpose. Return your findings via the structured output — every Critical/Important with its file:line and the verbatim quote that motivates it; an empty findings list when the diff is clean.`
 
