@@ -95,7 +95,10 @@ This ADR supersedes [ADR-{NNN}: {original title}](./{NNN}-original-title.md).
    or significant restructuring, changed infra/deploy config, a chosen-over-alternatives
    approach visible in the diff.
 3. Cross-reference existing ADRs.
-4. If any are undocumented, list them and ask whether to draft ADRs.
+4. If any are undocumented, list them and draft the ADRs — recording a decision that was
+   already made is mechanical (`docs/DECISION_POLICY.md`), not a question. Ask only when
+   it is unclear *whether a decision was made at all* (two readings of the diff), or when
+   the ADR would supersede an accepted one — superseding is the user's call.
 5. **Report the outcome explicitly** — "ADR-NNN drafted" or "none — [reason]" — so the sprint
    file's Close checklist `ADR check` row can record it (`— ADR-NNN` / `— none: reason`).
 

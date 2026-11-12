@@ -1,5 +1,5 @@
 {
-  "$comment": "Checked-in team defaults. Machine-specific paths and any tokens stay in .claude/settings.local.json (gitignored). Keep this file secret-free. If the default branch is not 'main', add env.SPRINT_MAIN_BRANCH (the full-tier sprint scripts read it).",
+  "$comment": "Checked-in team defaults. Machine-specific paths and any tokens stay in .claude/settings.local.json (gitignored). Keep this file secret-free. If the default branch is not 'main', add env.SPRINT_MAIN_BRANCH (the full-tier sprint scripts read it). The hooks block runs scripts/hooks/guard.mjs before Bash/edit/StructuredOutput calls (main-branch protection in both tiers; file-claim, lifecycle and completion guards in the full tier) and scripts/hooks/agent-log.mjs on subagent start/stop. /template-upgrade owns every hook group whose handlers all run scripts under scripts/hooks/ — add your own hooks as separate groups and they are preserved. Unattended runs need auto mode set in USER settings (~/.claude/settings.json): a defaultMode of auto or bypassPermissions in this file is ignored by Claude Code.",
   "permissions": {
     "allow": [
       "Bash({{PACKAGE_MANAGER}} run *)",
@@ -11,6 +11,9 @@
       "Bash(git diff*)",
       "Bash(git log*)",
       "Bash(git show*)",
+      "Workflow(design-review)",
+      "Workflow(sprint-flow)",
+      "Workflow(plan-flow)",
       "Skill(sprint)",
       "Skill(proposal)",
       "Skill(plan)",
@@ -22,5 +25,41 @@
       "Skill(template-upgrade)"
     ],
     "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|Edit|Write|NotebookEdit|MultiEdit|StructuredOutput)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/scripts/hooks/guard.mjs",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/scripts/hooks/agent-log.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/scripts/hooks/agent-log.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

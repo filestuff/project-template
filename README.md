@@ -10,8 +10,9 @@ for **driving serial sprint chains autonomously** (`/sprint train`: one worktree
 whole chain, front-loaded decisions, landings batched into one CI push per few sprints).
 
 **Requirements:** [Claude Code](https://claude.com/claude-code) (the skills and agents are
-Claude Code skills), git, bash. Node ≥ 18 for the full tier and for `/template-upgrade`
-(the `.mjs` helper scripts).
+Claude Code skills), git, bash, and Node ≥ 18 (the lints, the guard hooks and
+`/template-upgrade` are zero-dependency `.mjs` scripts; the full tier's orchestration
+scripts need it too).
 
 ## Install
 
@@ -19,15 +20,19 @@ Run `/bootstrap-project` in a Claude Code session inside (or pointed at) the tar
 asks the questions, copies the right tier, fills placeholders, merges CLAUDE.md/settings.json
 safely, and validates the result. Manual install: copy `lite/` into the repo root, then (for
 full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
-`template.config.json`), and `chmod +x scripts/sprint/*.sh`.
+`template.config.json`), and `chmod +x scripts/sprint/*.sh scripts/hooks/*.mjs`.
 
 ## Workflow at a glance
 
-0. **Spec** — when all you have is an idea: `/proposal` grounds itself in the code first,
-   interrogates the premise, weighs 2–3 alternatives equally, and routes every decision —
-   scope calls, the direction itself — through explicit option questions before writing a
-   decision-ready RFC to `docs/proposals/NNN-*.md` (self-reviewed, then scored by a
-   fresh-context reviewer). Sequential directions become **Stages** with measurable gates:
+0. **Spec** — when all you have is an idea: `/proposal` grounds itself in the code and in
+   prior decisions (ADRs, planning learnings) first, interrogates the premise, weighs 2–3
+   alternatives equally — designing structurally different ones in parallel when a new
+   module or service is at stake — and routes every decision — scope calls, the direction
+   itself — through explicit option questions before writing a decision-ready RFC to
+   `docs/proposals/NNN-*.md`. A **rigor tier** (light / standard / critical, classified
+   from what the idea touches) scales how much production-readiness design it must carry
+   and how many independent review lenses it faces; reviewers' findings are verified
+   before anyone acts on them, and the panel has a pass mark. Sequential directions become **Stages** with measurable gates:
    `/plan` consumes one stage at a time, and when a stage's sprints land, `/proposal NNN`
    runs the gate decision before the next stage is planned. It skips itself when a finished
    plan is handed in or a proposal already exists — then continue directly below.
@@ -35,19 +40,28 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
    (e.g. an external plan-review skill), then run `/plan` — it challenges scope against the
    decision ladder, cuts the plan into sprint files in `docs/sprints/backlog/` with
    dependencies, story points, and Produces/Consumes interface contracts, and won't commit
-   until every source-plan requirement maps to a sprint.
+   until every source-plan requirement maps to a sprint, `plan-check.mjs` passes
+   (dependencies, contracts, citations), and — for anything beyond a couple of low-risk
+   sprints — an independent four-lens panel has reviewed the breakdown.
 2. **Certify** a sprint just before working it: `/sprint plan S-NNN` deepens the file to an
    executable brief (exact paths, verified `file:line` citations, no placeholders, a
-   fresh-reader pre-mortem) and stamps `plan_date`. Uncertified sprints still run — you just
+   fresh-reader pre-mortem), then has a `brief-auditor` agent that has seen nothing else
+   cold-read it — the author of a brief cannot certify it — and stamps `plan_date`. Uncertified sprints still run — you just
    get warned.
 3. **Execute**: `/sprint start S-NNN` → implement → `/sprint done S-NNN` (acceptance evidence,
    doc sync, ADR check). `/sprint board` shows the kanban; `/sprint next` suggests what's
    unblocked.
-4. **Full tier, in parallel**: `/sprint wave` computes the next conflict-free wave from file
-   claims, fans out one planner subagent per stale/unplanned member, then one executor
-   subagent per sprint — each in its own git worktree, serialized on `main` by a lock.
-   Brief failures feed back into `docs/sprints/PLANNING_LEARNINGS.md` so plans stop failing
-   the same way twice.
+4. **Full tier, in parallel**: `/sprint wave` computes the conflict-free set from file
+   claims and runs it as a **rolling wave**. A planning workflow gives each member a
+   planner, an independent cold-read of its brief, and arbiter rulings on open questions.
+   Then every sprint gets its **own workflow run** in its own git worktree: an executor on
+   the model its `tier:` routes to; an arbiter for decisions the executor may not make; a
+   stronger executor if it escalates; an independent review (three focused lenses when the
+   sprint is high-risk) whose findings are verified before anyone acts on them; and a
+   bounded fix loop. Runs report back one by one, so finished sprints **land in batches —
+   one merge, one gate run — while the rest still execute**, and each landing admits the
+   sprints it unblocked into the same wave. Brief failures feed back into
+   `docs/sprints/PLANNING_LEARNINGS.md` so plans stop failing the same way twice.
 5. **Full tier, in series**: when the backlog is a chain that can't parallelize,
    `/sprint train S-A S-B …` runs it autonomously — all decisions batched upfront, one
    executor at a time in a single shared worktree, landings checkpointed every 3 sprints
@@ -55,6 +69,30 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
 
 The sprint file is the executor's **entire brief** — every gate above exists to make that
 single file sufficient for an agent (or developer) with zero conversation context.
+
+**Who decides what.** `docs/DECISION_POLICY.md` sorts every decision into one of three
+classes. *Mechanical* ones — settled by the brief, an ADR, the decision ladder or the
+code's own convention — are made and recorded without asking. *Taste* ones — reversible,
+contained — are made in the open, recorded with the option not taken, and listed at one
+approval gate per phase where you can overturn any of them. *Reserved* ones — direction,
+security posture, irreversible changes, spend, public contracts, weakening a check,
+deploys — are always yours, in every mode. `/plan` and `/sprint wave` run gated by
+default; `/sprint train` runs unattended after its opening confirmation; `/proposal` asks
+unless you tell it not to. An agent that meets a decision it may not make returns it to
+the `arbiter` (a stronger model); one that meets work beyond it returns `ESCALATE` and a
+stronger executor continues from its branch.
+
+**Which model does the work.** Each sprint carries a `tier:` — `routine`, `standard`,
+`complex` or `critical` — that says how *hard* it is (not how big, and not how risky), and
+the tier fixes both the model and the reasoning effort of the executor and of its
+reviewers. The planner assigns it when it certifies the brief, having just read the code,
+and records why. The rule is deliberately lopsided: a sprint is `routine` only if it meets
+every item on a checklist — which a lint and an independent cold reader both verify —
+while one signal is enough to move it up, because under-powering hard work costs far more
+than over-powering easy work. Every landed sprint records how it went, and
+`node scripts/sprint/tiers.mjs` shows per tier how often sprints escalated or finished
+uncleanly, so the table is tuned on evidence. `node scripts/sprint/decisions.mjs --class
+taste` lists what was decided on your behalf.
 
 ## Tiers
 
@@ -67,9 +105,21 @@ single file sufficient for an agent (or developer) with zero conversation contex
 | Commit gate (`scripts/sprint/gate.sh`, single source of truth) | ✅ | ✅ |
 | Update checks + `/template-upgrade` (three-way merge, migrations) | ✅ | ✅ |
 | Planning gates (scope challenge, coverage map, readiness checklist, `PLANNING_LEARNINGS.md` loop) | ✅ | ✅ |
+| Proposal rigor tiers + production-readiness sections, design-it-twice | ✅ | ✅ |
+| Independent review panels for proposals and plans (`design-reviewer` per lens, verified findings, pass mark) | ✅ | ✅ |
+| Planning lints (`proposal-check.mjs`, `plan-check.mjs`) + cold-read brief certification (`brief-auditor`) | ✅ | ✅ (also inside the wave planning pass) |
+| Learnings read back into review (`learnings.mjs`, recurring-rule promotion) | ✅ | ✅ |
+| Decision policy (`docs/DECISION_POLICY.md`: mechanical / taste / reserved, one approval gate, `arbiter` agent, `decisions.mjs` audit view) | ✅ | ✅ (waves run gated, trains unattended) |
+| Guard hooks (`scripts/hooks/guard.mjs`) | main-branch force-push / delete protection | + claim-guard, lifecycle-guard, done-gate, subagent event log |
+| Claims enforced (edit-time hook + `land` exit 6 on paths outside `touches:`) | — | ✅ |
+| Sprint tiers (`tier: routine / standard / complex / critical` — how hard the work is; assigned by the planner per `docs/sprints/tier-rubric.md`, with a reason; linted) | ✅ (informational: which model to run the session on) | ✅ |
+| Dynamic model + effort routing by tier (`routing.json`: executor and reviewer per tier), escalation up the ladder (`ESCALATE` → next tier → arbiter → user), outcome tracking and calibration (`tiers.mjs`) | agent definitions pin model/effort | ✅ |
 | Completion record (structured Completion Log, inline `Evidence:` lines, `close-check.mjs` lint, `docs/sprints/evidence/`) | ✅ (lint before the `done/` move) | ✅ (lint gates `merge-sprint.sh land`; commits stamped at land) |
 | Concurrent sprints | one at a time | many, in parallel agents |
-| Wave orchestration (`/sprint wave` + `sprint-planner`/`sprint-executor`/`wave-planner` agents) | — | ✅ |
+| Wave orchestration (`/sprint wave`: `plan-flow` + one `sprint-flow` workflow run per sprint; hand-dispatch fallback without the Workflow tool) | — | ✅ |
+| Independent per-sprint review in the orchestration layer (reviewer lenses by risk, verified findings, bounded fix loop) | — | ✅ |
+| Batch landing (`assemble-train.sh`: N finished sprints → one merge, one gate run) + rolling admission (`claims.mjs ready`, `reserve-wave.sh --add`) | — | ✅ |
+| Running-agents view (`agents.mjs` over the hook event log) | — | ✅ |
 | Serial-train orchestration (`/sprint train`: shared worktree, batched CI checkpoints) | — | ✅ |
 | File claims (`touches:` + `claims.mjs`) | — | ✅ |
 | Main-branch mutex (`lock.sh`) | — | ✅ |

@@ -2,7 +2,9 @@
 name: wave-planner
 description: Use in /sprint wave Step 2c when sprint-planner reports raise CROSS_SPRINT signals (shared foundations, contract misalignment between wave members) to propose a wave reshape.
 tools: Read, Grep, Glob, Bash, Edit
-model: sonnet
+model: opus
+effort: high
+maxTurns: 80
 ---
 
 You are the wave-planner sub-agent. Your dispatch prompt names: the wave roster (sprint

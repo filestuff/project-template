@@ -7,15 +7,25 @@
 //   claims.mjs check --sprint S-NNN              # that sprint's touches vs all OTHER in-flight sprints
 //   claims.mjs check --paths a,b [--sprint S-NNN] # explicit paths vs in-flight (excluding own sprint)
 //   claims.mjs add S-NNN <path...> [--no-push]   # locked main commit appending to touches
+//   claims.mjs covers --sprints S-A,S-B           # paths on stdin (one per line) vs those
+//                                                 # sprints' touches; prints the uncovered ones
+//
+//   claims.mjs ready [--wave W-<id>] [--json]     # backlog sprints startable RIGHT NOW (rolling
+//                                                 # wave admission): deps landed, claims non-empty,
+//                                                 # unreserved (or reserved by --wave), disjoint from
+//                                                 # in-flight + other waves' reservations + each other
 //
 // Claim grammar: exact repo-relative path | directory prefix ending in /** |
 // token (defined in claims-tokens.json). Exit codes: 0 free · 2 overlap · 1 error.
+// `ready`: 0 always for a readable repo (nothing ready is not an error) · 1 usage error.
+// `covers`: 0 every path is claimed · 2 some are not (listed) · 3 a named sprint has no
+// touches at all, so nothing can be verified.
 
-import { join, dirname } from "node:path";
+import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { repoRoot, readSprintFile, setField, allSprints } from "./frontmatter.mjs";
+import { repoRoot, readSprintFile, setField, allSprints, shortLabel } from "./frontmatter.mjs";
 
 // Claim tokens are project-specific — defined in the sibling claims-tokens.json
 // ({ "tokens": { "name": ["path", "dir/**", …] } }), seeded at bootstrap.
@@ -41,6 +51,14 @@ function patternsOverlap(a, b) {
     return a.value.startsWith(b.value) || b.value.startsWith(a.value);
   const [exact, prefix] = a.kind === "exact" ? [a, b] : [b, a];
   return exact.value.startsWith(prefix.value);
+}
+
+// Is a concrete repo-relative path inside any of these claims? (The land-time check:
+// claims are only a guarantee if what a branch actually changed is held against them.)
+export function pathCovered(path, claims) {
+  for (const claim of claims)
+    for (const p of expand(claim)) if (p.kind === "prefix" ? path.startsWith(p.value) : path === p.value) return true;
+  return false;
 }
 
 export function claimsOverlap(claimA, claimB) {
@@ -109,6 +127,52 @@ export function planStatus(s, byId) {
   return "fresh";
 }
 
+// Real pairwise overlap (unlike sprintsClaimOverlap, an empty manifest overlaps nothing —
+// this mirrors `check`/start.sh, so "ready" implies start.sh's claims check passes).
+function touchesOverlap(a, b) {
+  for (const ca of a.touches ?? []) for (const cb of b.touches ?? []) if (claimsOverlap(ca, cb)) return true;
+  return false;
+}
+
+// "What can start right now?" — the mechanical admission query for a rolling wave.
+// A backlog sprint is READY iff: (a) every depends_on sprint is landed (done/ or
+// done/archive/); (b) it has non-empty touches; (c) it is unreserved or reserved by
+// `wave`; (d) its touches are disjoint from every in-flight sprint and from every
+// backlog sprint reserved by a wave OTHER than `wave`; (e) in ascending sprint-number
+// order, it is disjoint from the sprints already accepted (the whole set can start
+// together). Returns { ready: [sprint…], blocked: [{ sprint, reason }] } — each blocked
+// sprint carries its FIRST failing reason, checked in the order above.
+export function computeReady(sprints, wave) {
+  const num = (s) => parseInt(String(s.sprint).replace(/\D/g, ""), 10) || 0;
+  const byId = new Map(sprints.map((s) => [s.sprint, s]));
+  const inFlight = sprints.filter((s) => s.dir === "in-progress");
+  const reservedElsewhere = sprints.filter((s) => s.dir === "backlog" && s.wave && s.wave !== wave);
+  const ready = [];
+  const blocked = [];
+  const backlog = sprints.filter((s) => s.dir === "backlog").sort((a, b) => num(a) - num(b));
+  for (const s of backlog) {
+    const block = (reason) => blocked.push({ sprint: s.sprint, reason });
+    let unmet = null;
+    for (const d of s.depends_on ?? []) {
+      const dep = byId.get(d);
+      if (dep && ["done", "done/archive"].includes(dep.dir)) continue;
+      unmet = `depends on ${d} (${dep ? dep.dir : "missing"})`;
+      break;
+    }
+    if (unmet) { block(unmet); continue; }
+    if ((s.touches ?? []).length === 0) { block("no claims"); continue; }
+    if (s.wave && s.wave !== wave) { block(`reserved by ${s.wave}`); continue; }
+    const flying = inFlight.find((t) => touchesOverlap(s, t));
+    if (flying) { block(`claims overlap ${flying.sprint} (in flight)`); continue; }
+    const held = reservedElsewhere.find((t) => t.sprint !== s.sprint && touchesOverlap(s, t));
+    if (held) { block(`claims overlap ${held.sprint} (reserved ${held.wave})`); continue; }
+    const ahead = ready.find((t) => touchesOverlap(s, t));
+    if (ahead) { block(`claims overlap ${ahead.sprint} (ready ahead of it)`); continue; }
+    ready.push(s);
+  }
+  return { ready, blocked };
+}
+
 function inFlightSprints(root) {
   const dir = join(root, "docs/sprints/in-progress");
   if (!existsSync(dir)) return [];
@@ -151,6 +215,7 @@ function parseArgs(argv) {
     if (argv[i] === "--sprint") args.sprint = argv[++i];
     else if (argv[i] === "--paths") args.paths = argv[++i].split(",").map((s) => s.trim());
     else if (argv[i] === "--wave") args.wave = argv[++i];
+    else if (argv[i] === "--sprints") args.sprints = argv[++i].split(",").map((s) => s.trim()).filter(Boolean);
     else if (argv[i] === "--no-push") args.noPush = true;
     else args.positional.push(argv[i]);
   }
@@ -269,6 +334,32 @@ if (cmd === "check") {
   } finally {
     execFileSync(lockSh, ["release", token]);
   }
+} else if (cmd === "covers") {
+  // Land-time guarantee: every path a branch changed must be inside its roster's touches.
+  if (!args.sprints?.length) {
+    console.error("usage: <paths on stdin> | claims.mjs covers --sprints S-A,S-B");
+    process.exit(1);
+  }
+  const claims = [];
+  const unclaimed = [];
+  for (const id of args.sprints) {
+    const file = findSprintFile(root, id);
+    if (!file) {
+      console.error(`${id}: no sprint file in in-progress/ or backlog/ on the ledger`);
+      process.exit(1);
+    }
+    const touches = readSprintFile(file).touches ?? [];
+    if (touches.length === 0) unclaimed.push(id);
+    claims.push(...touches);
+  }
+  if (unclaimed.length) {
+    console.log(`NO-CLAIMS: ${unclaimed.join(", ")} — no touches: to check against`);
+    process.exit(3);
+  }
+  const paths = readFileSync(0, "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
+  const outside = paths.filter((p) => !pathCovered(p, claims));
+  for (const p of outside) console.log(p);
+  process.exit(outside.length ? 2 : 0);
 } else if (cmd === "waves") {
   // Derived parallel schedule over backlog + in-progress (deps + claim-disjointness).
   const sprints = allSprints(root);
@@ -295,8 +386,56 @@ if (cmd === "check") {
     console.log(
       `Unscheduled (dependency cycle?): ${unscheduled.map((s) => s.sprint).join(", ")}`,
     );
+} else if (cmd === "ready") {
+  // Own arg parsing: --json is specific to this subcommand (parseArgs is shared and untouched).
+  let wave = null;
+  let json = false;
+  let bad = null;
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "--json") json = true;
+    else if (rest[i] === "--wave") {
+      wave = rest[++i];
+      if (!wave || !/^W-\S+$/.test(wave)) bad = `--wave needs a wave id (W-<id>), got '${wave ?? ""}'`;
+    } else bad = `unknown argument: ${rest[i]}`;
+  }
+  if (bad) {
+    console.error(bad);
+    console.error("usage: claims.mjs ready [--wave W-<id>] [--json]");
+    process.exit(1);
+  }
+  const sprints = allSprints(root);
+  const byId = new Map(sprints.map((s) => [s.sprint, s]));
+  const { ready, blocked } = computeReady(sprints, wave ?? undefined);
+  if (json) {
+    console.log(
+      JSON.stringify(
+        {
+          ready: ready.map((s) => ({
+            sprint: s.sprint,
+            file: relative(root, s.file),
+            plan: planStatus(s, byId),
+            wave: s.wave ?? null,
+            risk: s.risk ?? "low",
+            tier: s.tier ?? "standard",
+            story_points: s.story_points ?? null,
+            touches: s.touches ?? [],
+          })),
+          blocked,
+        },
+        null,
+        2,
+      ),
+    );
+  } else {
+    for (const s of ready)
+      console.log(
+        `${s.sprint}  ${s.story_points ?? "?"}pt  ${s.risk ?? "low"}/${s.tier ?? "standard"}  ${planStatus(s, byId)}  ${shortLabel(s)}`,
+      );
+    for (const b of blocked) console.log(`blocked: ${b.sprint} — ${b.reason}`);
+    console.log(`SUMMARY ready: ${ready.length} startable, ${blocked.length} blocked`);
+  }
 } else {
-  console.error("usage: claims.mjs check|add|waves ...");
+  console.error("usage: claims.mjs check|add|covers|waves|ready ...");
   process.exit(1);
 }
 }

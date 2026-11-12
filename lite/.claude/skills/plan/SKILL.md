@@ -6,7 +6,7 @@ description: >
   sprints", or "seed the backlog" — and, as "/plan recut", when execution has invalidated
   un-started backlog sprints ("recut the plan", "replan the backlog").
 argument-hint: "[feature description | proposal number | plan document path | recut <NNN | S-A S-B …>]"
-allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill"
+allowed-tools: "Read Edit Write Glob Grep Bash AskUserQuestion Skill Agent Task Workflow WebSearch WebFetch"
 ---
 
 # Plan Breakdown Skill
@@ -17,8 +17,9 @@ Takes a reviewed plan and breaks it into sprint files in `docs/sprints/backlog/`
 
 In scope: breaking a reviewed plan into backlog sprint files, and re-cutting un-started
 backlog sprints when execution invalidates their premises (Recut flow, below). Out of
-scope: plan reviews (those run separately first if used — this skill *consumes* their
-reports, Phase 1), per-sprint certification (`/sprint plan` — this skill leaves
+scope: reviews of the SOURCE plan (those run separately first if used — this skill
+*consumes* their reports, Phase 1; the breakdown this skill produces is reviewed by its own
+panel in Phase 4), per-sprint certification (`/sprint plan` — this skill leaves
 `plan_date: null`), starting execution (`/sprint start`). Null result: if the plan
 genuinely fits one sprint, create one sprint and say so — do not manufacture a multi-sprint
 split.
@@ -34,6 +35,30 @@ boundary adjustments) split into sequential per-item calls, then one final call 
 the assembled set; mutually exclusive choices narrow to the top 3 plus an explicit "none
 of these — show the rest", then decide. A wall-of-text question the user must parse for
 options is a protocol violation, not a style choice.
+
+## Autonomy (`docs/DECISION_POLICY.md`)
+
+`/plan` runs in the policy's **gated** mode by default: it decides what the rules settle,
+decides reversible details in the open, and asks the user once.
+
+- **Mechanical — decide and record, never ask:** reuse-vs-rebuild where the decision
+  ladder names existing code; deferring work the plan's goal does not need (to
+  `docs/TODOS.md`); story points; `risk` and `tier`; `depends_on` edges the code dictates.
+- **Taste — decide, record with the rejected option, list at the gate:** where a sprint
+  boundary falls between two workable seams; whether two small sprints merge; the order
+  of independent sprints; the wording of an Open Question's recommended option.
+- **Reserved — always asked:** dropping or adding scope the source plan asked for; the
+  complexity-smell reduce-or-proceed call (Phase 2); a phased split of a breakdown past
+  ~10 sprints; an unresolved review decision; a due stage gate; breaking down an
+  unreviewed proposal; a conflict with an accepted ADR; a panel blocker that survives.
+
+Every mechanical and taste decision goes into the Plan record's scope-decisions table
+(Phase 4) with its class — that table is the record the policy requires. The **approval
+gate** is one brief at the end of Phase 4, before the commit: "decided for you" (the taste
+rows, numbered — accept all, or overturn by number) and "yours to decide" (each reserved
+question via AskUserQuestion). When the user asks to be consulted on everything
+("interactive", "ask me about the boundaries"), ask the taste decisions as they arise
+instead — Phase 2 step 4 then confirms the boundaries as it always did.
 
 ## Pipeline
 
@@ -52,6 +77,15 @@ options is a protocol violation, not a style choice.
      `/proposal NNN`"** (recommended) / **"Plan the next stage anyway"**. On override,
      record `gate: skipped by user YYYY-MM-DD` on that stage before planning — a skipped
      gate is a recorded decision, not an invisible one.
+     **Reviewed proposals only.** A proposal that carries a `**Rigor**:` line must also
+     carry a `## Review record` (written by `/proposal` Step 6) before it is broken down —
+     without one, stop and ask via AskUserQuestion: **"Run the review first —
+     `/proposal NNN`"** (recommended) / **"Break it down unreviewed"**. On override, write
+     `REVIEW: OPEN — skipped by user YYYY-MM-DD` as that section. A record ending
+     `REVIEW: OPEN — …` is not a block: read the carried findings under Open questions —
+     they are inputs to the cut. Proposals with no Rigor line (filed plans, pre-1.11
+     proposals) pass through unchanged. Note the proposal's Rigor tier: it scales Phase 4's
+     review and seeds the sprints' `risk:`.
    - Free text → treat as a feature description; supplement from existing planning docs.
    - No argument → if `docs/execution-plan.md` exists, default to it; otherwise ask the user
      what to break down.
@@ -65,7 +99,12 @@ options is a protocol violation, not a style choice.
    implies a review exists but none is visible in either place, ask them to
    paste/summarize it.
 4. Read the design-system doc (if one exists) when the work is UI/visual.
-5. Read the newest 20 entries of `docs/sprints/PLANNING_LEARNINGS.md` when present — it
+5. Read the ADR list in `docs/decisions/` (titles and status; then in full any ADR whose
+   subject the plan touches). An accepted ADR binds the breakdown: a sprint that would
+   contradict one is not cut — the conflict goes back to the user as a decision
+   (supersede the ADR via `/adr`, or change the plan), and every ADR that constrains a
+   sprint is cited verbatim under that sprint's Binding constraints.
+6. Read the newest 20 entries of `docs/sprints/PLANNING_LEARNINGS.md` when present — it
    lists how past briefs failed; don't seed those gaps into new sprints (`/sprint plan` and the wave planners
    already read it; batch breakdown must not reintroduce what they'd have to fix).
 
@@ -119,7 +158,13 @@ options is a protocol violation, not a style choice.
      features into one mega-sprint.
    - **Boundary test**: a reviewer could accept one sprint while rejecting its
      neighbor. If rejecting sprint B necessarily reopens sprint A, the seam is wrong.
-4. **Confirm boundaries via AskUserQuestion** — present the proposed split as a numbered list
+4. **Settle the boundaries.** Gated mode (the default): the split is a set of taste
+   decisions — make them by the policy's principles (disjoint file regions first, fewest
+   `depends_on` edges, the boundary test above), note each non-obvious seam with the
+   alternative you rejected, and carry the numbered split to the approval gate at the end
+   of Phase 4; do not stop here. Stop and ask now only for what is reserved (see
+   Autonomy). Interactive mode: **confirm via AskUserQuestion** — present the proposed
+   split as a numbered list
    with goals + the dependency chain, calling out which sprints are meant to run in parallel;
    then decide per the Question protocol: "accept as proposed" (recommended) plus the
    concrete adjustments as options — 5+ contested boundaries go through the per-item split
@@ -144,7 +189,19 @@ options is a protocol violation, not a style choice.
 For each sprint, starting at S-{highest+1}, create a file from
 `docs/sprints/SPRINT_TEMPLATE.md` in `docs/sprints/backlog/` and populate:
 - **Frontmatter**: sprint ID, `status: backlog`, goal, a concise `short:` label,
-  `depends_on`, `blocks`, `tags`, `story_points`. When the source is a proposal, also set
+  `depends_on`, `blocks`, `tags`, `story_points`, `risk`, `tier`. **`risk: high`** when
+  the sprint's Files touch a surface in the risk-tier table of
+  `docs/sprints/review-calibration.md` (auth/permissions, schema/migrations, public or
+  cross-sprint contracts, secrets, payment or irreversible mutation, trust-boundary
+  parsing) — decided per sprint from its own files, so a `critical` proposal usually
+  yields a few high-risk sprints and several low ones, not all-high. **`tier:`** is how
+  hard the work is (`docs/sprints/tier-rubric.md`), and here it is only **provisional**:
+  `complex` when `risk` is high or the source plan describes the sprint as introducing a
+  new boundary, abstraction or cross-module change; otherwise `standard`. Never `routine`
+  or `critical` from this skill — both need a read of the code this skill does not do; the
+  planner assigns the real tier at certification. Size is not difficulty: story points do
+  not set the tier. Leave `tier_reason: null`. Both keys are mechanical — state them,
+  don't ask. When the source is a proposal, also set
   `proposal: NNN` and `stage: k` (`stage: 1` for un-staged proposals; both stay `null`
   otherwise) — informational backlinks, ignored by scripts.
 - **Context** (top of body): the source plan's path + this sprint's originating task
@@ -168,6 +225,10 @@ For each sprint, starting at S-{highest+1}, create a file from
 - **Interface Contract** (Produces / Consumes): the cross-sprint signatures. For every
   `depends_on` edge, fill the dependent's **Consumes** and the blocker's **Produces** with the
   same agreed signature — this is what lets the two sprints run in parallel.
+- **Production notes** (`risk: high` sprints only — delete the section otherwise):
+  Rollback, Observability, Security, each a concrete answer carried down from the
+  proposal's Production readiness section where one exists, narrowed to what THIS sprint
+  changes. The executor treats them as binding.
 - **Technical Details**, **Dependencies**, **Testing** (test-first pattern reference),
   **Risks**, **Open Questions** — written **decision-ready**: each question carries 2–4
   concrete options with their implications, so a later planning pass or pre-sprint round
@@ -223,6 +284,49 @@ a zero-findings check says so in one line ("coverage: 9/9 requirements mapped, n
 orphans"), never a bare pass. An issue with an obvious fix is still an issue: fix it in
 the sprint file before the commit, don't wave it through.
 
+**Mechanical lint (blocking).** The checks above are yours; this one is not:
+`node scripts/sprint/plan-check.mjs S-{first} … S-{last}` must exit 0 — it verifies what
+re-reading misses (every `depends_on` exists and the graph has no cycle, every Consumes
+names something its dependency's Produces states, surviving template placeholders,
+`risk: high` sprints carry Production notes, every `file:line` citation resolves). After
+the Plan record is appended (below), re-run it with `--record <source doc>` to check the
+coverage map and the sentinel line. Paste both SUMMARY lines in the Parallelization
+Summary.
+
+**Independent review (blocking when it runs).** You wrote this breakdown; you cannot be
+its only reviewer. Run the plan panel when ANY holds: the breakdown has 3+ sprints, the
+source proposal's Rigor is `standard` or `critical`, or any sprint is `risk: high`. A
+1–2 sprint low-risk breakdown skips it — say so in one line ("plan panel: skipped —
+2 low-risk sprints").
+
+The panel is four fresh-context `design-reviewer` subagents, one per plan lens —
+**coverage**, **slicing**, **contracts**, **executability** (`docs/proposals/review-lenses.md`)
+— blind to each other and to this conversation. With the Workflow tool:
+`Workflow({ name: "design-review", args: { kind: "plan", artifact: "<abs source path>",
+repoRoot: "<abs repo root>", lenses: ["coverage", "slicing", "contracts", "executability"],
+sprintFiles: ["<abs path of each new sprint file>"] } })`. Without it: dispatch the four
+`design-reviewer`s in ONE message via the Agent tool (prompt: source path, sprint file
+paths, repo root, the lens name — nothing of your own reasoning), then one
+`finding-verifier` per `blocker` / `major` finding, again in one message.
+
+Same gate as `/proposal` Step 6: it passes iff no `blocker` survives verification and
+every lens scores ≥ 7. Fix what survived in the sprint files (a re-cut seam, a missing
+Produces line, an unnamed file), re-run `plan-check.mjs`, then re-run only the failing
+lenses — at most two rounds. A fix that changes a boundary the user confirmed in Phase 2,
+or drops or adds scope, goes back to the user via AskUserQuestion; mechanical fixes do
+not. What still stands after round two is written into the owning sprint's Open Questions
+as a decision-ready item and listed under `UNRESOLVED DECISIONS:` in the Plan record — a
+surviving blocker is never waved through. Fail-soft, honestly: if subagents cannot run,
+record "plan panel: could not run ([why])" — never as a pass.
+
+**Approval gate (gated mode — before the commit).** Present the breakdown once: the
+numbered sprint list with goals, the dependency chain and what runs in parallel; then
+"decided for you" — the scope-decisions table's taste rows, numbered, accept all or
+overturn by number; then "yours to decide" — each reserved question still open, via
+AskUserQuestion. Apply what the user overturns (re-run `plan-check.mjs`, and the failing
+panel lenses if a boundary moved), update the table, then commit. Nothing to decide →
+say so in one line and commit.
+
 When the source is a proposal, include its status write-back in the same commit: flip
 `**Status**: draft` → `active (stage k/N)` on first consumption (`1/1` for un-staged
 proposals), and set the consumed stage's status line to `planned (S-{first}..S-{last})`
@@ -235,9 +339,15 @@ file if absent) in the same commit:
 - Heading: `### YYYY-MM-DD — stage k breakdown (S-{first}..S-{last})` (or `— recut …`,
   see Recut flow).
 - The coverage map table from the exit gate (requirement/task → sprint ID).
-- A scope-decisions table: `# | item | ACCEPTED / DEFERRED / CUT | one-line reasoning` —
-  every Phase 2 scope-gate outcome, DEFERRED rows carrying their `docs/TODOS.md` backlink.
+- A scope-decisions table: `# | item | ACCEPTED / DEFERRED / CUT | class | decided by |
+  one-line reasoning (principle; for taste rows also the rejected option)` — every Phase 2
+  scope-gate outcome and every boundary decision, DEFERRED rows carrying their
+  `docs/TODOS.md` backlink. `class` is `mechanical`, `taste` or `reserved`; `decided by`
+  is `agent` or `user`. A taste row the user overturned at the gate is rewritten as
+  `reserved | user`.
 - Review inputs consumed (the report section's name, or "none").
+- Plan panel: one line per lens — `lens score/10 — kept n, refuted m, fixed k` — or
+  `skipped — [why]` / `could not run — [why]`.
 - Last line, machine-checkable: exactly `NO UNRESOLVED DECISIONS`, or `UNRESOLVED
   DECISIONS:` followed by one bullet per open item (each also lives as a decision-ready
   Open Question in the sprint that owns it).

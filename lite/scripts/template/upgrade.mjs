@@ -680,6 +680,25 @@ function cmdMergeClaudeBlock(argv) {
 
 // --- merge-settings ---------------------------------------------------------
 
+const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+// Stable JSON (sorted keys) so two hook groups that differ only in key order compare equal.
+function canonical(v) {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
+  if (isPlainObject(v)) return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`).join(",")}}`;
+  return JSON.stringify(v);
+}
+
+// A matcher group is template-owned iff it has handlers and every one is a command that
+// runs a script under scripts/hooks/ (the directory the template ships its hooks in).
+function isTemplateHookGroup(group) {
+  const handlers = isPlainObject(group) && Array.isArray(group.hooks) ? group.hooks : [];
+  return (
+    handlers.length > 0 &&
+    handlers.every((h) => isPlainObject(h) && h.type === "command" && typeof h.command === "string" && /(^|[\s"'/])scripts\/hooks\//.test(h.command))
+  );
+}
+
 function cmdMergeSettings(argv) {
   const args = parseArgs(argv);
   const newPath = args.flags.new;
@@ -714,8 +733,34 @@ function cmdMergeSettings(argv) {
     }
     merged.permissions = mergedPerms;
   }
+  // hooks: merged per event. The template OWNS every matcher group whose handlers all
+  // run something under scripts/hooks/ — those are replaced wholesale by the incoming
+  // set on each merge (so a changed or dropped template hook never leaves a stale twin
+  // behind, and re-running adds nothing). Any other group is the downstream repo's own
+  // and is kept untouched, in place.
+  if (isPlainObject(newSettings.hooks) || isPlainObject(existing.hooks)) {
+    const have = isPlainObject(existing.hooks) ? existing.hooks : {};
+    const incoming = isPlainObject(newSettings.hooks) ? newSettings.hooks : {};
+    const out = {};
+    for (const event of new Set([...Object.keys(have), ...Object.keys(incoming)])) {
+      const mine = (Array.isArray(have[event]) ? have[event] : []).filter((g) => !isTemplateHookGroup(g));
+      const theirs = (Array.isArray(incoming[event]) ? incoming[event] : []).filter(
+        (g) => !mine.some((m) => canonical(m) === canonical(g)),
+      );
+      if (mine.length + theirs.length > 0) out[event] = [...mine, ...theirs];
+    }
+    if (Object.keys(out).length > 0) merged.hooks = out;
+    else delete merged.hooks;
+  }
+
+  // env: merged per variable; a value the downstream repo already set wins (bootstrap
+  // writes env.SPRINT_MAIN_BRANCH there, and operators tune the rest).
+  if (isPlainObject(newSettings.env)) {
+    merged.env = { ...newSettings.env, ...(isPlainObject(existing.env) ? existing.env : {}) };
+  }
+
   for (const [key, value] of Object.entries(newSettings)) {
-    if (key === "permissions") continue;
+    if (key === "permissions" || key === "hooks" || key === "env") continue;
     if (!Object.hasOwn(existing, key)) merged[key] = value;
   }
 

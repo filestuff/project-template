@@ -24,18 +24,31 @@ file paths.
 
 | Owner | Does | Touches |
 |-------|------|---------|
-| **Orchestrator** (this session — the "master") | Compute + reserve the wave; run the planning pass (dispatch planners, batch the decision round, write answers into sprint files, two locked commits); per sprint run start (dep check, claims check, `start.sh` under the lock, create the worktree); dispatch `sprint-executor` subagents; **advise** blocked subagents (see The advisor loop); collect reports; **serialize** Phase 3 completions; adjudicate review findings | `main` (lock-serialized), the ledger docs, the user |
+| **Orchestrator** (this session — the "master") | Compute + reserve the wave; run the planning pass (launch `plan-flow`, hold the decision round, write answers into sprint files, two locked commits); per sprint run start (dep check, claims check, `start.sh` under the lock, create the worktree); launch one `sprint-flow` run per sprint; act on what each run returns (grant claims, take parked decisions to the user, re-launch); **land** ready sprints in batches under the lock; admit newly unblocked sprints; adjudicate the post-wave review | `main` (lock-serialized), the ledger docs, the user |
 | **Planning subagent** (`sprint-planner`, one per unplanned/stale sprint) | Verify + deepen ONE sprint file against current `main`: staleness, contract drift, deliverable detail, `touches:`, decision-ready questions; set `plan_date` | its assigned sprint file only (in the wave's planning worktree — the orchestrator commits) |
+| **Brief auditor** (`brief-auditor`, one per planned sprint) | Cold-read ONE planned sprint file as its future executor: what it would have to ask or assume. Its verdict, not the planner's, is what lets `plan_date` stand | nothing — verdict only |
+| **Arbiter** (`arbiter`, on demand) | Classify and decide what a planner or executor raised and may not decide itself, under `docs/DECISION_POLICY.md`: answers mechanical and taste decisions with a recorded rationale, returns reserved ones shaped for the user | nothing — decision only |
 | **Wave-planning subagent** (`wave-planner`, conditional) | Cross-sprint constraint check when planner reports signal it (shared foundations, contract misalignment) | the wave's wave-plan.md only |
-| **Execution subagent** (`sprint-executor`, one per sprint) | PROTOCOL **Phase 2 only** — verify the brief, implement deliverables test-first, gate, commit atomically, run a `reviewer` child before DONE — inside its assigned worktree; may spawn read-only Explore/debug children (see Executor children) | its worktree branch only + its report file |
+| **Execution subagent** (`sprint-executor`, one per sprint) | PROTOCOL **Phase 2 only** — verify the brief, implement deliverables test-first, gate, commit atomically, write the Completion Log — inside its assigned worktree; fixes review findings when handed them; returns BLOCKED for a decision it may not make and ESCALATE for work beyond it. It never reviews its own work | its worktree branch only + its report file |
 | **Doc-sync subagent** (`doc-sync`, one per completing sprint) | Step 5 completion pass: resolve the diff base (`git -C <worktree> merge-base HEAD main`), run PROTOCOL Phase 3's doc-sync pass and `/adr check` over the diff | nothing — docs/ADR signal only |
-| **Reviewer subagent** (`reviewer`) | Per-sprint branch review (as the executor's child) and the post-wave broad review over merged `main` | nothing — findings list only |
+| **Reviewer subagent** (`reviewer`) | Per-sprint branch review — dispatched by the orchestration layer, never by the author: one pass, or three focused lenses for a `risk: high` sprint — and the post-wave broad review over merged `main` | nothing — findings list only |
+| **Finding verifier** (`finding-verifier`) | Tries to refute one Critical/Important review finding before anyone acts on it; re-checks a "fixed" finding against the new HEAD | nothing — verdict only |
 
 Every subagent role — including `doc-sync` — has an agent definition under `.claude/agents/`
-with `model: sonnet` pinned — **never dispatch a definition-less generic subagent in a
-wave, and never pass a spawn-time `model` override**: the Agent tool accepts one, so skipping
-the pin (or passing `model` explicitly) lets a subagent silently inherit the master's
-(expensive) model.
+that pins its `model` and `effort` — **never dispatch a definition-less generic subagent in
+a wave**: it would silently inherit the master's (expensive) model. The one sanctioned
+spawn-time `model` override is the executor's, and only with the value
+`scripts/sprint/routing.json` gives for that sprint (see Roles and models).
+
+**What is enforced, not just asked.** `scripts/hooks/guard.mjs` (wired in
+`.claude/settings.json`) runs before every Bash and file-edit call of every agent: an edit
+inside a sprint worktree outside that sprint's `touches:` is refused (the agent is told to
+return NEEDS_CLAIM); a subagent running a lifecycle script, pushing, or committing with
+`--no-verify` is refused; a force-push or deletion of the main branch is refused for
+everyone; and under the workflow variant an executor's DONE is refused while its
+Completion Log fails `close-check.mjs`. These are early feedback — a shell redirect can
+still write a file no hook sees — so the binding check is `merge-sprint.sh land`'s
+claims check (Step 5, exit 6). Decisions are governed by `docs/DECISION_POLICY.md`.
 
 The orchestrator's primary checkout stays parked on `main` (it is the lifecycle ledger). It
 **never** enters a worktree — it creates them with `git worktree add` and hands the path to a
@@ -124,9 +137,16 @@ paths for file edits. Either is fine; never use `EnterWorktree`.
    W-…)` for a wave id that is not yours (another session's roster — treat like in-flight),
    or `⚠️ no claims` (it isn't parallel-safe — run it solo via plain `/sprint start`). Members
    tagged `⚠ unplanned` or `⚠ stale plan` stay in the wave — Step 2 plans them before dispatch.
-2. Present the set to the user and confirm — per member: ID, goal, points, plan status
-   (`plan_date` or unplanned/stale), and open-question count. A wave of 2–4 is typical; more
-   than that, ask whether to cap it.
+2. Present the set to the user and confirm — per member: ID, goal, points, `risk`/`tier`,
+   plan status (`plan_date` or unplanned/stale), and open-question count. A wave of 2–4 is
+   typical; more than that, ask whether to cap it. In the same confirmation settle the two
+   things that would otherwise interrupt the wave later (AskUserQuestion):
+   - **Autonomy** (`docs/DECISION_POLICY.md`): **gated** *(recommended, the default)* —
+     mechanical and taste decisions are made and recorded, taste ones are listed for you at
+     the decision round and the wave close, reserved ones are always asked; or
+     **interactive** — taste decisions are asked too.
+   - **Push policy** for the wave's code-bearing push (P3): **ask at wave end**
+     *(recommended when a platform auto-deploys main)*, **auto-push**, or **hold**.
 
 ### Step 1.5 — Reserve the wave
 
@@ -159,15 +179,45 @@ feed any into the decision round (2e). A wave planned just-in-time via `/sprint 
 typically skips everything; later waves typically re-plan — that is the intended cost
 profile. If **every** member skips, no planning worktree is needed — go straight to 2e.
 
-**2b — Planning fan-out (parallel, in a planning worktree).** First create the wave's
+**2b — Planning pass (one workflow run, in a planning worktree).** First create the wave's
 planning worktree:
 `git worktree add .claude/worktrees/wave-W-<id>-plan -b wave-W-<id>-plan main`.
-Then dispatch one **`sprint-planner`** subagent per non-skipped member, all in a single
-message, using the **Planning dispatch prompt** below — pass only the sprint ID, the
-absolute backlog-file path **inside the planning worktree**, the repo root, the wave roster
-(IDs + `touches:`), and the sprints landed since its `plan_date`. Planners edit their
-(pairwise-distinct) files in the worktree; the primary checkout — the ledger — **stays
-clean throughout**, so other waves' locked transactions are never blocked by this pass.
+Then launch the **`plan-flow`** workflow over the non-skipped members:
+
+```
+Workflow({ name: "plan-flow", args: {
+  waveId: "W-<id>", repoRoot: "<abs repo root>", autonomy: "<gated | interactive>",
+  rosterSummary: "S-AAA touches [...]; S-BBB touches [...]",
+  members: [{ sprint: "S-NNN", file: "<abs backlog-file path INSIDE the planning worktree>",
+              landedSince: "S-CCC (docs/sprints/done/…), …" }],     // or "none"
+  routing: <the parsed contents of scripts/sprint/routing.json>
+} })
+```
+
+Each member flows on its own through three stages — no member waits for another:
+
+1. **Plan** — a `sprint-planner` verifies and deepens the member's file against current
+   code, and **assigns its `tier:`** — how hard the work is, which decides the model and
+   effort that will execute and review it (`docs/sprints/tier-rubric.md`). The planner has
+   just read the code; `/plan`'s tier was provisional. Each verdict carries `tier` and
+   `tier_reason`. Planners edit their (pairwise-distinct) files in the worktree; the primary
+   checkout — the ledger — **stays clean throughout**, so other waves' locked
+   transactions are never blocked by this pass.
+2. **Audit** — a `brief-auditor` cold-reads the file as its future executor, and checks
+   independently any claim that the sprint is `routine` (the cheapest setting — a downgrade
+   that does not hold is a blocking item). A planner
+   cannot certify the brief it wrote: its `plan_date` is provisional until a fresh reader
+   agrees. `INSUFFICIENT` → one planner repair round with the auditor's blocking list →
+   one re-audit.
+3. **Decide** (gated runs) — each open question goes to the `arbiter`, which classifies
+   it under `docs/DECISION_POLICY.md`.
+
+The run returns `verdicts` (each with its `audit`), `missing` (planners that died —
+re-launch for those members, or `--drop` them), `uncertified`, `decided` and `ask`.
+For every **`uncertified`** member — still insufficient after the repair round — run
+`node scripts/sprint/frontmatter.mjs set <planning-worktree file> plan_date null` and
+surface it in the decision round (2e) as defer / proceed-anyway, exactly like a
+`NOT_READY` verdict. Record each verdict and audit in wave-plan.md.
 
 **2c — Wave constraints check.** Always (orchestrator, mechanical): after the planners
 return, re-run the wave math **against the planning worktree** (it holds the corrected
@@ -196,18 +246,31 @@ INDEX/ROADMAP, `--no-verify`) → release (no push — the commit carries `[skip
 the next checkpoint). Deepening is committed even for members that later drop — the work
 keeps its value and its `plan_date`.
 
-**2e — Decision round (no lock held).** Batch **all** members' questions into AskUserQuestion
-calls (≤4 questions each), labeled `S-NNN D-A: …` with the planner's options and its
-marked recommendation. More than ~8
-total questions is a planning smell — the per-planner cap is 2–3; push back rather than
-relay a quiz. `NOT_READY` / `SPLIT_SUGGESTED` verdicts surface here as defer / split /
-proceed-anyway choices — never silently drop a member (and `--drop` whatever the user
-defers).
+**2e — Decision round (no lock held).** `plan-flow` has already classified the planners'
+questions (`docs/DECISION_POLICY.md`):
+
+- **`decided`** — the arbiter's mechanical and taste rulings, each with its record line.
+  They go into 2f as written. Nothing to ask.
+- **`ask`** — reserved questions (with the arbiter's stake, options and recommendation),
+  plus any question the arbiter did not rule on. Batch them into AskUserQuestion calls
+  (≤4 questions each), labeled `S-NNN D-A: …`.
+
+Then show the gate brief once: the **taste** rulings from `decided`, numbered, one line
+each (decision — principle — rejected option). The user accepts them with a word or
+overturns any by number; an overturned one is re-recorded as `reserved, user`. Mechanical
+rulings are not listed — they are in the record. In an **interactive** wave `decided` is
+empty and every question is in `ask`.
+More than ~8 total questions is a planning smell — the per-planner cap is 2–3; push back
+rather than relay a quiz. `NOT_READY` / `SPLIT_SUGGESTED` verdicts and uncertified members
+are always the user's — defer / split / proceed-anyway — never silently drop a member
+(and `--drop` whatever the user defers).
 
 **2f — Apply decisions + locked commit #2.** Entirely under the lock (the orchestrator's
 own edits take seconds — the ledger must not sit dirty outside it):
 `lock.sh acquire wave-decisions-W-<id>` → append each answer to the sprint file's
-**Pre-Sprint Decisions** section as `- YYYY-MM-DD (wave): [decision] — [rationale]`, check
+**Pre-Sprint Decisions** section in the policy's record grammar —
+`- YYYY-MM-DD (wave, <class>, <arbiter|user>): [decision] — principle: … — rejected: … — undo: …`
+(the arbiter's RECORD line verbatim; for a user answer, `(wave, reserved, user)`) — check
 off the answered Open Questions items, apply any option-implied edits the planner
 pre-declared → re-run `claims.mjs waves` if decisions shifted touches → commit
 `sprint: wave decisions W-<id> — S-A,S-B,… [skip ci]`, release (no push — see Push policy).
@@ -241,104 +304,236 @@ Pre-Sprint Decisions).
 After the **last** member's start: **checkpoint P2** — `bash scripts/sprint/push-main.sh`
 (ledger-only; the HEAD commit carries `[skip ci]`, so this triggers no CI).
 
-### Step 4 — Fan out execution (parallel subagents)
+### Step 4 — Launch one `sprint-flow` run per sprint
 
-Dispatch **one `sprint-executor` subagent per sprint, all in a single message** (multiple tool
-calls in one turn = they run concurrently). Use the **Execution dispatch prompt** below.
-**File-based handoff:** pass only the sprint ID + worktree path + wave ledger dir — the sprint
-file *is* the brief; the subagent reads it. Do not paste the sprint's contents into the prompt
-(it would bloat your context for the rest of the session).
+Launch **one `sprint-flow` workflow run per started sprint, all in a single message**.
+Each run is independent and notifies you separately when it ends — a sprint that finishes
+early is yours to land (Step 5) while its neighbours are still executing. Do not wait for
+the slowest sprint.
 
-Before returning DONE, the executor runs a `reviewer` child over its branch diff and fixes all
-Critical/Important findings — **Step 5 receives reviewed work**, and the report discloses the
-review outcome.
+```
+Workflow({ name: "sprint-flow", args: {
+  waveId: "W-<id>", repoRoot: "<abs repo root>",
+  ledgerDir: "<abs repo root>/.claude/sprint-orchestration/W-<id>/",
+  mode: "wave", autonomy: "<gated | interactive>",
+  sprint: { id: "S-NNN", worktree: "<abs worktree path>",
+            risk: "<low | high>",                                     // from the sprint's frontmatter
+            tier: "<routine | standard | complex | critical>" },      // from the sprint's frontmatter
+  routing: <the parsed contents of scripts/sprint/routing.json>
+} })
+```
 
-A subagent returns one of: **DONE** (deliverables complete, reviewed, acceptance evidence
-gathered, report file written), **BLOCKED** / **NEEDS_CLAIM** (handle via The advisor loop
-below), or **PLAN_GAP** (the brief is wrong or too thin to execute — see Failure handling).
+`tier` picks the rung of `routing.json` the sprint starts on — model **and** effort for
+its executor and for its reviewers. A missing or unknown tier runs as `standard`.
 
-### The advisor loop
+**File-based handoff:** the run is given the sprint id and worktree — the sprint file *is*
+the brief; never paste a sprint's contents into `args`.
 
-The master is the executors' first line of support — most blockers should die here without
-reaching the user. A **BLOCKED** return arrives in the executor's structured form (QUESTION /
-CONTEXT / OPTIONS / DEFAULT). Handle it:
+Inside a run (the script is `.claude/workflows/sprint-flow.js`; you do none of this by
+hand):
 
-1. **Answer from what you already hold**: the sprint's Pre-Sprint Decisions, the wave's
-   wave-plan.md, your own plan context from Steps 1–2. Most blockers are already decided
-   there.
-2. **Answer from the repo**: a *targeted* read (a config file, an interface, a doc) is fine —
-   but never the sprint's diff or body wholesale; that budget belongs to Step 5/6 survival.
-3. **Escalate to the user** only when it is a genuine product/architecture tradeoff you
-   cannot decide: AskUserQuestion, batched if several sprints are blocked at once, labeled
-   `S-NNN: …` with the executor's OPTIONS.
+1. **Execute** — a `sprint-executor` on the model and effort routing.json gives the
+   sprint's `tier:`.
+   A **BLOCKED** executor is answered by the `arbiter` and a fresh executor continues from
+   the branch; an **ESCALATE** moves the sprint to the next tier in `routing.escalation`;
+   a dead executor is re-dispatched once.
+2. **Review** — independent of the author by construction: one `reviewer` over the branch
+   diff, or three focused lenses (correctness, security and data, tests) when the sprint
+   is `risk: high`. Reviewers run on the reviewer setting of the tier the sprint
+   **finished** on — never weaker than the executor that did the work. The executor
+   neither spawns nor briefs them.
+3. **Verify** — each Critical/Important finding goes to a `finding-verifier` told to
+   refute it; refuted findings are dropped and recorded as such.
+4. **Fix** — the executor fixes what survived, re-gates and commits; verifiers re-check
+   each fix against the new HEAD. At most two rounds. A finding the executor disputes goes
+   to the arbiter.
 
-Deliver the answer by **continuing the same subagent (SendMessage) — not a fresh dispatch**:
-its context (partial work, dead ends already explored) is the most valuable thing it has.
-Re-dispatch fresh only if the agent died (see Failure handling). For **NEEDS_CLAIM**: run
-`claims.mjs add S-NNN <path> --no-push` under the lock (checks the path is free of other
-in-flight sprints *and* other waves' reservations), then continue the subagent with "claim
-granted — mirror the touches: addition in your branch copy and proceed."
+### What a run returns
 
-Recording: the executor writes the answer into its sprint file's Pre-Sprint Decisions as
-`- YYYY-MM-DD (wave, in-flight): [decision] — [rationale]` (the file lives in its worktree);
-the master mirrors one line into the wave's wave-progress.md.
+Every run ends with a `status`, the executor's `commits` / `gate` / `close_check` lines,
+the `review` summary, a `review_record` (the lines for the sprint's `### Review` section —
+you paste them at land, Step 5), the arbiter `decisions` made along the way, any
+`escalations`, the `tier` it finished on, and an `outcome` line (assigned and final tier,
+runs, escalations, arbiter calls, fix rounds, findings — you write it into the done-file
+at land; `tiers.mjs` calibrates the rubric on it). Act on the status; record one line per sprint in wave-progress.md.
 
-### Executor children
+| Status | Meaning | You |
+|---|---|---|
+| `READY_TO_LAND` | executed, reviewed, findings fixed or refuted | land it — Step 5 |
+| `PARKED` | a decision that is the user's (`question.class: reserved`), an unresolved review finding, a review that did not complete, or an escalation past the top of the ladder | put `question` to the user (AskUserQuestion, with its stake and options), then re-launch the sprint's run with `resume: "<the answer>"` |
+| `NEEDS_CLAIM` | the sprint needs a file outside its `touches:` | `claims.mjs add S-NNN <path> --no-push` under the lock, then re-launch with `resume: "claim granted for <path> — mirror the touches: addition in your branch copy and proceed"`. Exit 2 from `claims.mjs add` = another sprint holds it: a real conflict — re-launch with `resume` telling the executor to do without the file, or sequence the sprints (re-cutting a seam is the user's call) |
+| `PLAN_GAP` | the brief is wrong | Failure handling → PLAN_GAP, then re-launch |
+| `DIED` | the executor died twice | read `git -C <worktree> log`; re-launch once, or surface it |
 
-Executors may spawn their own subagents — at most 2–3 per sprint: **Explore** (read-only
-recon of an unfamiliar subsystem), **reviewer** (the mandatory pre-completion review), and
-**debug** (a failure that resists two root-cause attempts). Every child prompt must restate
-the worktree path + `git -C` discipline (never EnterWorktree), the `touches:` list (report,
-never edit, outside it), and "do not commit — the parent commits". Children are leaves —
-they never spawn further agents. An executor that needs more children than this is holding a
-brief that is too thin: that is a PLAN_GAP, not a staffing problem. (Full rules live in
-`.claude/agents/sprint-executor.md`.)
+A re-launched run reads the branch first — committed work persists there — and continues.
+Besides `resume`, pass it where the sprint stands on the ladder so an escalation is not
+lost and the outcome stays true: `sprint.tier` = the `tier` the previous run **returned**,
+`sprint.assignedTier` = the tier in the sprint's frontmatter, and `sprint.attempt` = the
+run count (2 for the first re-launch). Confirm each `decisions` entry is in the
+sprint file's Pre-Sprint Decisions (the executor was told to record it verbatim); collect
+the taste ones for the list you show the user at the wave close (Step 6).
 
-### Step 5 — Serialize completions (orchestrator, one at a time)
+**Never auto-answer a `PARKED` question whose class is `reserved`,** in any autonomy mode,
+and never land a `PARKED` sprint over its open findings without the user saying so —
+landing unreviewed or over an open Critical is weakening a check
+(`docs/DECISION_POLICY.md`).
 
-**Do NOT fan out `/sprint done`.** `merge-sprint.sh` holds the main-lock across
-`prepare → land → finish`, *including the exit-4 pause where you apply the semantic docs* — so
-racing completions make all but one hit the lock ceiling (exit 75). Complete finished sprints
-**sequentially**. For each:
+### Without the Workflow tool (fallback)
 
-1. **Pre-draft the semantic docs before taking the lock** (mandatory when another wave is
-   live, recommended always): write the DOC_HEALTH rows/History entry, INDEX Done-row, and
-   ROADMAP narrative into `.claude/sprint-orchestration/W-<id>/S-NNN-docs-draft.md`. The
-   exit-4 pause then becomes "apply the draft" — seconds of lock-held time, not minutes.
-2. Run PROTOCOL **Phase 3 through `finish`**: the acceptance-evidence check is now
-   **structural** — the executor wrote the Completion Log (Evidence lines, Outcome, Review,
-   Deviations, Deferred, Learnings, checklist rows) into the sprint file in its worktree
-   (executor duty 7a). Run
+When the Workflow tool is not available, do by hand what the runs do — the roles, the
+order and the rules are identical; only the dispatcher changes:
+
+- **Plan** (2b): dispatch one `sprint-planner` per member in a single message (Planning
+  dispatch prompt, below); then one `brief-auditor` per `READY` / `READY_WITH_QUESTIONS`
+  member in a single message (prompt: the sprint file path in the planning worktree and
+  the repo root, nothing else); `INSUFFICIENT` → continue that planner via SendMessage
+  with the blocking list, then one fresh auditor. In a gated wave, dispatch one `arbiter`
+  per open question in a single message.
+- **Execute** (4): dispatch one `sprint-executor` per sprint in a single message
+  (Execution dispatch prompt, below), passing as spawn-time `model` what routing.json's
+  `executor.<tier>` gives for any sprint that is not `standard` (the Agent tool takes a
+  model, not an effort — the definition's effort applies; that is one reason the workflow
+  path is the primary one). On **BLOCKED**: answer from the record if it is already decided, otherwise
+  dispatch the `arbiter`; deliver the answer by **continuing the same executor
+  (SendMessage)** — its context is the most valuable thing it has. On **ESCALATE**:
+  dispatch a fresh `sprint-executor` on the next routing tier with the handover block.
+- **Review**: when an executor returns DONE, dispatch the `reviewer`(s) yourself —
+  worktree path, the diff to review, the sprint file path, **nothing of the executor's
+  reasoning**; three lenses for `risk: high`. Dispatch a `finding-verifier` per
+  Critical/Important finding. Send the surviving findings to the executor (SendMessage)
+  as a fix round; re-check each fix with a `finding-verifier`. Two rounds at most, then
+  it is the user's.
+- Dispatch reviewers with the model routing.json's `reviewer.<tier>` gives for the tier
+  the sprint finished on.
+- Compose the sprint's `outcome` line yourself, in the same grammar the runs use:
+  `assigned=<tier> final=<tier> runs=<n> escalations=<n> arbiter=<n> fix_rounds=<n>
+  findings=<confirmed>/<raised>`.
+- Compose the `review_record` lines yourself, one per finding:
+  `- <severity> (<lens>) <file:line> — <description> — fixed <sha> | refuted on
+  verification: <why> | declined: <why>`, or `— no material issues found (…)`.
+
+Executors cannot be relied on to spawn children in either path — agents started by a
+workflow never can, and environments that cap subagent nesting
+(`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, the default in cloud sessions) remove the
+ability from hand-dispatched ones too. That is why review, advice and escalation are the
+orchestration layer's job and never the executor's.
+
+### Step 5 — Land what is ready (orchestrator; batched, while others still run)
+
+**Do NOT fan out landings.** `merge-sprint.sh` holds the main-lock across
+`prepare → land → finish`, *including the exit-4 pause where you apply the semantic docs* —
+so racing completions make all but one hit the lock ceiling (exit 75). But do not land
+sprints one by one either: every sprint that is `READY_TO_LAND` when you turn to landing
+goes in **one batch** — one merge, one gate run, one lock transaction — and you do not
+wait for the sprints still executing. Land again when more are ready.
+
+For the batch (up to 6 sprints; one ready sprint is simply a batch of one):
+
+1. **Check each record** (no lock):
    `node scripts/sprint/close-check.mjs --json <worktree>/docs/sprints/in-progress/S-NNN-*.md`
    and adjudicate the JSON — `ok`, `failures[]`, `counts` (evidenced/total per class),
-   `review[]` (the reviewer child ran; Critical/Important fixed or escalated; declined
-   findings carry reasons), `deviations[]`, `learnings[]` — never the sprint body or the
-   diff. `ok:false` → the record is incomplete: continue the executor via SendMessage with
-   the failure list (the advisor loop); never fill the record yourself. Then dispatch a
-   short-lived **doc-sync subagent** (fresh context) with the sprint's worktree path: it
-   resolves its own diff base (`git -C <worktree> merge-base HEAD main` — the branch's fork
-   point), runs the PROTOCOL Phase 3 doc-sync pass and `/adr check` over
-   `git diff <base>..HEAD`, spot-checks two Evidence citations against the diff, and returns
-   ≤12 lines (docs drafted yes/no, ADR needed yes/no + why, `evidence: ok | gap: <criterion>`,
-   and the verbatim annotations for the `Docs synced` / `New docs registered` / `ADR check`
-   checklist rows). The master adjudicates that return — it still never reads the diff
-   itself. Then `prepare` (add `--wait 900` when another wave is live) → `land` (it re-runs
-   the lint on the branch copy and exits 5 on an incomplete record — `main` untouched, no
-   new `prepare` needed; `--allow-incomplete "<reason>"` is the audited escape when the
-   executor is gone and the gap is cosmetic) → apply the docs draft **and** finalize the
-   landed done-file's `Docs synced` / `New docs` / `ADR check` rows from the doc-sync
-   return, prepend any `plan`-class `learnings[]` line to `docs/sprints/PLANNING_LEARNINGS.md`
-   → `finish <branch> --no-push`. Phase 3 Step 6's CI check does **not** run here — `finish`
-   deferred its push, so there is nothing to poll yet; it defers to checkpoint P3 in Step 6
-   below, which covers every sprint in the wave at once.
-3. Remove the sprint's worktree, then move to the next.
+   `deviations[]`, `learnings[]` — never the sprint body or the diff. `ok:false` →
+   re-launch that sprint's run with `resume: "<the failure list>"` and leave it out of
+   this batch; never fill the record yourself. (`review[]` reads `— pending: independent
+   review before land` here — the review lives in the run's `review_record`, step 5.)
+2. **Doc-sync** (no lock): dispatch one short-lived **`doc-sync`** subagent per sprint in
+   the batch, in a single message, each with its sprint's worktree path: it resolves its
+   own diff base (`git -C <worktree> merge-base HEAD main`), runs the PROTOCOL Phase 3
+   doc-sync pass and `/adr check` over `git diff <base>..HEAD`, spot-checks two Evidence
+   citations, and returns ≤12 lines (docs drafted yes/no, ADR needed yes/no + why,
+   `evidence: ok | gap: <criterion>`, and the verbatim annotations for the `Docs synced` /
+   `New docs registered` / `ADR check` checklist rows). You adjudicate the returns — you
+   still never read a diff.
+3. **Pre-draft the semantic docs** (no lock; mandatory when another wave is live): per
+   sprint, the DOC_HEALTH rows/History entry, INDEX Done-row and ROADMAP narrative into
+   `.claude/sprint-orchestration/W-<id>/S-NNN-docs-draft.md`. The exit-4 pause then becomes
+   "apply the drafts" — seconds of lock-held time, not minutes.
+4. **Assemble and gate — once** (no lock):
+   `bash scripts/sprint/assemble-train.sh W-<id> S-A S-B …` merges the batch's branches
+   into one integration branch `land-W-<id>-<n>` in its own worktree and prints `branch:`,
+   `worktree:`, `merged:` and, for any member whose merge conflicted, `conflict: S-NNN
+   (<paths>)` — that member is left out (the batch is not sunk): land it alone afterwards,
+   or re-launch its run with the conflict as `resume`. Then run
+   `scripts/sprint/gate.sh` **in the integration worktree** — one gate run for the whole
+   batch, with no lock held.
+   - **Green** → step 5.
+   - **Red** → the members each passed alone, so this is an interaction between them:
+     `assemble-train.sh --cleanup <branch> --force`, split the roster in half, assemble
+     and gate each half. A half that is green lands; a single member that is red on
+     current `main` goes back to its run with the gate's failure output as `resume`.
+5. **Land the batch** (one lock transaction):
+   `merge-sprint.sh prepare <land-branch>` (add `--wait 900` when another wave is live;
+   exit 3 = `main` moved since you assembled — re-run the gate in the integration worktree,
+   lock held) → `merge-sprint.sh land <land-branch> --sprints S-A,S-B,…` (it lints every
+   member's record and exits 5 on an incomplete one; it checks claims and exits 6 — see
+   below; `main` is untouched in both cases) → at the exit-4 pause, for each member: apply
+   its docs draft; finalize the done-file's `Docs synced` / `New docs` / `ADR check` rows
+   from its doc-sync return (an ADR the doc-sync agent says is needed is drafted now via
+   `/adr` — mechanical, not a question); **replace the `### Review` section's `— pending:
+   independent review before land` line with that sprint's `review_record` lines,
+   verbatim**; record how the run went —
+   `node scripts/sprint/frontmatter.mjs set docs/sprints/done/S-NNN-….md outcome "<the
+   run's outcome line>"` (the last run's, for a sprint that was re-launched); prepend any `plan`-class `learnings[]` line to
+   `docs/sprints/PLANNING_LEARNINGS.md` → `merge-sprint.sh finish <land-branch> --sprints
+   S-A,S-B,… --no-push`. Phase 3 Step 6's CI check does **not** run here — `finish`
+   deferred its push; it runs once at checkpoint P3 (Step 6).
+6. **Clean up**: `bash scripts/sprint/assemble-train.sh --cleanup <land-branch>`, then
+   remove each landed member's worktree and branch
+   (`git worktree remove .claude/worktrees/S-NNN-… && git branch -d S-NNN-…`). Mark the
+   members `landed` in wave-progress.md.
+7. **Admit what is now unblocked** — Step 5.5 — before you go back to waiting.
 
-A sprint that lands changes (`prepare` exit 3) re-runs the gate in its worktree before
-`land`, lock held — that serialization is the point.
+A batch whose `prepare` brings in changes (exit 3) re-runs the gate in the integration
+worktree before `land`, lock held — that serialization is the point. In single-session
+operation `main` moves only by ledger commits between your assemble and your `prepare`, so
+exit 3 is rare and the batch's one gate run is the one you already did.
 
-### Step 6 — Review, then the next wave
+**`land` exit 6 — the branch changed files outside its claims** (lock kept, `main`
+untouched; the paths are listed). Those files were never checked against the other
+in-flight sprints, which is the one thing claims exist to guarantee. Do not reach for the
+override: `merge-sprint.sh abort <land-branch>` (releases the lock) →
+`claims.mjs add S-NNN <path…> --no-push` for the member that changed them → `prepare` →
+`land` again. If `claims.mjs add`
+exits 2, another sprint holds the path — a real conflict: have the executor undo that
+change, or land the two sprints in sequence. `--allow-outside-claims "<reason>"` (written
+into the done-file's Deviations) is for paths no sprint could contend for, and it is a
+**reserved** decision — ask the user. A `GATE-SENSITIVE:` list in `land`'s output (the
+commit gate, CI config, or deleted tests changed) is also reserved: confirm with the user
+before `finish`, or `abort`.
 
-After the wave's sprints have all landed on `main`, dispatch one **`reviewer`** subagent
+### Step 5.5 — Rolling admission (after every landing batch)
+
+A landing unblocks sprints: dependents of what just landed, and sprints whose claims
+overlapped it. Do not wait for the wave to drain before starting them.
+
+1. `node scripts/sprint/claims.mjs ready --wave W-<id> --json` — the backlog sprints that
+   can start **right now**: every dependency landed, claims disjoint from everything in
+   flight and from other waves' reservations, and pairwise disjoint among themselves. Its
+   `blocked` list says why each of the others cannot (`depends on S-x (in-progress)`,
+   `claims overlap S-y (in flight)`, `no claims`, …).
+2. Nothing ready → go back to waiting for runs. Otherwise the new members join **this**
+   wave — same id, same ledger, same review base:
+   `bash scripts/sprint/reserve-wave.sh --add W-<id> S-X S-Y --no-push` (exit 2 = a claim
+   race or an unknown wave — recompute). A wave the user capped at N keeps at most N
+   sprints in flight: admit only as many as have landed.
+3. Plan them — Step 2, over the new members only (2a's skip check first: members certified
+   just-in-time skip straight to 2e) — then Step 3 (start + worktree) and Step 4 (one
+   `sprint-flow` run each). Admission never changes the autonomy mode or the push policy
+   the user chose at Step 1; tell them in one line what joined ("admitted S-X, S-Y —
+   unblocked by S-A").
+
+**Lookahead planning.** While runs are executing and you have nothing to land, you may run
+Step 2 early for sprints that will become ready when in-flight work lands (the `blocked`
+entries whose only reason is a dependency or overlap with a sprint of this wave) — in the
+planning worktree, uncommitted. Their plans are provisional: Step 3.1's staleness
+re-check runs when they are actually admitted, and a member whose dependency landed
+differently than planned goes through `plan-flow` again.
+
+### Step 6 — Review, then close the wave
+
+The wave is over when no run is executing, nothing is `READY_TO_LAND` or parked, and
+`claims.mjs ready --wave W-<id>` admits nothing more (or the user stops it). After its
+sprints have all landed on `main`, dispatch one **`reviewer`** subagent
 (fresh context) over the merged wave result on `main` — a fresh reviewer catches cross-sprint
 integration issues per-sprint review can't. Hand it the landed `docs/sprints/done/S-NNN-*.md`
 paths as a starting map (their Completion Logs carry the evidence, review dispositions and
@@ -377,8 +572,14 @@ into the wave close; it needs the proposal's evidence spec, not the wave report.
 finishers can't each see a sibling in-progress and silently drop the gate offer.)
 
 Then close out the wave: `reserve-wave.sh --release W-<id>` if any backlog members still
-carry the reservation (deferred/split members). Then **checkpoint P3 (mandatory)**: ask
-the deploy-gate question (Push policy above), then run
+carry the reservation (deferred/split members). Run `node scripts/sprint/tiers.mjs` and
+relay any flag it raises — a tier whose sprints keep escalating (`UNDER`) or finishing
+uncleanly (`STRAINED`) means the rubric or the routing table needs adjusting, and that is
+the user's call to make on evidence, not yours to make silently. Show the user the wave's
+decisions made on their behalf — `node scripts/sprint/decisions.mjs --class taste --since <wave start>` —
+and take any they overturn as follow-up work. Then **checkpoint P3 (mandatory)**: follow
+the push policy chosen at Step 1 — "ask at wave end" → the deploy-gate question (Push
+policy above); "auto-push" → proceed; "hold" → skip the push and say so — then run
 `bash scripts/sprint/push-main.sh` — the single CI-triggering push of the wave — and run
 PROTOCOL Phase 3 Step 6's "verify CI green" check against **this** push; it covers every
 sprint in the wave in one pass. On a red run: identify the offending sprint locally by
@@ -403,18 +604,22 @@ re-dispatched already-landed sprints — the most expensive failure mode. Keep a
   (`printf '*\n' > .claude/sprint-orchestration/.gitignore` — runtime scratch, never
   committed), then a subdirectory per wave: `.claude/sprint-orchestration/W-<id>/`.
 - Maintain `W-<id>/wave-progress.md`: one line per sprint —
-  `S-NNN | planned(date) | decisions | started | worktree=… | status=dispatched|DONE|PLAN_GAP|landed`.
-  Update it as agents report and as you land.
+  `S-NNN | planned(date) | decisions | started | worktree=… | status=running|READY_TO_LAND|PARKED|NEEDS_CLAIM|PLAN_GAP|DIED|landed@<land-branch> | admitted(initial|after S-NNN)`.
+  Update it as runs return and as you land. `.claude/sprint-orchestration/events.jsonl`
+  (written by a hook on every subagent start and stop) shows which agents are running and
+  for how long — `/sprint board` summarises it.
 - Maintain `W-<id>/wave-plan.md`: members table (ID, verdict, plan_date, touches summary),
   constraint findings, contract edges checked, pending decisions, dispatch checklist,
   review dispositions. This is where planning-pass state survives compaction — including
   the planning-worktree path while Step 2 is in flight.
 - Execution subagents write the **Completion Log into the sprint file** in their worktree
-  (evidence citations, outcome, review outcome, deviations, deferred, learnings — committed
+  (evidence citations, outcome, deviations, deferred, learnings — committed
   on the branch, so it lands with the code and outlives everything here) and a ≤20-line
   pointer `W-<id>/S-NNN-report.md` (sprint-file path, commit list, literal gate tail, the
   lint SUMMARY line). Step 5 reads the sprint file through `close-check.mjs --json`, never
-  the body, and adds `W-<id>/S-NNN-docs-draft.md`. Nothing in this directory is ever cited
+  the body, and adds `W-<id>/S-NNN-docs-draft.md`. Save each run's returned
+  `review_record` and `outcome` line to `W-<id>/S-NNN-review.md` the moment they arrive —
+  you write both at land, and they must survive a compaction in between. Nothing in this directory is ever cited
   from a committed file — it is gitignored.
 - After a compaction, trust this ledger + `git log` + `/sprint board` (the `in-progress/`
   set and `wave:` reservations on `main` are authoritative), never recollection. Your wave
@@ -430,13 +635,49 @@ sprint bodies (diff-dependent duties — doc sync, `/adr check`, review — are 
 to fresh subagents; the master only adjudicates their structured returns) — that is what
 keeps it alive across a whole wave.
 
-All wave subagents — `sprint-planner`, `sprint-executor`, `wave-planner`, `reviewer`, `doc-sync` —
-are pinned `model: sonnet` in their agent definitions. The Agent tool DOES accept a spawn-time
-`model` override, so the pin alone is not a guarantee: always dispatch by agent name, never
-as a generic subagent, and never pass a `model` parameter when dispatching wave agents —
-otherwise N executors silently run on the master's model tier and multiply the wave's cost.
-Executors' children inherit the same tier via their own definitions (`reviewer`) or the dispatch
-default.
+Subagents run on the model **and reasoning effort** their work needs.
+`scripts/sprint/routing.json` is the table. Fixed roles are pinned in their agent
+definitions too, so dispatching by name gives the routed setting:
+
+| Role | Default | Why |
+|---|---|---|
+| `sprint-planner`, `wave-planner` | opus / high | a gap in the brief is a guess committed to code — and the planner assigns the tier |
+| `arbiter` | opus / xhigh | makes the decisions others may not (set `fable` where available) |
+| `brief-auditor`, `finding-verifier` | sonnet / medium | narrow, checkable tasks |
+| `doc-sync` | sonnet / low | mechanical |
+
+The **executor and the reviewer are routed per sprint, by its `tier:`** — how hard the work
+is (`docs/sprints/tier-rubric.md`), assigned by the planner at certification with a
+recorded reason:
+
+| `tier:` | The work is… | Executor | Reviewer |
+|---|---|---|---|
+| `routine` | mechanical — repeats an existing pattern | sonnet / medium | sonnet / high |
+| `standard` | ordinary engineering within one module | sonnet / high | opus / high |
+| `complex` | design under constraints, subtle state, cross-module | opus / high | opus / xhigh |
+| `critical` | hard and unforgiving — data loss, security, irreversible | opus / xhigh | opus / xhigh |
+
+Three properties of this table are deliberate. **A tier fixes effort as well as model** —
+effort is the cheaper lever, and running everything at the same effort either overpays for
+mechanical work or under-thinks the hard work. **A reviewer is never weaker than the
+executor it reviews.** And **assignment is asymmetric**: `routine` needs every criterion
+on a checklist (the lint and the cold reader both check it), while one signal is enough to
+go up — a hard sprint run too low costs a failed run, an escalation and a subtler bug; an
+easy sprint run too high costs tokens.
+
+`sprint-flow` applies the table itself from the `routing` and `sprint.tier` you pass it,
+and climbs `routing.escalation` one rung per ESCALATE. On the hand-dispatch fallback the
+routed model is a spawn-time `model` on the Agent tool — the only sanctioned override:
+never pass a `model` that is not in routing.json, and never dispatch a wave role as a
+generic subagent — either lets N agents silently run on the master's model and multiply
+the wave's cost. To change a setting, edit routing.json — and, for a fixed role or the
+`standard` tier, the `model:` / `effort:` lines of its agent definition too.
+
+**Tune it on evidence.** Each landed sprint records an `outcome:` line; `node
+scripts/sprint/tiers.mjs` aggregates them per assigned tier and flags a tier that
+escalates too often (`UNDER`), finishes uncleanly (`STRAINED`), or has run clean long
+enough to question (`OVER?`). Change the rubric or the table when that view says so — not
+after one bad sprint, and not on a hunch.
 
 ### Running waves from multiple sessions
 
@@ -474,26 +715,6 @@ safe, and what to do differently:
   read-only premises can rot. Step 3.1's re-check catches it before dispatch; the executor's
   verify-the-brief step is the backstop.
 
-### Dynamic workflow variant (optional)
-
-If the **Workflow tool** is available in this environment, the two fan-outs — and only
-those — can run as deterministic workflow scripts with schema-validated returns (no
-text-parsing of planner verdicts / executor statuses) and resume-from-runId:
-
-- Step 2b → `scripts/sprint/workflows/plan-wave.mjs` (args: wave id, roster with file paths
-  in the planning worktree, repo root, landed-since list).
-- Step 4 → `scripts/sprint/workflows/exec-wave.mjs` (args: wave id, sprints with worktree
-  paths, repo root).
-
-Everything else is unchanged and stays in-session: the decision round needs interactive
-AskUserQuestion; starts, completions, and reservations are lock-serialized shell transactions
-whose exit codes (2/3/4/75) demand in-session judgment. Note one tradeoff: workflow agents
-return structured results but cannot be continued via SendMessage after the workflow ends —
-a BLOCKED executor inside a workflow surfaces its question in the workflow result, and the
-advisor loop answers it via a fresh dispatch (pointing at the branch's committed work) instead
-of a continuation. When the Workflow tool is absent, the Agent-tool dispatch described in
-Steps 2b/4 is the primary path — the two are interchangeable per wave.
-
 ## The serial train (`/sprint train`)
 
 A **train** is the serial dual of a wave, for a chain of sprints that cannot parallelize —
@@ -507,9 +728,11 @@ one push, one CI run — N sprints cost ceil(N/K) CI runs instead of N.
 
 Everything not stated in this section is inherited from the wave protocol verbatim: the
 division of labor (master never reads code, diffs, or sprint bodies), Push policy and the
-`[skip ci]` convention, worktree mode (`git -C`, never EnterWorktree), the advisor loop,
-Executor children, the durable ledger, Roles and models (all subagents pinned
-`model: sonnet` — dispatch by agent name only), multi-session rules, and Failure handling.
+`[skip ci]` convention, worktree mode (`git -C`, never EnterWorktree), what a
+`sprint-flow` run does and returns (Step 4), the hand-dispatch fallback, the durable ledger, Roles and models (dispatch by agent name; the
+executor's model follows the sprint's `tier:` per routing.json), the decision policy,
+ESCALATE handling, the `land` claims check (exit 6), multi-session rules, and Failure
+handling.
 
 What is structurally different from a wave:
 
@@ -532,11 +755,13 @@ What is structurally different from a wave:
 - **The reservation is longer-lived.** The whole chain's `touches:` are held against other
   sessions for the train's full duration — inherent to serial work; expect to starve
   overlapping foreign work longer than a wave would.
-- **Autonomy contract.** The confirmation at Step T1 authorizes the whole chain. Between
-  sprints the master proceeds without asking; executor OPTIONS are run through the decision
-  ladder (`docs/ENGINEERING_PRINCIPLES.md`) before any escalation, and auto-answers are
-  recorded as `- YYYY-MM-DD (train, auto): [decision] — [rationale]` in Pre-Sprint Decisions
-  plus one line in train-progress.md. Checkpoint pushes follow the **push policy chosen at
+- **Autonomy contract.** The confirmation at Step T1 authorizes the whole chain: a train
+  runs in the policy's **unattended** mode (`docs/DECISION_POLICY.md`). Between sprints
+  the master proceeds without asking; executor OPTIONS and planner questions go to the
+  `arbiter`, and its mechanical and taste decisions are recorded in Pre-Sprint Decisions
+  with its RECORD line (`- YYYY-MM-DD (train, taste, arbiter): [decision] — principle: … —
+  rejected: … — undo: …`) plus one line in train-progress.md — the T7 close lists the
+  taste ones for the user. A `reserved` return is never auto-answered: it is hard stop (4). Checkpoint pushes follow the **push policy chosen at
   T1**; when "ask at each checkpoint" was chosen, that pause is a *scheduled* stop like the
   decision round — not a hard stop. The **only four hard stops**: (1) a second PLAN_GAP on
   the same sprint; (2) a red checkpoint CI not cured by one targeted fix; (3) a delta-refresh
@@ -597,16 +822,22 @@ in train-progress.md.
    `sprint-planner` in **post-start mode against the worktree copy** (commits
    `S-i: revise plan — train delta` on the branch); auto-decide its new questions via the
    ladder where an option is recommended + reversible + small-blast-radius, else hard stop.
-3. **Dispatch** one fresh `sprint-executor` (by name — pinned sonnet) with the standard
-   execution prompt plus the **diff-base SHA** (the predecessor's boundary): its reviewer
-   child diffs `<base>..HEAD`, not `main...HEAD`.
-4. **Advise** BLOCKED / NEEDS_CLAIM via the advisor loop (SendMessage continuation;
-   `claims.mjs add S-i <path> --no-push` under the lock — S-i is in `in-progress/`, so the
-   precondition holds).
-5. **On DONE:** evidence check via `close-check.mjs --json` on the worktree's in-progress
-   file (wave Step 5.2 — structured output only, never the diff; `ok:false` → continue the
-   executor with the failure list); record the boundary SHA + status line in
-   train-progress.md; pre-draft S-i's semantic docs into `W-<id>/S-i-docs-draft.md`.
+3. **Launch** one `sprint-flow` run for S-i (wave Step 4's call) with `mode: "train"`,
+   `autonomy: "unattended"`, the train worktree as `sprint.worktree`, and
+   `sprint.diffBase` = the predecessor's **boundary SHA** — the run's reviewers then diff
+   `<base>..HEAD` (S-i's commits only), not `main...HEAD`. One run at a time: the train is
+   serial.
+4. **Act on what the run returns** (wave "What a run returns"): `NEEDS_CLAIM` →
+   `claims.mjs add S-i <path> --no-push` under the lock (S-i is in `in-progress/`, so the
+   precondition holds) and re-launch with `resume`; `PARKED` with a `reserved` question is
+   hard stop (4); `PARKED` on review findings that survived two fix rounds is a hard stop
+   too — a train never lands over an open Critical.
+5. **On `READY_TO_LAND`:** evidence check via `close-check.mjs --json` on the worktree's
+   in-progress file (structured output only, never the diff; `ok:false` → re-launch with
+   the failure list as `resume`); record the boundary SHA (`git -C <wt> rev-parse HEAD`) +
+   status line in train-progress.md; save the run's `review_record` and `outcome` line to
+   `W-<id>/S-i-review.md`; dispatch `doc-sync` for S-i against the boundary range and
+   pre-draft its semantic docs into `W-<id>/S-i-docs-draft.md`.
 6. **Checkpoint due** (i ≡ 0 mod K, last member, or any pause/abort)? → T6, then continue
    the loop.
 
@@ -614,7 +845,8 @@ in train-progress.md.
 `merge-sprint.sh prepare train-W-<id>` (exit 3 → full `gate.sh` in the worktree, lock held)
 → `merge-sprint.sh land train-W-<id> --sprints S-A,S-B,…` (one `--no-ff` merge; per-sprint
 done-moves + status/end_date flips; one regen; exit 4) → apply the segment's pre-drafted
-docs (seconds) → `merge-sprint.sh finish train-W-<id> --sprints S-A,S-B,… --no-push` →
+docs, paste each member's saved `review_record` over its `### Review` pending line, and
+set each done-file's `outcome` (seconds) → `merge-sprint.sh finish train-W-<id> --sprints S-A,S-B,… --no-push` →
 push **per the T1 push policy**: "ask-each" → deploy-gate question, then
 `bash scripts/sprint/push-main.sh`; "auto" → `push-main.sh` directly; "hold" → skip the
 push (the segment stays local until T7). When pushed, it is **the checkpoint's single
@@ -698,6 +930,8 @@ carries the full duties; the prompt carries only the per-sprint variables:
 >
 > Execute the sprint per your instructions and return the structured status (≤15 lines).
 
+(Hand-dispatch fallback only — `sprint-flow` composes this prompt itself.)
+
 ## Failure handling
 
 - **A planning subagent dies mid-edit:** its roster file may be dirty — in the wave's
@@ -708,10 +942,17 @@ carries the full duties; the prompt carries only the per-sprint variables:
 - **A member is rejected at the decision round:** pre-start this is cheap — keep the
   committed deepening, `reserve-wave.sh --drop W-<id> S-NNN`, note it in wave-plan.md.
   Removing members preserves pairwise disjointness; only *adding* members forces a re-check.
-- **An execution subagent returns BLOCKED / NEEDS_CLAIM:** the advisor loop — answer or
-  claim, then **continue the same agent** (SendMessage). Re-dispatch a fresh `sprint-executor`
-  only if the agent died (its committed work persists on the branch; tell the fresh agent to
-  read `git -C <worktree> log` first).
+- **A run returns `NEEDS_CLAIM` / `PARKED` / `DIED`:** see "What a run returns" (Step 4) —
+  grant the claim, take the question to the user, or re-launch; a re-launched run
+  continues from the branch (committed work persists there) and needs only `resume`.
+- **BLOCKED and ESCALATE never reach you from a run** — the run answers a BLOCKED executor
+  through the arbiter and moves an ESCALATE to the next routing tier itself; what it
+  cannot settle arrives as `PARKED`. On the hand-dispatch fallback you do both: never
+  answer an ESCALATE by telling the same executor to try again.
+- **A run itself fails** (the workflow errors, or is stopped): nothing on `main` moved and
+  the branch keeps every commit — re-launch it; with the same arguments the Workflow tool
+  can resume from its last completed agent.
+- **`land` exits 6 (paths outside claims):** see Step 5 — abort, claim, prepare, land.
 - **PLAN_GAP:** the brief is wrong — fix the brief, don't abandon the sprint. Before
   re-dispatching, prepend one line to `docs/sprints/PLANNING_LEARNINGS.md` (create with a
   one-line header if absent): `- YYYY-MM-DD S-NNN PLAN_GAP: <gap class> — <root cause in

@@ -53,7 +53,7 @@
     }
   },
   "postCopy": {
-    "chmod+x": ["scripts/sprint/*.sh", "scripts/template/*.sh"],
+    "chmod+x": ["scripts/sprint/*.sh", "scripts/template/*.sh", "scripts/hooks/*.mjs"],
     "writePerProject": [
       "scripts/sprint/claims-tokens.json (full tier — from stack answers)",
       ".claude/settings.json env.SPRINT_MAIN_BRANCH (only if default branch != main)"

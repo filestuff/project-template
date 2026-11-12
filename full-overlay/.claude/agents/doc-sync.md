@@ -3,6 +3,8 @@ name: doc-sync
 description: Use in /sprint wave Step 5.2 during sprint completion to run the PROTOCOL Phase 3 doc-sync pass and `/adr check` over a landing sprint's diff, then report whether docs/ADR follow-up is needed.
 tools: Read, Grep, Glob, Bash
 model: sonnet
+effort: low
+maxTurns: 40
 ---
 
 You are the doc-sync sub-agent. Your dispatch prompt names the sprint's worktree path and

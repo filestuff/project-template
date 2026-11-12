@@ -67,11 +67,41 @@ else
   echo "Skipping gitleaks pre-push scan (not installed) — install gitleaks to enable it."
 fi
 
-# --- Fast static gate (skips doc-only / .claude-only pushes) ----------------
 gate_base="origin/$MAIN"
 git rev-parse --verify --quiet "$gate_base" >/dev/null 2>&1 || gate_base="HEAD~1"
 
 changed=$(git diff --name-only "$gate_base"...HEAD 2>/dev/null || true)
+
+# --- Planning-artifact lint (changed proposals + certified backlog briefs) ---
+# The prose rules for proposals and sprint briefs decay unless something checks them.
+# Scope is deliberately narrow so this never blocks a ledger push it should not:
+#   - proposals: every changed docs/proposals/NNN-*.md (a file with no `**Rigor**:` line
+#     is treated as legacy/imported by the lint itself and only shape-checked);
+#   - sprint briefs: changed BACKLOG files that are certified (`plan_date` set) AND carry
+#     a `risk:` key, i.e. were written under the 1.11+ template. Unplanned skeletons,
+#     in-progress files (their citations move as the sprint edits code) and pre-1.11
+#     briefs are skipped.
+if command -v node >/dev/null 2>&1 && [ -f scripts/sprint/plan-check.mjs ] && [ -f scripts/sprint/proposal-check.mjs ]; then
+  plan_ids=""
+  for f in $(printf '%s\n' "$changed" | grep -E '^docs/sprints/backlog/S-[0-9]+-[^/ ]*\.md$' || true); do
+    [ -f "$f" ] || continue
+    if grep -Eq '^plan_date: *[0-9]{4}-' "$f" && grep -Eq '^risk:' "$f"; then
+      plan_ids="$plan_ids $(basename "$f" | grep -oE '^S-[0-9]+')"
+    fi
+  done
+  if [ -n "$plan_ids" ]; then
+    echo "pre-push: linting certified backlog briefs:$plan_ids"
+    # shellcheck disable=SC2086 # word-splitting the id list is the point
+    node scripts/sprint/plan-check.mjs $plan_ids
+  fi
+  for f in $(printf '%s\n' "$changed" | grep -E '^docs/proposals/[0-9]{3}-[^/ ]*\.md$' || true); do
+    [ -f "$f" ] || continue
+    echo "pre-push: linting $f"
+    node scripts/sprint/proposal-check.mjs "$f"
+  done
+fi
+
+# --- Fast static gate (skips doc-only / .claude-only pushes) ----------------
 code_changed=$(printf '%s\n' "$changed" | grep -Ev '^(docs/|\.claude/)|\.mdx?$' | grep -v '^$' || true)
 
 if [ -n "$code_changed" ]; then

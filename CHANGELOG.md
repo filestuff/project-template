@@ -4,6 +4,336 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.14.0] - 2026-11-12
+
+**Model and effort follow the difficulty of the work.** Until now a sprint was `standard`
+or `complex` by proxy — story points, risk — every executor ran at the same reasoning
+effort, reviewers ran at one fixed setting, and nothing recorded whether the choice had
+been right. Tiers are now four, each fixes model *and* effort for both the executor and
+its reviewers, the planner assigns them from the code with a recorded reason, and every
+landed sprint feeds a calibration view. No migrations: existing sprint files keep working
+(`standard` and `complex` mean what they meant; a missing tier is `standard`).
+
+- **Four tiers** (`docs/sprints/tier-rubric.md`, new, both tiers): `routine` (mechanical —
+  repeats an existing pattern), `standard`, `complex` (design under constraints, subtle
+  state, cross-module), `critical` (hard *and* unforgiving). The tier is about difficulty;
+  `risk:` (what is exposed) and `story_points` (size) are separate questions, and story
+  points no longer set the tier.
+- **Routing per tier** (full: `scripts/sprint/routing.json`): executor — routine
+  sonnet/medium, standard sonnet/high, complex opus/high, critical opus/xhigh; reviewer —
+  routine sonnet/high, standard opus/high, complex and critical opus/xhigh. A reviewer is
+  never weaker than the executor it reviews, and an escalated sprint is reviewed at the
+  tier it *finished* on. The escalation ladder now has four rungs, climbed one per
+  ESCALATE.
+- **The planner assigns the tier, at certification** (`/sprint plan`, the `sprint-planner`
+  agent). It has just read the code the sprint touches; `/plan`'s tier is provisional and
+  is only ever `standard` or `complex`. The planner writes `tier:` and a one-line
+  `tier_reason:` (new frontmatter key) and may lower a provisional tier when the code shows
+  the work is simpler — with the reason on the record.
+- **Asymmetric by design.** Going *down* to `routine` requires every criterion on a
+  checklist: an existing pattern cited as `file:line` and followed, no new interface,
+  `risk: low`, no open question, no schema/concurrency/caching/auth/trust-boundary work,
+  ≤ 5 files, ≤ 3 points. `plan-check.mjs` enforces the ones a lint can see (new rule
+  `tier-unjustified`), and the `brief-auditor` — which has not seen the planner's
+  reasoning — checks the claim against the code and blocks a `routine` that does not
+  hold. Going *up* needs one signal. Unsure means the higher tier. After a sprint starts,
+  its tier only rises.
+- **Outcome tracking** (full). Each `sprint-flow` run returns an `outcome` line —
+  `assigned=… final=… runs=… escalations=… arbiter=… fix_rounds=… findings=confirmed/raised`
+  — which the orchestrator writes into the done-file's frontmatter at land.
+  **`scripts/sprint/tiers.mjs`** (new) aggregates them per assigned tier and flags `UNDER`
+  (≥ 25% of a tier's sprints escalated), `STRAINED` (≥ 40% needed two fix rounds, a
+  re-launch, or had ≥ 2 confirmed findings) and `OVER?` (a top tier that has run clean for
+  8+ sprints). Nothing is flagged below 4 sprints. `/sprint board` shows it, and the wave
+  close relays its flags to you — changing the rubric or the table is your call.
+- **Upgrade notes.**
+  - `routing.json` changes shape: `roles.reviewer` is now a table by tier, and
+    `roles.executor` and `escalation` gain `routine` and `critical`. If you edited the
+    file, the upgrade three-way-merges it; `sprint-flow` also accepts the old shape (one
+    reviewer entry; a `critical` sprint then starts at the top of the old ladder, a
+    `routine` one runs as `standard`) so a half-merged file degrades safely rather than
+    cheaply.
+  - **Cost moves in both directions.** Mechanical sprints get cheaper (medium effort, and a
+    Sonnet reviewer); `complex` sprints get a more expensive review (Opus at extra-high);
+    `critical` is new and is the most expensive setting. Nothing becomes `routine` unless
+    a planner assigns it and the lint and the cold reader agree.
+  - Briefs certified before this release have no `tier_reason:`. That is a warning for
+    `complex`, never a failure; re-certifying a sprint (`/sprint plan`) assigns its tier
+    under the new rubric.
+  - Where `fable` is available to you, `executor.critical`, `reviewer.critical` and
+    `arbiter` in `routing.json` are the places to use it.
+
+## [1.13.0] - 2026-11-12
+
+**Flow orchestration (full tier).** A wave used to move in barriers: plan everything, then
+execute everything, then land one sprint at a time — each landing able to re-run the whole
+gate under the lock — and only then look at what was unblocked. It now flows. Each sprint
+runs in its own workflow and reports back on its own; finished sprints land together in
+one merge with one gate run while the others keep executing; and every landing admits the
+sprints it unblocked into the same wave. Review moves out of the executor: an executor can
+no longer be the one who picks its reviewer. No migrations. Lite installs are unaffected
+apart from two extra allow rules.
+
+- **One workflow run per sprint** (new: `.claude/workflows/sprint-flow.js`). The
+  orchestrator launches one run per started sprint in a single message; each notifies it
+  separately when it ends. Inside a run: **execute** on the model the sprint's `tier:`
+  routes to → a BLOCKED executor is answered by the `arbiter` and a fresh executor
+  continues from the branch (a reserved decision parks the sprint for you) → an ESCALATE
+  moves it up the routing ladder → **review**, independent of the author: one `reviewer`,
+  or three focused lenses (correctness, security and data, tests) for a `risk: high`
+  sprint → every Critical/Important finding goes to a `finding-verifier` told to refute
+  it → the executor **fixes** what survived and verifiers re-check each fix against the
+  new HEAD, two rounds at most. It returns `READY_TO_LAND`, `PARKED`, `NEEDS_CLAIM`,
+  `PLAN_GAP` or `DIED`, with a ready-made `review_record`.
+- **Planning as a workflow too** (new: `.claude/workflows/plan-flow.js`, replacing
+  `plan-wave.mjs`): per member a planner, a `brief-auditor` cold read with one repair
+  round, and — in a gated wave — an `arbiter` ruling on each open question. It returns
+  what was `decided` (with record lines) and what to `ask` you.
+- **Review is no longer the executor's to arrange.** `sprint-executor` loses its
+  "run a reviewer child" duty: it writes `### Review` as `— pending: independent review
+  before land`, and the orchestrator pastes the run's `review_record` into the done-file
+  at land. This also retires the v1.11 stop-gap for executors that could not spawn
+  children — nothing in the wave depends on an agent spawning a child any more, so waves
+  behave the same in cloud sessions (where subagent nesting is capped) as on a laptop.
+- **The gate is the gate.** `sprint-executor` is now told in so many words that a
+  `gate.sh` failing on the untouched baseline is a PLAN_GAP, and that substituting another
+  command for it — or editing it — is never the executor's call. (Found in a live fixture
+  run: with a broken gate, two executors stopped correctly and one "verified" with a
+  different command; the batch's single gate run at landing would have caught it, but it
+  should not get that far.)
+- **Batch landing** (new: `scripts/sprint/assemble-train.sh`). Every sprint that is ready
+  when you turn to landing goes in one batch: the script merges their branches into one
+  integration branch (a member that conflicts is left out, not allowed to sink the batch),
+  you run `gate.sh` **once**, with no lock held, and `merge-sprint.sh prepare / land
+  --sprints / finish` land them in one transaction — the train-checkpoint path, now used
+  for waves. N sprints cost one gate run instead of up to N under the lock. A red gate
+  splits the batch in half.
+- **Rolling admission** (new: `claims.mjs ready [--wave W-<id>]`, `reserve-wave.sh --add
+  W-<id> S-NNN…`). After each landing the orchestrator asks what can start *now* — every
+  dependency landed, claims free — and adds those sprints to the same wave: same id, same
+  ledger, same review base. `ready` also says why each other backlog sprint cannot start.
+  Planning for soon-to-be-unblocked sprints may run ahead while the wave executes.
+- **`/sprint board`** gains running agents (`scripts/sprint/agents.mjs`, from the
+  hook-written event log: who is running, for how long; finished counts and durations per
+  agent type) and the latest decisions made on your behalf. Wall-clock only — Claude Code
+  does not expose token cost to hooks, so none is shown.
+- **Verified with live agents** before release: in a rendered full-tier fixture, three
+  sprints ran as three concurrent workflow runs, hit a broken gate (two stopped
+  correctly), had a deliberately undecided behaviour settled by the arbiter and recorded,
+  were reviewed independently (three lenses for the high-risk one), and landed as one
+  batch with one gate run, each done-file carrying its own commits and review record.
+- **`ORCHESTRATION.md` is restructured** around this: Step 4 launches runs, "What a run
+  returns" says what to do with each status, Step 5 lands in batches, Step 5.5 admits. A
+  "Without the Workflow tool" section keeps the hand-dispatch path — same roles, same
+  order, same rules. The train loop launches one `sprint-flow` run per member
+  (`mode: "train"`) instead of dispatching executors directly.
+- **Upgrade notes.**
+  - `/template-upgrade` will list two **removed** files —
+    `scripts/sprint/workflows/exec-wave.mjs` and `plan-wave.mjs`. Choose *delete*: the
+    workflows now live in `.claude/workflows/` as `sprint-flow.js` and `plan-flow.js`
+    (they must be `.js` there — Claude Code does not discover saved workflows as `.mjs`).
+  - The workflow scripts use top-level `await` and `return`; if your linter scans
+    dot-directories, ignore `.claude/`.
+  - **Finish in-flight waves before upgrading**, or finish them by hand: an executor
+    dispatched under the old definition has already run (or skipped) its own review and
+    written `### Review` itself — land those sprints as before; the new record-pasting
+    step applies to sprints run after the upgrade.
+  - A wave now runs more agents per sprint than before (reviewers, verifiers, and the
+    arbiter when needed). Cost scales with `risk:` — a low-risk sprint adds one reviewer;
+    a high-risk one adds three plus a verifier per finding. Models are in
+    `scripts/sprint/routing.json`.
+  - If the user capped a wave at N, the cap now limits sprints *in flight*, not the wave's
+    total — admission keeps the wave going until nothing more is ready.
+
+## [1.12.0] - 2026-11-12
+
+**Decisions, routing and enforcement.** Three things that were prose become mechanisms.
+Who decides what is now one policy every skill and agent defers to, instead of ~20
+separate "ask the user" rules and an autonomy contract that existed only in train mode.
+Which model runs which role is a table, with an escalation path for agents that hit
+something beyond them. And the rules agents were asked to follow — stay inside your
+claims, never run lifecycle scripts, never push — are enforced by hooks and by `land`.
+No migrations. **Read the upgrade notes: this release changes how sessions behave.**
+
+- **`docs/DECISION_POLICY.md`** (new, both tiers). Three classes, tested in order:
+  *reserved* (direction and scope, overturning you, irreversible or destructive changes,
+  security posture, spend, public contracts, superseding an ADR, weakening a test or the
+  gate, deploys, Manual criteria) is **always asked, in every mode**; *mechanical* (the
+  brief, an ADR, the decision ladder or the code's convention gives one answer) is decided
+  and recorded without asking; *taste* (reasonable people differ, reversible, contained)
+  is decided, recorded with the option not taken and how to undo it, and listed at **one
+  approval gate per phase** where you accept all with a word or overturn any by number.
+- **Defaults by flow.** `/plan` and `/sprint wave` run *gated* (you now get one brief at
+  the end of a breakdown or a decision round instead of a question per boundary);
+  `/sprint train` runs *unattended* as before, with its auto-answers now made by the
+  arbiter and recorded in the policy's grammar; `/proposal` stays *interactive* — its
+  direction and appetite are always yours — unless you ask it to run gated; solo
+  `/sprint start` stays interactive. Say "ask me everything" to any of them for
+  interactive.
+- **`arbiter` agent** (new, both tiers; opus / xhigh). Planners' and executors' questions
+  go to it before they go to you: it reads the record and the code, classifies the
+  decision, answers mechanical and taste ones with a recorded rationale, and returns
+  reserved ones shaped as a decision brief. It never decides a reserved question.
+- **`scripts/sprint/decisions.mjs`** (new): lists every recorded decision across sprints
+  and proposals — `--class taste` is "what was decided on my behalf", `--since` narrows
+  it. Decisions still live only in the artifact they concern; this is a view. It flags a
+  taste decision recorded without a rejected option or an undo.
+- **Model routing** (full: `scripts/sprint/routing.json`; both tiers: every agent
+  definition now pins `model`, `effort` and `maxTurns`). Planners, reviewers and the
+  arbiter move to **opus**; executors stay on sonnet for `tier: standard` sprints and run
+  on opus for `tier: complex` ones; auditors, verifiers and doc-sync stay on sonnet. The
+  old rule "all wave subagents are sonnet, never pass a model" is replaced by "pass a
+  spawn-time model only for the executor, only from routing.json".
+- **Escalation path.** `sprint-executor` gains a fifth status, **ESCALATE**
+  (`repeated-failure` / `beyond-capability` / `carve-out-uncertainty`), with a handover
+  block; it commits its work in progress first, and the master re-dispatches on the next
+  routing tier, then the arbiter, then you. **BLOCKED** now means "a decision I may not
+  make" and is answered by the arbiter first. Escalation is one-way.
+- **Guard hooks** (new: `scripts/hooks/guard.mjs`, wired in `.claude/settings.json`).
+  Before every Bash and file-edit call, for the main session and every subagent:
+  *both tiers* — force-pushing or deleting the main branch is refused (feature branches
+  are untouched). *Full tier* — an edit inside a sprint worktree outside that sprint's
+  `touches:` is refused, with the way out in the message; a subagent running a lifecycle
+  script, pushing, or committing with `--no-verify` is refused; and under the workflow
+  variant an executor's DONE is refused (at most three times) while its Completion Log
+  fails `close-check.mjs`. `scripts/hooks/agent-log.mjs` records subagent start/stop times
+  in `.claude/sprint-orchestration/events.jsonl` (full tier, gitignored).
+- **Claims bind at `land`** (full). `merge-sprint.sh land` now refuses a branch that
+  changed any path outside its roster's `touches:` — **exit 6**, lock kept, `main`
+  untouched, paths listed (the sprint's own file, its evidence directory and the generated
+  docs are exempt). Recovery: `abort`, `claims.mjs add`, `prepare`, `land`.
+  `--allow-outside-claims "<reason>"` is the audited escape, written into Deviations. It
+  also prints a `GATE-SENSITIVE:` list when a branch changes the commit gate, CI config or
+  deletes tests. New `claims.mjs covers --sprints …` does the check.
+- **Fix: `/template-upgrade` dropped template hooks and env.** `merge-settings` copied any
+  top-level key other than `permissions` only when your `settings.json` lacked it — so a
+  repo that already had `env` (bootstrap writes `env.SPRINT_MAIN_BRANCH` for a non-`main`
+  default branch) or its own `hooks` would never have received this release's hooks. It
+  now merges `hooks` per event and `env` per variable (yours win), and is idempotent.
+- **Upgrade notes.**
+  - *Hooks change session behaviour.* After upgrading, every Bash and edit call runs
+    `guard.mjs` (≈50 ms). Hooks you added yourself are kept; the upgrade owns only groups
+    whose handlers all run scripts under `scripts/hooks/`. Emergency off-switch:
+    `SPRINT_GUARD=off` in the environment. Node ≥ 18 is now required in the lite tier too.
+  - *In-flight sprints (full tier).* A sprint started before the upgrade whose branch
+    already strays outside its `touches:` will now stop at `land` with exit 6 — claim the
+    paths (`claims.mjs add`) rather than override. Sprints with empty `touches:` are
+    unaffected (a warning).
+  - *Cost.* Planners and reviewers now run on opus. To keep the old behaviour, set their
+    `model:` back to `sonnet` in `.claude/agents/*.md` **and** in
+    `scripts/sprint/routing.json` (a test in the template keeps the two in step; your
+    copies are yours to change).
+  - *Unattended runs.* Claude Code ignores `permissions.defaultMode: "auto"` in a project
+    settings file; set it in `~/.claude/settings.json` if you want waves and trains to run
+    without permission prompts.
+  - *CLAUDE.md block* gains one line (the policy doc); as always the block between the
+    `project-template` markers is replaced whole.
+
+## [1.11.0] - 2026-11-12
+
+**Planning rigor.** Until now a proposal was scored by one generic reviewer whose result
+was explicitly "not a gate", a plan breakdown was reviewed by nobody but its author, a
+sprint brief was certified by the agent that wrote it, and none of the rules for any of
+them was checked by a script. This release adds a rigor tier, production-readiness
+sections, independent review panels with a pass mark, and two lints. It also fixes two
+defects in the full tier's workflow variant found while testing it. No migrations.
+Everything applies to proposals and sprints written after the upgrade — existing
+proposals (no `**Rigor**:` line) and existing sprints (no `risk:`/`tier:` keys) keep
+working unchanged.
+
+- **Rigor tiers** (`/proposal` Step 1.6, `PROPOSAL_TEMPLATE.md`): each proposal declares
+  `**Rigor**: light | standard | critical`, classified mechanically from what the idea
+  touches (critical: auth, payments, secrets, irreversible data changes, trust-boundary
+  parsing, migrations, public contracts; standard: a new module/service/datastore/
+  dependency, or more than one sprint). The tier scales everything below, so a small
+  proposal stays small.
+- **`## Production readiness`** (new template section): design-level answers for the
+  recommended alternative. Light: risks and rollback. Standard adds architecture and data
+  flow, interfaces and contracts, test strategy, observability. Critical adds data model
+  and migration, security and threat model, failure modes, non-functional targets,
+  rollout plan, cost and capacity. Still no deliverables. A bare "n/a" fails the lint;
+  `n/a — [why]` passes.
+- **Prior decisions are read first.** `/proposal` and `/plan` now read `docs/decisions/`
+  (plus planning learnings and TODOS) before the first question. A direction that
+  contradicts an accepted ADR becomes an explicit "supersede ADR-NNN?" decision for you —
+  previously nothing upstream read the ADRs at all.
+- **Design it twice** (`/proposal` Step 3, standard and critical): when the idea adds a
+  module, service or data model, two `design-explorer` agents each develop a structurally
+  different shape, blind to each other, and Alternatives is built from both.
+- **Review panels replace the single reviewer.** `/proposal` Step 6 and — new — `/plan`
+  Phase 4 dispatch one fresh-context `design-reviewer` per lens
+  (`docs/proposals/review-lenses.md`): 1 lens for light, 3 for standard, up to 7 for
+  critical; 4 for a plan (coverage, slicing, contracts, executability). Every blocker and
+  major finding is checked by a `finding-verifier` told to refute it before anyone acts on
+  it. The panel **passes only if no blocker survives and every lens scores ≥ 7**; at most
+  two rounds; what still stands goes to Open questions, and a surviving blocker needs your
+  explicit acceptance. The result is written into the proposal as `## Review record`.
+  `/plan` skips its panel for 1–2 low-risk sprints and asks before breaking down a
+  rigor-bearing proposal that has no review record.
+- **Sprint files: `risk:` and `tier:`** (`SPRINT_TEMPLATE.md`, set by `/plan`, raised by
+  planning). `risk: high` (the sprint touches a risk-tier surface) makes a new
+  `## Production notes` section mandatory — rollback, observability, security.
+  `tier: complex` marks sprints that should run on a stronger model; it is recorded now
+  and acted on by a later release.
+- **A brief's author no longer certifies it.** `/sprint plan` (both tiers) and the wave
+  planning pass (full) hand the finished sprint file to a `brief-auditor` that has seen
+  nothing else and reports what it would have to ask or assume to execute it. A brief
+  that is still insufficient after one repair round keeps `plan_date: null`.
+- **New lints** (zero-dependency, lite + full): `scripts/sprint/proposal-check.mjs <file>`
+  (sections required by the tier, surviving template placeholders, vague open questions,
+  stage gates, `file:line` citations that do not resolve, a missing review record once the
+  proposal leaves `draft`) and `scripts/sprint/plan-check.mjs [S-NNN …] [--record <doc>]`
+  (dependencies exist and are acyclic, every Consumes is something its dependency
+  Produces, placeholders, Production notes on high-risk sprints, citations, the plan
+  record's coverage map and sentinel). The skills run them; so does
+  `scripts/sprint/pre-push-gate.sh`, narrowly — changed proposals, and changed **backlog**
+  briefs that are certified and carry a `risk:` key. Unplanned skeletons, in-progress
+  files, pre-1.11 briefs and imported proposals are never blocked.
+- **Learnings are read back.** `scripts/sprint/learnings.mjs [--class review,test]` lists
+  the `### Learnings` lines of closed sprints, newest first. The `reviewer` agent and
+  `/review` now start from them, and a rule recorded by three or more sprints is flagged
+  `RECURRING` and promoted into `/review`'s Project-Specific Checks. Before this, only
+  `plan`-class learnings were ever re-read.
+- **Fix (full tier, workflow variant): a dead executor or planner was reported as alive.**
+  `exec-wave.mjs` and `plan-wave.mjs` merged a crashed agent's empty result into an
+  object, so it came back as a status with no fields and `missing` was always empty.
+- **Fix (full tier): sprints could land unreviewed without anyone noticing.** An executor
+  cannot spawn its reviewer child when it is dispatched by a workflow script (always) or
+  when subagent nesting is capped at depth 1 (the default in cloud sessions). It now says
+  so — `### Review` reads `— not run: no Agent tool — orchestrator must review before
+  land` — and ORCHESTRATION.md Step 4 tells the wave master to dispatch the reviewer
+  itself before landing.
+- **Upgrade notes.** New files arrive as additions (four agents, one workflow under
+  `.claude/workflows/`, three scripts, `docs/proposals/review-lenses.md`);
+  `.claude/settings.json` gains one allow rule, `Workflow(design-review)`. `/proposal`,
+  `/plan` and `/sprint plan` now dispatch more subagents than before, and
+  `design-reviewer` and `design-explorer` are pinned to `model: opus` — edit the `model:`
+  line in `.claude/agents/<name>.md` to change that. The panels use the Workflow tool
+  when it is available and fall back to plain parallel subagents when it is not. The
+  workflow ships as `.claude/workflows/design-review.js` — a workflow script, not a Node
+  module (it uses top-level `await` and `return`): if your linter scans dot-directories
+  (ESLint 9's flat config does), add `.claude/` to its ignores.
+
+## [1.10.1] - 2026-11-12
+
+Fixes a `merge-sprint.sh` defect in **train mode** (full tier), found by code review rather
+than in use. No migrations; the fix applies on your next `land --sprints …`. Sprints already
+landed by a train keep whatever was stamped at the time — see the last bullet.
+
+- **`land --sprints S-A,S-B,…` now stamps each member with its own commits.** The
+  post-merge loop reused a variable left over from the completion-log lint loop, so it was
+  stuck on the roster's LAST sprint id: every member's done-file got the last member's
+  `S-NNN:` commits under `### Commits`, and its own were recorded nowhere. Single-sprint
+  landings (`/sprint done`, `/sprint wave`) were never affected.
+- **`--allow-incomplete` in train mode now notes the right files.** The same variable
+  decided which done-files receive the `landed incomplete — <reason>` line under
+  Deviations: it was written to every member when the last one was incomplete, and to none
+  otherwise. It is now written to exactly the members that failed the lint.
+- **Existing train-landed sprints:** a done-file whose `### Commits` list names another
+  sprint's id was stamped by the old loop. The true list is
+  `git log --reverse --format='- %h %s' <merge>^1..<merge>^2 --grep='^S-NNN:'` with the
+  `merge:` SHA already recorded in that file — correct by hand if the record matters.
+
 ## [1.10.0] - 2026-09-01
 
 The sprint file becomes the **durable completion record**. Measured across three downstream
