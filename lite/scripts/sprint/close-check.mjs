@@ -50,7 +50,7 @@ if (lines[0] !== "---") {
   console.error(`${file}: no frontmatter (file does not start with ---)`);
   process.exit(1);
 }
-let fmEnd = lines.indexOf("---", 1);
+const fmEnd = lines.indexOf("---", 1);
 if (fmEnd === -1) {
   console.error(`${file}: unterminated frontmatter`);
   process.exit(1);
@@ -222,7 +222,7 @@ const pick = (t) => (sections[t]?.content ?? []).map((i) => lines[i].trim()).fil
 const summary =
   `SUMMARY ${sprint} automated=${counts.automated_evidenced}/${counts.automated} descoped=${counts.descoped} ` +
   `manual=${counts.manual_confirmed}/${counts.manual} checklist=${counts.checklist_annotated}/${counts.checklist} ` +
-  `sections=${legacy ? "legacy" : REQUIRED.every((t) => sections[t]) ? "ok" : "missing:" + REQUIRED.filter((t) => !sections[t]).join(",")}`;
+  `sections=${legacy ? "legacy" : REQUIRED.every((t) => sections[t]) ? "ok" : `missing:${REQUIRED.filter((t) => !sections[t]).join(",")}`}`;
 const ok = failures.length === 0;
 
 if (json) {

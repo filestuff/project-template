@@ -41,7 +41,8 @@ const fmt = (ms) => (ms == null ? "?" : ms < 90_000 ? `${Math.round(ms / 1000)}s
 const running = [...open.values()].map((s) => ({ agent_type: s.agent_type, agent_id: s.agent_id, started: s.ts, age_ms: now - Date.parse(s.ts) })).sort((a, b) => b.age_ms - a.age_ms);
 const byType = {};
 for (const d of done) {
-  const t = (byType[d.agent_type] ??= { finished: 0, total_ms: 0, timed: 0, max_ms: 0 });
+  byType[d.agent_type] ??= { finished: 0, total_ms: 0, timed: 0, max_ms: 0 };
+  const t = byType[d.agent_type];
   t.finished++;
   if (d.ms != null) { t.total_ms += d.ms; t.timed++; t.max_ms = Math.max(t.max_ms, d.ms); }
 }

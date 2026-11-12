@@ -4,6 +4,51 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.15.1] - 2026-11-12
+
+**Shipped scripts are Biome-clean.** Before this release, a repo in link mode whose worktree
+gate lints the whole tree (`biome check .`) had **every** sprint gate go red after
+upgrading, before a sprint wrote a line. The errors were in template-owned scripts, not
+sprint code. Found in ai-todo: a wave's first dispatch of 4 executors all returned
+`PLAN_GAP` on 19 Biome errors in `scripts/`, right after the v1.11.0 → v1.14.0 upgrade.
+The primary gate stayed green because it never lints root `scripts/`, and
+`/template-upgrade` never ran either gate. No migrations, and no behaviour change in any
+script.
+
+- **25 lint errors fixed, behaviour unchanged.** The rewrites are the same ones ai-todo made
+  in its own fix, so if you already patched these files the three-way merge is clean:
+  - `useTemplate`, `useNumberNamespace`, `useOptionalChain`, `useConst`,
+    `noUnusedTemplateLiteral`, `useNumericSeparators`.
+  - `noAssignInExpressions`: `x ??= …; const t = x`, `for (let m = RE.exec(l); m; m = RE.exec(l))`,
+    and `const st = {…}; stats[t] = st`.
+  - Two reasoned `biome-ignore`s. `useForOf` on argv loops that consume a flag's value
+    with `++i`, and `noDelete` in `upgrade.mjs merge-settings`, where the merged `hooks`
+    key must be absent, not `undefined`.
+
+  Changed scripts: `scripts/hooks/agent-log.mjs`, `scripts/hooks/guard.mjs`,
+  `scripts/sprint/close-check.mjs`, `scripts/sprint/decisions.mjs`,
+  `scripts/sprint/plan-check.mjs`, `scripts/sprint/proposal-check.mjs`,
+  `scripts/template/upgrade.mjs`, and, in the full tier only, `scripts/sprint/agents.mjs`,
+  `scripts/sprint/claims.mjs` and `scripts/sprint/tiers.mjs`.
+- **The rule set.** Ultracite's `core` preset on Biome 2.4.x, with the stylistic rules a Biome
+  downstream turns off (block statements, nested ternaries, top-level regex,
+  cognitive complexity, import sorting, …). Clean under it means clean under Biome's
+  `recommended` too. **Formatting is not enforced.** Reformatting would rewrite about
+  2,800 lines and turn your next upgrade into merge conflicts in every script you have
+  touched. If your formatter covers `scripts/`, expect format-only diffs there.
+  `.claude/workflows/*.js` is not linted: those files run in the Workflow runtime
+  (top-level `return`, injected globals) and do not parse as modules. Exclude them in your
+  Biome config if it reaches `.claude/`.
+- **`/template-upgrade` Step 11 now runs your gates.** After apply it runs
+  `bash scripts/sprint/gate.sh` in the primary checkout. In link mode it also runs the
+  rendered worktree gate commands from the repo root, because those are the commands that
+  went red here. A failure in a file the upgrade touched is an upgrade bug, to fix before the
+  commit is offered. A failure only in files the upgrade did not touch is reported as
+  pre-existing.
+- **Template side, invisible to you:** a new `tests/test-lint.sh` in `tests/run.sh`. It
+  pins Biome 2.4.15 and ultracite 7.7.0 in `package.json` and fails, rather than skips,
+  when the tooling is missing. Later template releases can't regress this.
+
 ## [1.15.0] - 2026-11-12
 
 *Drafted as a 1.11.0 (PR #12, 2026-10-01) and released on top of 1.14.0. It composes with

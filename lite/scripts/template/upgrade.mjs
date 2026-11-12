@@ -750,6 +750,7 @@ function cmdMergeSettings(argv) {
       if (mine.length + theirs.length > 0) out[event] = [...mine, ...theirs];
     }
     if (Object.keys(out).length > 0) merged.hooks = out;
+    // biome-ignore lint/performance/noDelete: the merged settings must not carry a hooks key at all
     else delete merged.hooks;
   }
 

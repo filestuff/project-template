@@ -311,7 +311,7 @@ function doneGate(input, projectDir) {
 
   const problems = [];
   try {
-    execFileSync("node", [join(projectDir, "scripts/sprint/close-check.mjs"), files[0]], { encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "pipe"] });
+    execFileSync("node", [join(projectDir, "scripts/sprint/close-check.mjs"), files[0]], { encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "pipe"] });
   } catch (e) {
     if (e.status === 5) problems.push(...String(e.stdout ?? "").split("\n").filter((l) => l.startsWith("FAIL ")).slice(0, 15));
     else return; // the lint itself broke — not the executor's problem
@@ -345,7 +345,7 @@ function doneGate(input, projectDir) {
   process.stderr.write(
     `DONE-GATE (${refusals + 1}/${DONE_GATE_MAX_REFUSALS}): ${id} is not DONE yet — its record would be refused at land.\n${problems.join("\n")}\n` +
       `Fix the Completion Log in ${files[0]} per docs/sprints/SPRINT_TEMPLATE.md, commit (\`${id}: completion log\`), then return DONE again. ` +
-      `If a criterion genuinely cannot be evidenced, leave it unchecked and return BLOCKED with that as the question.\n`,
+      "If a criterion genuinely cannot be evidenced, leave it unchecked and return BLOCKED with that as the question.\n",
   );
   process.exit(2);
 }

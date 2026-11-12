@@ -1,0 +1,79 @@
+{
+  // Lint check for the scripts this template ships downstream (tests/test-lint.sh).
+  //
+  // Why: link-mode worktree gates lint the whole tree, scripts/ included, so a lint error
+  // in a shipped script reddens every downstream sprint gate (v1.15.1). The rule set is
+  // ultracite's core preset with the stylistic rules a real Biome downstream (ai-todo)
+  // turns off. Being clean here means being clean there, and also under Biome's
+  // `recommended` set. Versions are pinned in package.json; bump them together.
+  //
+  // The formatter is off on purpose. Downstreams don't format scripts/. A template-side
+  // reformat would rewrite about 2,800 lines and break /template-upgrade's three-way merge
+  // for every repo that has edited a script locally.
+  "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
+  "extends": ["ultracite/biome/core"],
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": [
+      "lite/**",
+      "full-overlay/**",
+      // Workflow scripts run inside the Workflow runtime, not Node: they use top-level
+      // `return`/`await` and injected globals (agent, parallel, phase, …), so they do
+      // not parse as ES modules. Downstreams exclude them from Biome too.
+      "!**/.claude/workflows"
+    ]
+  },
+  // ultracite enables the formatter per language too, so disable it at every level.
+  "formatter": { "enabled": false },
+  "javascript": { "formatter": { "enabled": false } },
+  "json": { "formatter": { "enabled": false } },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } },
+  "linter": {
+    "rules": {
+      "style": {
+        "useBlockStatements": "off",
+        "noNestedTernary": "off",
+        "noNegationElse": "off",
+        "noUselessElse": "off",
+        "noProcessEnv": "off",
+        "useAtIndex": "off",
+        "useCollapsedIf": "off",
+        "useCollapsedElseIf": "off",
+        "useDefaultSwitchClause": "off",
+        "useFilenamingConvention": "off",
+        "noMagicNumbers": "off",
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        "noConsole": "off",
+        "noBitwiseOperators": "off",
+        "noEmptyBlockStatements": "off",
+        "noEvolvingTypes": "off",
+        "noConstantBinaryExpressions": "off",
+        "useAwait": "off",
+        "useIterableCallbackReturn": "off"
+      },
+      "complexity": {
+        "noForEach": "off",
+        "useSimplifiedLogicExpression": "off",
+        "noExcessiveCognitiveComplexity": "off",
+        "useArrowFunction": "off"
+      },
+      "performance": {
+        "useTopLevelRegex": "off",
+        "noNamespaceImport": "off",
+        "noAwaitInLoops": "off"
+      },
+      "correctness": {
+        "noUnusedImports": "warn",
+        "noUnusedVariables": "warn",
+        "noUnusedFunctionParameters": "warn",
+        "useParseIntRadix": "off"
+      },
+      "nursery": {
+        "noShadow": "off",
+        "noUnnecessaryConditions": "off"
+      }
+    }
+  }
+}

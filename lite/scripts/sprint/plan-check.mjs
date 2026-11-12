@@ -243,7 +243,7 @@ function contractBullets(o, which) {
 }
 
 // --- choose the sprints to lint --------------------------------------------------------------
-let targets = [];
+const targets = [];
 if (ids.length === 0) {
   if (!dirExists.backlog) die(`no backlog directory: ${join(root, DIRS[0][1])}`);
   for (const [id, locs] of [...index.entries()].sort()) for (const l of locs) if (l.dir === "backlog") targets.push({ id, ...l });
@@ -389,7 +389,7 @@ for (const t of targets) {
           const m = re.exec(lines[i]);
           if (!m) continue;
           let v = m[1];
-          for (let j = i + 1; j < pn.end && /^\s+\S/.test(lines[j]) && !/^\s*[-*]\s/.test(lines[j]); j++) v += " " + lines[j];
+          for (let j = i + 1; j < pn.end && /^\s+\S/.test(lines[j]) && !/^\s*[-*]\s/.test(lines[j]); j++) v += ` ${lines[j]}`;
           found = { i, v: v.trim() };
           break;
         }
@@ -410,7 +410,7 @@ for (const t of targets) {
       for (let i = oq.start; i < oq.end; i++) {
         if (!/^\s*[-*]\s+\[ \]/.test(lines[i])) continue;
         let tx = lines[i];
-        for (let j = i + 1; j < oq.end && !doc.isBlank(j) && !/^\s*[-*]\s+\[/.test(lines[j]) && !doc.hset.has(j); j++) tx += " " + lines[j];
+        for (let j = i + 1; j < oq.end && !doc.isBlank(j) && !/^\s*[-*]\s+\[/.test(lines[j]) && !doc.hset.has(j); j++) tx += ` ${lines[j]}`;
         if (!tx.toLowerCase().includes("options:")) fail("open-question-vague", i, `${lines[i].trim()}  ← no \`options:\``);
         if (tierVal === "routine") fail("tier-unjustified", i, "tier: routine with an open question — a sprint with an undecided choice is at least standard");
       }
@@ -422,8 +422,7 @@ for (const t of targets) {
     if (doc.fence[i]) continue;
     const l = lines[i];
     CITE.lastIndex = 0;
-    let m;
-    while ((m = CITE.exec(l))) {
+    for (let m = CITE.exec(l); m; m = CITE.exec(l)) {
       const [raw, p, ext, a, b] = m;
       const before = l[m.index - 1] ?? "";
       if (/[{}<>]/.test(before) || /[{}<>]/.test(p) || /^https?/i.test(p)) continue;

@@ -25,7 +25,7 @@ try {
     const ignore = join(dir, ".gitignore");
     if (!existsSync(ignore)) writeFileSync(ignore, "*\n");
     const line = { ts: new Date().toISOString(), event, agent_type: input.agent_type, agent_id: input.agent_id ?? null, session_id: input.session_id ?? null };
-    appendFileSync(join(dir, "events.jsonl"), JSON.stringify(line) + "\n");
+    appendFileSync(join(dir, "events.jsonl"), `${JSON.stringify(line)}\n`);
   }
 } catch {
   /* observability must never get in the way */

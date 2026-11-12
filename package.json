@@ -1,0 +1,12 @@
+{
+  "name": "project-template-dev",
+  "private": true,
+  "description": "Template-maintainer tooling only (tests/test-lint.sh). Not part of the payload; bootstrap never copies it.",
+  "scripts": {
+    "lint": "biome check --diagnostic-level=error lite full-overlay"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.15",
+    "ultracite": "7.7.0"
+  }
+}

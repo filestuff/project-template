@@ -171,6 +171,19 @@ contains it).
 - No leftover placeholder tokens: `grep -rnE '\{\{' <file...>` over exactly the
   files listed in MANIFEST's `files` map (not the whole repo — the repo's own
   code may legitimately contain doubled braces) must return nothing.
+- **Run the project's gates on the upgraded tree.** The checks above prove the
+  scripts parse. They do not prove that the project's own linters accept them, and
+  a shipped script that fails the project's lint reddens every sprint gate (v1.15.1).
+  - `bash scripts/sprint/gate.sh` in the primary checkout (the full commit gate).
+  - **Link mode** (`scripts/sprint/worktree-links.json` lists `links`): also run the
+    worktree gate, from the repo root. That is the reduced command between the
+    `WORKTREE_GATE_EOF` markers in `scripts/sprint/gate.sh`, i.e. the rendered
+    worktree gate commands from the MANIFEST's placeholders. It often lints the whole
+    tree, `scripts/` included, while the full gate may not:
+    `bash -euo pipefail -c "$(sed -n "/^IFS= read -r -d '' WORKTREE_GATE_CMD/,/^WORKTREE_GATE_EOF\$/{//!p;}" scripts/sprint/gate.sh)"`
+  - A failure in a file this upgrade touched is an upgrade bug. A failure only in
+    files the upgrade did not touch was red before the upgrade: report it to the
+    user as pre-existing, and don't count it against the upgrade.
 
 Any failure: fix before offering the commit (a validation failure after apply is
 an upgrade bug — investigate, don't paper over).

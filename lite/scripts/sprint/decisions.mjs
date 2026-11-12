@@ -25,13 +25,13 @@ const DECIDERS = ["agent", "arbiter", "orchestrator", "user", "unknown"];
 const classes = list("--class");
 const deciders = list("--decider");
 const since = flag("--since");
-const limit = flag("--limit") === null ? Infinity : Number(flag("--limit"));
+const limit = flag("--limit") === null ? Number.POSITIVE_INFINITY : Number(flag("--limit"));
 const root = flag("--root") || process.cwd();
 const json = argv.includes("--json");
 const usage = () => { console.error("usage: decisions.mjs [--class mechanical,taste,reserved,unclassified] [--decider agent,arbiter,orchestrator,user] [--since YYYY-MM-DD] [--limit N] [--root <repo-root>] [--json]"); process.exit(1); };
-if ((classes && classes.some((c) => !CLASSES.includes(c))) || (deciders && deciders.some((d) => !DECIDERS.includes(d)))) usage();
+if ((classes?.some((c) => !CLASSES.includes(c))) || (deciders?.some((d) => !DECIDERS.includes(d)))) usage();
 if (since !== null && !/^\d{4}-\d{2}-\d{2}$/.test(since)) usage();
-if (!(limit === Infinity || (Number.isInteger(limit) && limit > 0))) usage();
+if (!(limit === Number.POSITIVE_INFINITY || (Number.isInteger(limit) && limit > 0))) usage();
 
 const DIRS = ["docs/sprints/backlog", "docs/sprints/in-progress", "docs/sprints/done", "docs/sprints/done/archive", "docs/sprints/rejected", "docs/proposals"];
 const LINE = /^\s*-\s+(\d{4}-\d{2}-\d{2})\s+\(([^)]+)\):\s*(.+)$/;
