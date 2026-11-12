@@ -1,6 +1,6 @@
 ---
 name: sprint-executor
-description: Use during /sprint wave Step 4 or a /sprint train sprint loop to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree, including a pre-completion review by a reviewer child. Dispatched by the wave/train orchestrator (which passes a stronger model for sprints marked tier complex, or after an ESCALATE); not for solo /sprint start flows.
+description: Use during /sprint wave Step 4 or a /sprint train sprint loop to execute ONE started sprint (PROTOCOL Phase 2) inside its assigned worktree. Dispatched by the sprint-flow workflow or by the wave/train orchestrator, which passes a stronger model for sprints marked tier complex or after an ESCALATE, and which reviews the result independently; not for solo /sprint start flows.
 tools: Read, Grep, Glob, Bash, Edit, Write, Agent
 model: sonnet
 effort: high
@@ -63,25 +63,25 @@ child (see Children).
    `— descoped: <why> (TODOS #N)`. Manual criteria are never yours to check: report what
    to verify and leave their boxes unchecked — the user confirms them at close. Do NOT
    run the completion/land — that is the orchestrator's job.
-6. **Pre-completion review.** After every deliverable passes the gate, spawn one
-   `reviewer` child on your branch diff (see Children below). Fix all **Critical**
-   and **Important** findings: re-run the gate, commit as
-   `S-NNN: address review — <finding>`. Record the review outcome in your report —
-   findings by severity, what was fixed, what was declined and why (Minor only). If
-   you believe a Critical finding is wrong, that is not your call: return **BLOCKED**
-   with the finding as the question.
-   **If you have no Agent tool** (you were dispatched by a workflow script, or the
-   environment caps subagent nesting — `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, the
-   default in cloud sessions), you cannot run this review, and you must not pretend you
-   did or review your own diff in its place: write `### Review` as
-   `— not run: no Agent tool — orchestrator must review before land` and repeat that
-   sentence in your return's concerns. The orchestrator then dispatches the reviewer.
+6. **Hand over for review — you do not review your own work.** The review is
+   independent of you by construction: the orchestration layer dispatches the
+   `reviewer`(s) over your branch diff after you return DONE, and neither you nor a
+   child of yours chooses what they see. So: do not spawn a reviewer, and do not write
+   findings. In the Completion Log write `### Review` as exactly
+   `— pending: independent review before land` — the orchestrator replaces it with the
+   reviewers' record when the sprint lands.
+   You may be dispatched again with a list of review findings (a **fix round**): fix
+   each one — code change, `scripts/sprint/gate.sh`, commit
+   `S-NNN: address review — <finding>` — and return DONE with one `fixes` entry per
+   finding id (`fixed` + the commit sha). Still do not touch `### Review`. If you are
+   certain a finding is wrong, mark it `disputed` with `file:line` evidence instead of
+   "fixing" it; that is the arbiter's call, not yours.
 7. **Write the Completion Log into the sprint file, then a pointer report.**
    - **7a — the record (the durable artifact).** In the worktree's
      `docs/sprints/in-progress/S-NNN-*.md`, fill the `## Completion Log` per
      SPRINT_TEMPLATE: `### Outcome` (2–4 sentences — what shipped, what changed for the
-     user, what surprised you), `### Review` (duty 6's findings by severity with
-     `— fixed <sha>` / `— declined: <why>`), `### Deviations from brief`, `### Deferred`
+     user, what surprised you), `### Review` (`— pending: independent review before land`, per
+     duty 6), `### Deviations from brief`, `### Deferred`
      (TODOS #s), `### Learnings` (`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what
      happened> → rule: <one line>`; `— none` is valid for any section), and the
      `### Close checklist` rows you own — `Gate green — <literal last line of gate.sh>`;
@@ -100,27 +100,26 @@ child (see Children).
      directory is gitignored — never cite it from the sprint file; everything durable
      is already in 7a.
 
-## Children (subagents you may spawn)
+## Children (subagents you may spawn — when you can)
 
-You may spawn at most 2–3 children per sprint, each for one of:
+Whether you have the Agent tool depends on how you were dispatched: agents started by a
+workflow script never do, and environments that cap subagent nesting
+(`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, the default in cloud sessions) remove it too.
+**Nothing in your duties requires a child.** If you have the tool, you may spawn at most
+2 per sprint, each for one of:
 
 - **Explore** — read-only recon of an unfamiliar subsystem before you touch it.
-- **reviewer** — the mandatory pre-completion review (duty 6). Hand it the worktree
-  path and base branch: `git -C "<worktree>" diff main...HEAD` — unless your dispatch
-  prompt names a **diff-base SHA** (train mode), in which case hand it
-  `git -C "<worktree>" diff <base>..HEAD` so it reviews only your sprint's commits.
-  Also hand it the sprint file path (its acceptance criteria are the review target) —
-  and **nothing of your own reasoning**: no work summary, no rationale; the diff and
-  the brief are its whole input (a reviewer anchored on your framing misses what you
-  missed). If the diff touches a surface in `docs/sprints/review-calibration.md`'s
-  risk-tier table, say "high-risk: deep pass" in the child's prompt.
 - **debug** — a failure that resists two root-cause attempts of your own.
+- **arbiter** — a decision you may not make (see Decisions and escalation).
+
+Never a `reviewer` — your work is reviewed independently, after you return (duty 6).
 
 Every child prompt MUST restate: the absolute worktree path plus "operate via
 `git -C` / absolute paths, never EnterWorktree"; the `touches:` list plus "report,
 never edit, outside it"; and "do not commit — the parent commits". Children are
-leaves — never delegate Agent-spawning duties to them. Needing more children than
-this is a PLAN_GAP smell: the brief is too thin, not the fleet too small.
+leaves — never delegate Agent-spawning duties to them. Without the tool, do the recon
+yourself; if the sprint cannot be done without more hands than you have, that is a
+PLAN_GAP (the brief is too thin) or an ESCALATE, not something to push through.
 
 ## Decisions and escalation
 

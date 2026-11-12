@@ -51,11 +51,17 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
 3. **Execute**: `/sprint start S-NNN` → implement → `/sprint done S-NNN` (acceptance evidence,
    doc sync, ADR check). `/sprint board` shows the kanban; `/sprint next` suggests what's
    unblocked.
-4. **Full tier, in parallel**: `/sprint wave` computes the next conflict-free wave from file
-   claims, fans out one planner subagent per stale/unplanned member, then one executor
-   subagent per sprint — each in its own git worktree, serialized on `main` by a lock.
-   Brief failures feed back into `docs/sprints/PLANNING_LEARNINGS.md` so plans stop failing
-   the same way twice.
+4. **Full tier, in parallel**: `/sprint wave` computes the conflict-free set from file
+   claims and runs it as a **rolling wave**. A planning workflow gives each member a
+   planner, an independent cold-read of its brief, and arbiter rulings on open questions.
+   Then every sprint gets its **own workflow run** in its own git worktree: an executor on
+   the model its `tier:` routes to; an arbiter for decisions the executor may not make; a
+   stronger executor if it escalates; an independent review (three focused lenses when the
+   sprint is high-risk) whose findings are verified before anyone acts on them; and a
+   bounded fix loop. Runs report back one by one, so finished sprints **land in batches —
+   one merge, one gate run — while the rest still execute**, and each landing admits the
+   sprints it unblocked into the same wave. Brief failures feed back into
+   `docs/sprints/PLANNING_LEARNINGS.md` so plans stop failing the same way twice.
 5. **Full tier, in series**: when the backlog is a chain that can't parallelize,
    `/sprint train S-A S-B …` runs it autonomously — all decisions batched upfront, one
    executor at a time in a single shared worktree, landings checkpointed every 3 sprints
@@ -98,7 +104,10 @@ taste` lists what was decided on your behalf.
 | Model routing + escalation (`routing.json`, sprint `tier:`, executor `ESCALATE` → stronger executor → arbiter → user) | agent definitions pin model/effort | ✅ |
 | Completion record (structured Completion Log, inline `Evidence:` lines, `close-check.mjs` lint, `docs/sprints/evidence/`) | ✅ (lint before the `done/` move) | ✅ (lint gates `merge-sprint.sh land`; commits stamped at land) |
 | Concurrent sprints | one at a time | many, in parallel agents |
-| Wave orchestration (`/sprint wave` + `sprint-planner`/`sprint-executor`/`wave-planner` agents) | — | ✅ |
+| Wave orchestration (`/sprint wave`: `plan-flow` + one `sprint-flow` workflow run per sprint; hand-dispatch fallback without the Workflow tool) | — | ✅ |
+| Independent per-sprint review in the orchestration layer (reviewer lenses by risk, verified findings, bounded fix loop) | — | ✅ |
+| Batch landing (`assemble-train.sh`: N finished sprints → one merge, one gate run) + rolling admission (`claims.mjs ready`, `reserve-wave.sh --add`) | — | ✅ |
+| Running-agents view (`agents.mjs` over the hook event log) | — | ✅ |
 | Serial-train orchestration (`/sprint train`: shared worktree, batched CI checkpoints) | — | ✅ |
 | File claims (`touches:` + `claims.mjs`) | — | ✅ |
 | Main-branch mutex (`lock.sh`) | — | ✅ |

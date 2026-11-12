@@ -462,6 +462,29 @@ their manifest entries.
   `done/`, the blocked one via the arbiter, the planted finding fixed, one gate run for
   the batch.
 
+### 5.7 As built (v1.13.0) — deviations from the text above
+
+- **F20 (verified): several workflow runs launched in one message each notify the caller
+  separately**, in completion order. That settled the architecture: one `sprint-flow` run
+  per sprint, no single pipeline with a barrier at its end.
+- **No migration.** `/template-upgrade` already lists removed files and asks delete/keep;
+  a `v1.13.0.sh` that deleted the two old workflow scripts would only duplicate that
+  prompt. The CHANGELOG tells the operator to choose delete.
+- **The review record is pasted by the orchestrator at land**, not written by the
+  executor. A clean review would otherwise need one more executor dispatch just to edit a
+  line; the master already finalizes done-file rows during the exit-4 pause.
+- **`plan-flow` also runs the arbiter** over planners' open questions (a Decide stage),
+  so the decision round starts from `decided` / `ask` lists instead of raw questions.
+- **Batch landing is a procedure around `assemble-train.sh`**, with the red-gate split
+  done by the orchestrator re-invoking it on half the roster — not a `--bisect` flag.
+- **Lock semantics and `computeWaves` are untouched**, as planned. `claims.mjs ready` is a
+  separate pure function (`computeReady`) with the admission rule; unlike `computeWaves`
+  it treats an in-flight sprint with empty `touches:` as overlapping nothing, matching
+  `claims.mjs check` and `start.sh` (which refuses to start an unclaimed sprint at all —
+  now pinned by a test).
+- **`agents.mjs`** summarises the hook event log for `/sprint board`; cost is not shown
+  because hooks cannot see it.
+
 ## 6. Build order and checkpoints
 
 1. v1.11.0 — §3. Commit, push, report.

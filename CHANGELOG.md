@@ -4,6 +4,77 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.13.0] - 2026-11-12
+
+**Flow orchestration (full tier).** A wave used to move in barriers: plan everything, then
+execute everything, then land one sprint at a time — each landing able to re-run the whole
+gate under the lock — and only then look at what was unblocked. It now flows. Each sprint
+runs in its own workflow and reports back on its own; finished sprints land together in
+one merge with one gate run while the others keep executing; and every landing admits the
+sprints it unblocked into the same wave. Review moves out of the executor: an executor can
+no longer be the one who picks its reviewer. No migrations. Lite installs are unaffected
+apart from two extra allow rules.
+
+- **One workflow run per sprint** (new: `.claude/workflows/sprint-flow.js`). The
+  orchestrator launches one run per started sprint in a single message; each notifies it
+  separately when it ends. Inside a run: **execute** on the model the sprint's `tier:`
+  routes to → a BLOCKED executor is answered by the `arbiter` and a fresh executor
+  continues from the branch (a reserved decision parks the sprint for you) → an ESCALATE
+  moves it up the routing ladder → **review**, independent of the author: one `reviewer`,
+  or three focused lenses (correctness, security and data, tests) for a `risk: high`
+  sprint → every Critical/Important finding goes to a `finding-verifier` told to refute
+  it → the executor **fixes** what survived and verifiers re-check each fix against the
+  new HEAD, two rounds at most. It returns `READY_TO_LAND`, `PARKED`, `NEEDS_CLAIM`,
+  `PLAN_GAP` or `DIED`, with a ready-made `review_record`.
+- **Planning as a workflow too** (new: `.claude/workflows/plan-flow.js`, replacing
+  `plan-wave.mjs`): per member a planner, a `brief-auditor` cold read with one repair
+  round, and — in a gated wave — an `arbiter` ruling on each open question. It returns
+  what was `decided` (with record lines) and what to `ask` you.
+- **Review is no longer the executor's to arrange.** `sprint-executor` loses its
+  "run a reviewer child" duty: it writes `### Review` as `— pending: independent review
+  before land`, and the orchestrator pastes the run's `review_record` into the done-file
+  at land. This also retires the v1.11 stop-gap for executors that could not spawn
+  children — nothing in the wave depends on an agent spawning a child any more, so waves
+  behave the same in cloud sessions (where subagent nesting is capped) as on a laptop.
+- **Batch landing** (new: `scripts/sprint/assemble-train.sh`). Every sprint that is ready
+  when you turn to landing goes in one batch: the script merges their branches into one
+  integration branch (a member that conflicts is left out, not allowed to sink the batch),
+  you run `gate.sh` **once**, with no lock held, and `merge-sprint.sh prepare / land
+  --sprints / finish` land them in one transaction — the train-checkpoint path, now used
+  for waves. N sprints cost one gate run instead of up to N under the lock. A red gate
+  splits the batch in half.
+- **Rolling admission** (new: `claims.mjs ready [--wave W-<id>]`, `reserve-wave.sh --add
+  W-<id> S-NNN…`). After each landing the orchestrator asks what can start *now* — every
+  dependency landed, claims free — and adds those sprints to the same wave: same id, same
+  ledger, same review base. `ready` also says why each other backlog sprint cannot start.
+  Planning for soon-to-be-unblocked sprints may run ahead while the wave executes.
+- **`/sprint board`** gains running agents (`scripts/sprint/agents.mjs`, from the
+  hook-written event log: who is running, for how long; finished counts and durations per
+  agent type) and the latest decisions made on your behalf. Wall-clock only — Claude Code
+  does not expose token cost to hooks, so none is shown.
+- **`ORCHESTRATION.md` is restructured** around this: Step 4 launches runs, "What a run
+  returns" says what to do with each status, Step 5 lands in batches, Step 5.5 admits. A
+  "Without the Workflow tool" section keeps the hand-dispatch path — same roles, same
+  order, same rules. The train loop launches one `sprint-flow` run per member
+  (`mode: "train"`) instead of dispatching executors directly.
+- **Upgrade notes.**
+  - `/template-upgrade` will list two **removed** files —
+    `scripts/sprint/workflows/exec-wave.mjs` and `plan-wave.mjs`. Choose *delete*: the
+    workflows now live in `.claude/workflows/` as `sprint-flow.js` and `plan-flow.js`
+    (they must be `.js` there — Claude Code does not discover saved workflows as `.mjs`).
+  - The workflow scripts use top-level `await` and `return`; if your linter scans
+    dot-directories, ignore `.claude/`.
+  - **Finish in-flight waves before upgrading**, or finish them by hand: an executor
+    dispatched under the old definition has already run (or skipped) its own review and
+    written `### Review` itself — land those sprints as before; the new record-pasting
+    step applies to sprints run after the upgrade.
+  - A wave now runs more agents per sprint than before (reviewers, verifiers, and the
+    arbiter when needed). Cost scales with `risk:` — a low-risk sprint adds one reviewer;
+    a high-risk one adds three plus a verifier per finding. Models are in
+    `scripts/sprint/routing.json`.
+  - If the user capped a wave at N, the cap now limits sprints *in flight*, not the wave's
+    total — admission keeps the wave going until nothing more is ready.
+
 ## [1.12.0] - 2026-11-12
 
 **Decisions, routing and enforcement.** Three things that were prose become mechanisms.

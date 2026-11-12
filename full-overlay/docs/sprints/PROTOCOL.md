@@ -381,8 +381,9 @@ preparing the merge; fix Critical/Important findings and re-run `gate.sh`. **Not
 high-risk** → skip — review depth scales with blast radius; do not add a pass to every
 sprint. Record the outcome under `### Review`: findings by severity with disposition
 (`— fixed <sha>` / `— declined: <why>`), or the literal `— not run: low risk (Step 3.5)`.
-(Wave/train sprints skip this step entirely — the executor's mandatory `reviewer` child
-already covered it and recorded its outcome there.)
+(Wave/train sprints skip this step entirely — every one of them is reviewed
+independently by the orchestration layer before it lands, and that review's record is
+written into `### Review` at land; see ORCHESTRATION.md Steps 4–5.)
 
 ### Step 3.6: Proposal Stage Check (solo sprints only)
 
