@@ -4,6 +4,26 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.10.1] - 2026-11-12
+
+Fixes a `merge-sprint.sh` defect in **train mode** (full tier), found by code review rather
+than in use. No migrations; the fix applies on your next `land --sprints …`. Sprints already
+landed by a train keep whatever was stamped at the time — see the last bullet.
+
+- **`land --sprints S-A,S-B,…` now stamps each member with its own commits.** The
+  post-merge loop reused a variable left over from the completion-log lint loop, so it was
+  stuck on the roster's LAST sprint id: every member's done-file got the last member's
+  `S-NNN:` commits under `### Commits`, and its own were recorded nowhere. Single-sprint
+  landings (`/sprint done`, `/sprint wave`) were never affected.
+- **`--allow-incomplete` in train mode now notes the right files.** The same variable
+  decided which done-files receive the `landed incomplete — <reason>` line under
+  Deviations: it was written to every member when the last one was incomplete, and to none
+  otherwise. It is now written to exactly the members that failed the lint.
+- **Existing train-landed sprints:** a done-file whose `### Commits` list names another
+  sprint's id was stamped by the old loop. The true list is
+  `git log --reverse --format='- %h %s' <merge>^1..<merge>^2 --grep='^S-NNN:'` with the
+  `merge:` SHA already recorded in that file — correct by hand if the record matters.
+
 ## [1.10.0] - 2026-09-01
 
 The sprint file becomes the **durable completion record**. Measured across three downstream

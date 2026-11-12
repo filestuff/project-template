@@ -166,4 +166,29 @@ set +e; out=$(bash "$MS" finish S-003-gamma --no-push 2>&1); code=$?; set -e
 [[ $code -eq 0 ]] || { echo "finish S-003 exited $code:"; echo "$out"; exit 1; }
 echo "$out" | grep -Eq 'Outcome for S-003 is 3[0-9]{2} chars' || { echo "no oversized-Outcome warning:"; echo "$out"; exit 1; }
 
+# --- 5. train mode: --sprints stamps EACH member with ITS OWN commits ---------
+# Regression: the post-merge loop reused `$s` from the lint loop (left on the
+# last roster id), so every member's done-file was stamped with the last
+# member's `S-NNN:` commits and --allow-incomplete noted only that one.
+sprint_file S-004 delta complete   >docs/sprints/in-progress/S-004-delta.md
+sprint_file S-005 epsilon incomplete >docs/sprints/in-progress/S-005-epsilon.md
+git add -A && git commit -qm "start S-004 + S-005"
+TW="$R/.claude/worktrees/train-W-1"
+git worktree add -q "$TW" -b train-W-1 main
+mkdir -p "$TW/src"
+echo d >"$TW/src/delta.txt";   git -C "$TW" add -A && git -C "$TW" commit -qm "S-004: build delta"
+echo e >"$TW/src/epsilon.txt"; git -C "$TW" add -A && git -C "$TW" commit -qm "S-005: build epsilon"
+prep train-W-1
+set +e; out=$(bash "$MS" land train-W-1 --sprints S-004,S-005 --allow-incomplete "train close" 2>&1); code=$?; set -e
+[[ $code -eq 4 ]] || { echo "expected train land exit 4, got $code:"; echo "$out"; exit 1; }
+D4="docs/sprints/done/S-004-delta.md" D5="docs/sprints/done/S-005-epsilon.md"
+grep -q '^- [0-9a-f]\{7,\} S-004: build delta$' "$D4" || { echo "S-004 not stamped with its own commit:"; sed -n '/### Commits/,/### Review/p' "$D4"; exit 1; }
+grep -q 'S-005: build epsilon' "$D4" && { echo "S-004 stamped with S-005's commit"; exit 1; }
+grep -q '^- [0-9a-f]\{7,\} S-005: build epsilon$' "$D5" || { echo "S-005 not stamped with its own commit"; exit 1; }
+grep -q 'S-004: build delta' "$D5" && { echo "S-005 stamped with S-004's commit"; exit 1; }
+# only the member that failed the lint carries the override note
+grep -q 'landed incomplete — train close$' "$D5" || { echo "override reason missing on the incomplete member"; exit 1; }
+grep -q 'landed incomplete' "$D4" && { echo "override reason written to a COMPLETE member"; exit 1; }
+bash "$MS" finish train-W-1 --sprints S-004,S-005 --no-push >/dev/null
+
 echo "merge-sprint land: all checks passed"

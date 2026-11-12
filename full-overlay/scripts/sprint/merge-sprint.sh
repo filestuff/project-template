@@ -241,6 +241,7 @@ land)
   fi
 
   for ((i = 0; i < ${#SPRINTS[@]}; i++)); do
+    s=${SPRINTS[i]} # rebind per member — the lint loop above leaves $s on the LAST id
     BASENAME=${BASENAMES[i]}
     git -C "$ROOT" mv "docs/sprints/in-progress/$BASENAME" "docs/sprints/done/$BASENAME"
     DONE_FILE="$ROOT/docs/sprints/done/$BASENAME"
