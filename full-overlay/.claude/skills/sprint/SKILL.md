@@ -42,12 +42,12 @@ backlog sprint.
 |--------|---------|-----------|
 | `gate.sh` | The commit gate — single source of truth for pre-commit checks (in a linked worktree with worktree gate commands set: a reduced gate, reported as such) | non-zero = fix first |
 | `lock.sh` | Mutex for all main mutations (`acquire`/`release`/`status`/`steal --force`) | 75 = busy |
-| `claims.mjs` | `check` claims overlap vs in-flight sprints; `add` expands a claim (locked main commit, pushed via `ledger-push.sh`); `waves` (in-flight + reserved sprints pinned to Wave 1). Tokens: `claims-tokens.json` | 2 = overlap / unknown token, 3 = `add` committed, push withheld |
+| `claims.mjs` | `check` claims overlap vs in-flight + reserved sprints (`--train W-<id>`: your own train's cars don't block — never for a parallel wave); `add` expands a claim (locked main commit, pushed via `ledger-push.sh`); `waves` (in-flight + reserved sprints pinned to Wave 1). Tokens: `claims-tokens.json` | 2 = overlap / unknown token, 3 = `add` committed, push withheld |
 | `regen.mjs` | Regenerate the marker-delimited blocks in INDEX.md + ROADMAP.md (`--check` for drift, broken INDEX `done/` links and duplicate TODOS ids) | 2 = drift / unknown token |
 | `check-ledger-links.mjs [--check]` | Relink INDEX `(done/…)` links orphaned by archive rotation; `--check` also flags unresolved links + duplicate TODOS ids | 2 = issues remain |
-| `start.sh S-NNN --touches "…" [--wave W-<id>]` | The whole locked start transaction on main (refuses a sprint reserved by another wave) | 2 = overlap/claimed/foreign-reserved, 3 = committed, push withheld, 75 = busy |
+| `start.sh S-NNN --touches "…" [--wave W-<id> [--train]]` | The whole locked start transaction on main (refuses a sprint reserved by another wave; a parallel wave's members are claims-checked against each other, `--train` exempts your own train's cars) | 2 = overlap/claimed/foreign-reserved, 3 = committed, push withheld, 75 = busy |
 | `unstart.sh S-NNN [--reason "…"]` | The locked inverse: in-progress → backlog (keeps `plan_date`/`touches:`/decisions; clears `wave:`) | 2 = not in flight / branch has commits, 3 = committed, push withheld, 75 = busy |
-| `reserve-wave.sh S-A S-B… \| --drop W-<id> S-NNN \| --release W-<id>` | Locked wave reservation: mints `W-<id>`, writes `wave:` into backlog members so concurrent sessions can't take them or overlapping claims | 2 = member gone/reserved/overlap, 3 = committed, push withheld, 75 = busy |
+| `reserve-wave.sh [--train] S-A S-B… \| --drop W-<id> S-NNN \| --release W-<id>` | Locked wave reservation: mints `W-<id>`, writes `wave:` into backlog members so concurrent sessions can't take them or overlapping claims. Members must be pairwise disjoint unless `--train` | 2 = member gone/reserved/overlap, 3 = committed, push withheld, 75 = busy |
 | `merge-sprint.sh prepare\|land\|finish\|abort <branch>` | The locked completion (merge queue); `land`/`finish` take `--sprints S-A,S-B,…` in train mode to land a whole segment in one merge + one completion commit. `finish` never pushes | 3 = re-run gate, 4 = author docs, 5 = incomplete record, 75 = busy |
 | `frontmatter.mjs get\|set` | Read/write sprint frontmatter fields round-trip-safely | |
 | `push-main.sh [--wait <secs>] [--expect <ids>] [--allow-foreign]` | The only code-bearing pusher: classifies the range by sprint id **before** pushing; with `--expect`, refuses another sprint's code; guards against a `[skip ci]` HEAD hiding a code push; prints the `verify-ci.sh` command | 2 = FOREIGN code (ask before `--allow-foreign`), 75 = busy |
@@ -319,12 +319,12 @@ member's executor and reviewers follow its `tier:`). Validate the user's ordered
 chain (deps in `done/` or earlier in the chain; warn on pairs that would parallelize —
 suggest `/sprint wave`), ask the **checkpoint push policy** at T1 (ask at each checkpoint /
 auto-push / hold until train end — ORCHESTRATION "Train protocol" T1), **reserve the whole
-chain** (`reserve-wave.sh` — the wave id doubles
+chain** (`reserve-wave.sh --train` — the wave id doubles
 as the train id; checkpoint P1, `[skip ci]`), **plan all members upfront** (wave Step 2
 verbatim: parallel `sprint-planner` fan-out in a planning worktree, then ONE batched decision
 round for the entire chain — after it the train runs unattended), create **one** train
 worktree/branch (`train-W-<id>`), then loop strictly serially: `start.sh S-i --wave W-<id>
---no-push` + a ledger-sync merge into the branch, a mechanical delta-refresh screen, one
+--train --no-push` + a ledger-sync merge into the branch, a mechanical delta-refresh screen, one
 `sprint-flow` run per sprint (`mode: "train"`, the predecessor's boundary SHA as
 `diffBase` — the run executes, reviews independently, and answers BLOCKED / ESCALATE
 itself through the `arbiter` and the routing ladder; its decisions are recorded as

@@ -346,4 +346,93 @@ done
 set +e; out=$(bash "$ST" S-071 --wave W-20261112-ab12 --no-push 2>&1); code=$?; set -e
 [[ $code -eq 0 && -f docs/sprints/in-progress/S-071-claimed.md ]] || { echo "a claimed sprint should start, got $code:"; echo "$out"; exit 1; }
 
+# --- same-wave claims: only a serial train (--train) is exempt -------------------------
+# A parallel wave's members run concurrently, so start.sh's re-check must catch a
+# same-wave overlap (e.g. the planning pass widened a member's touches: after the
+# reservation). A train's members run one at a time on one branch, so they may overlap
+# each other — but only when the caller says so with --train; foreign claims still block.
+FM="$R/scripts/sprint/frontmatter.mjs"
+unchanged() { # label: a refused start/reserve must leave HEAD, the tree and the lock alone
+  [[ $(git rev-parse HEAD) == "$H" ]] || fail "$1: HEAD moved"
+  tree_clean "$1"; lock_free "$1"
+}
+reset_ledger
+git add -A && git commit -qm "reset for same-wave claims" >/dev/null 2>&1 || true
+
+# (1) parallel wave: a member whose touches now overlap an in-flight sibling must not start
+sprint_file backlog S-080 par-a "" src/par-a.txt 1 "plan_date: 2026-09-01"
+sprint_file backlog S-081 par-b "" src/par-b.txt 1 "plan_date: 2026-09-01"
+git add -A && git commit -qm "parallel pair"
+run bash "$RW" S-080 S-081 --no-push
+want_code 0 "reserve a disjoint parallel wave"
+WP=$(printf '%s\n' "$OUT" | sed -n 's/^wave id: //p')
+run bash "$ST" S-080 --wave "$WP" --no-push
+want_code 0 "first parallel member starts"
+node "$FM" set docs/sprints/backlog/S-081-par-b.md touches '["src/par-b.txt","src/par-a.txt"]'
+git add -A && git commit -qm "deepen: S-081 now also touches src/par-a.txt"
+H=$(git rev-parse HEAD)
+run bash "$ST" S-081 --wave "$WP" --no-push
+want_code 2 "a parallel member overlapping its in-flight sibling"
+want_text "(claimed by S-080"
+unchanged "refused parallel start"
+[[ -f docs/sprints/backlog/S-081-par-b.md ]] || fail "refused parallel start moved the sprint file"
+# claims.mjs check: --wave grants no exemption; --train would (it is the caller's assertion)
+run node "$CL" check --sprint S-081 --wave "$WP"
+want_code 2 "check --wave must still report same-wave overlap"
+run node "$CL" check --sprint S-081 --train bogus
+want_code 1 "check --train with a malformed id"
+
+# (2) train reserve: overlapping members reserve only with --train. A foreign solo sprint
+# is already in flight on a file neither car claims yet.
+reset_ledger
+git add -A && git commit -qm "reset for train" >/dev/null 2>&1 || true
+sprint_file backlog S-090 car-a "" src/shared.txt,src/a.txt 1 "plan_date: 2026-09-01"
+sprint_file backlog S-091 car-b "S-090" src/shared.txt,src/b.txt 1 "plan_date: 2026-09-01"
+sprint_file backlog S-092 solo "" src/c.txt 1 "plan_date: 2026-09-01"
+git add -A && git commit -qm "train chain + a foreign solo sprint"
+run bash "$ST" S-092 --no-push
+want_code 0 "foreign solo sprint starts"
+H=$(git rev-parse HEAD)
+run bash "$RW" S-090 S-091 --no-push
+want_code 2 "overlapping members reserved as a parallel wave"
+unchanged "refused parallel reserve of a chain"
+run bash "$RW" --train S-090 S-091 --no-push
+want_code 0 "overlapping members reserved as a train"
+WT=$(printf '%s\n' "$OUT" | sed -n 's/^wave id: //p')
+H=$(git rev-parse HEAD)
+run bash "$RW" --drop "$WT" S-091 --train --no-push
+want_code 1 "--train with --drop is a usage error"
+unchanged "--drop --train usage error"
+
+# (3) train start: car A starts with --train; car B without --train fails closed
+run bash "$ST" S-090 --wave "$WT" --train --no-push
+want_code 0 "first train car starts"
+H=$(git rev-parse HEAD)
+run bash "$ST" S-091 --wave "$WT" --no-push
+want_code 2 "second train car without --train fails closed"
+want_text "(claimed by S-090"
+unchanged "refused train start without --train"
+
+# (4) foreign claims still block a train car: car B's touches widen into S-092's file
+node "$FM" set docs/sprints/backlog/S-091-car-b.md touches '["src/shared.txt","src/b.txt","src/c.txt"]'
+git add -A && git commit -qm "deepen: S-091 now also touches src/c.txt"
+H=$(git rev-parse HEAD)
+run bash "$ST" S-091 --wave "$WT" --train --no-push
+want_code 2 "train car overlapping a foreign in-flight sprint"
+want_text "(claimed by S-092"
+unchanged "refused train start against foreign claims"
+run bash "$R/scripts/sprint/unstart.sh" S-092 --no-push
+want_code 0 "unstart the foreign solo sprint"
+run bash "$ST" S-091 --wave "$WT" --train --no-push
+want_code 0 "second train car starts with --train once the foreign claim is gone"
+
+# (5) --train without --wave is a usage error, before any lock or ledger change
+sprint_file backlog S-093 lone "" src/lone.txt 1 "plan_date: 2026-09-01"
+git add -A && git commit -qm "lone sprint"
+H=$(git rev-parse HEAD)
+run bash "$ST" S-093 --train --no-push
+want_code 1 "start.sh --train without --wave"
+want_text "--train needs --wave"
+unchanged "start.sh --train without --wave"
+
 echo "rolling wave: all checks passed"

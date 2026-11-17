@@ -5,7 +5,7 @@
 # `wave: W-<id>` into each member's frontmatter and commits on main under the
 # sprint-main lock; claims.mjs treats reserved backlog sprints as claim holders.
 #
-#   reserve-wave.sh S-A S-B …                  # reserve members under a fresh W-<id> (printed)
+#   reserve-wave.sh [--train] S-A S-B …        # reserve members under a fresh W-<id> (printed)
 #   reserve-wave.sh --add W-<id> S-A [S-B …]   # rolling admission: add backlog sprints to an
 #                                              # EXISTING wave (same id, no new pre_wave_sha)
 #   reserve-wave.sh --drop W-<id> S-NNN        # release ONE member (e.g. rejected at the decision round)
@@ -14,6 +14,10 @@
 # --release is also the recovery for a crashed session's stale reservation —
 # like lock.sh steal, only ever run it with the user's explicit confirmation.
 # Options for all forms: [--no-push] [--wait <secs>]
+# --train (fresh reserve and --add only): the wave is a serial train (/sprint train), so
+# its members may overlap EACH OTHER — they run one at a time on one branch. In-flight
+# sprints and other waves' reservations still block. A parallel wave omits it: its
+# members run concurrently, so they must stay pairwise disjoint.
 #
 # --add: the wave must already exist — a `sprint: reserve wave <W-id> ` commit reachable
 # from main. Each new member is claims-checked against in-flight sprints, other waves'
@@ -32,13 +36,14 @@ GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
 ROOT=${GIT_COMMON%/.git}
 MAIN=${SPRINT_MAIN_BRANCH:-main}
 
-MODE=reserve WAVE="" NO_PUSH=0 WAIT=300
+MODE=reserve WAVE="" TRAIN=0 NO_PUSH=0 WAIT=300
 MEMBERS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --drop) MODE=drop; WAVE=$2; shift 2 ;;
   --release) MODE=release; WAVE=$2; shift 2 ;;
   --add) MODE=add; WAVE=${2:-}; shift; [[ $# -eq 0 ]] || shift ;;
+  --train) TRAIN=1; shift ;;
   --no-push) NO_PUSH=1; shift ;;
   --wait) WAIT=$2; shift 2 ;;
   S-*) MEMBERS+=("$1"); shift ;;
@@ -48,7 +53,7 @@ done
 
 case "$MODE" in
 reserve)
-  [[ ${#MEMBERS[@]} -gt 0 ]] || { echo "usage: reserve-wave.sh S-A S-B … | --add W-<id> S-A [S-B …] | --drop W-<id> S-NNN | --release W-<id>" >&2; exit 1; }
+  [[ ${#MEMBERS[@]} -gt 0 ]] || { echo "usage: reserve-wave.sh [--train] S-A S-B … | --add W-<id> [--train] S-A [S-B …] | --drop W-<id> S-NNN | --release W-<id>" >&2; exit 1; }
   WAVE="W-$(date +%Y%m%d)-$(od -An -N2 -tx1 /dev/urandom | tr -d ' \n')"
   ;;
 add)
@@ -62,6 +67,10 @@ release)
   [[ ${#MEMBERS[@]} -eq 0 ]] || { echo "--release takes no sprint args: reserve-wave.sh --release W-<id>" >&2; exit 1; }
   ;;
 esac
+if [[ $TRAIN -eq 1 && ( $MODE == drop || $MODE == release ) ]]; then
+  echo "--train applies only to a fresh reserve or --add (it changes the claims check), not --$MODE" >&2
+  exit 1
+fi
 
 wave_of() { node "$SELF_DIR/frontmatter.mjs" get "$1" wave | tr -d '"'; }
 
@@ -165,8 +174,11 @@ done
 if [[ $MODE == reserve || $MODE == add ]]; then
   # With all members now marked, claims.mjs sees them as holders: each member's
   # check enforces disjointness pairwise AND against in-flight + foreign reservations.
+  # A train (--train) skips the pairwise part: its own members may overlap.
+  TRAIN_ID=""
+  if [[ $TRAIN -eq 1 ]]; then TRAIN_ID=$WAVE; fi
   for sprint in "${MEMBERS[@]}"; do
-    node "$SELF_DIR/claims.mjs" check --sprint "$sprint" || {
+    node "$SELF_DIR/claims.mjs" check --sprint "$sprint" ${TRAIN_ID:+--train "$TRAIN_ID"} || {
       if [[ $MODE == add ]]; then
         echo "$sprint: claims overlap — not added to $WAVE (rolled back)" >&2
       else
