@@ -4,6 +4,32 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.16.1] - 2026-11-17
+
+**Fix (full tier): two members of one parallel wave could both run with overlapping file
+claims.** `start.sh --wave W-…` told the claims check to skip every sprint in the same wave.
+That exemption was added in v1.3.1 for serial trains, whose cars run one at a time on one
+branch, but it also applied to parallel `/sprint wave` members, which run at the same time.
+So if the wave's planning pass widened one member's `touches:` into a sibling's files, the
+start-time re-check (documented as authoritative) let it through and both executors edited
+the same files. A parallel wave's members are now checked against each other like any other
+claim holder.
+
+- **Trains now say so with `--train`.** `start.sh S-NNN --wave W-<id> --train` and
+  `reserve-wave.sh --train S-A … S-N` exempt only your own train's cars. In-flight sprints
+  and other waves' reservations still block a train. `claims.mjs check` takes the same
+  `--train W-<id>`; its `--wave` flag is still accepted but no longer exempts anything.
+- **Trains with overlapping cars can now be reserved.** Before, `reserve-wave.sh` required
+  every member to be disjoint, so a chain whose `touches:` overlap (the case
+  ORCHESTRATION.md says trains are for) could not be reserved at all. With `--train` it can.
+- **What to change:** if you run `/sprint train` from your own notes or scripts, add
+  `--train` to its `reserve-wave.sh` and `start.sh` calls (ORCHESTRATION.md T2/T4/T5 and
+  the sprint skill already do). A train call that misses it fails with exit 2 on the first
+  overlapping car. It never lets an overlap through silently.
+
+All edited files are managed (`claims.mjs`, `start.sh`, `reserve-wave.sh`, ORCHESTRATION.md,
+the sprint skill), so `/template-upgrade`'s three-way merge applies them. No migrations.
+
 ## [1.16.0] - 2026-11-12
 
 **Risk no longer sets the tier, and the expensive tiers have to be earned.** Since v1.14.0

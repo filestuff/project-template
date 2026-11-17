@@ -273,7 +273,8 @@ return, re-run the wave math **against the planning worktree** (it holds the cor
 per member, `SPRINT_ROOT=<planning-worktree> node scripts/sprint/claims.mjs check --sprint
 S-NNN` — touches corrections may have broken pairwise disjointness; a member that now
 overlaps drops to a later wave (`reserve-wave.sh --drop`). Step 3's `start.sh` re-checks
-claims against the live ledger anyway — that check is authoritative. Scan the planner
+claims against the live ledger anyway — including the wave's own members, since a parallel
+wave's members run concurrently — and that check is authoritative. Scan the planner
 reports' `CROSS_SPRINT` / `CONTRACT_DRIFT` lines. Record everything in the wave's
 `wave-plan.md`. **Conditionally**: if any CROSS_SPRINT signal fires (e.g. a shared file all
 members need, contract misalignment between members), dispatch one **`wave-planner`**
@@ -869,7 +870,9 @@ hard-stop events." In the same confirmation, ask the **checkpoint push policy**
 - **Hold until train end** — checkpoints land locally without pushing; one deploy-gate ask
   before the final T7 push. *Caveat: no origin backup of landed code mid-train.*
 
-**T2 — Reserve the whole chain.** `bash scripts/sprint/reserve-wave.sh S-A … S-N` — the
+**T2 — Reserve the whole chain.** `bash scripts/sprint/reserve-wave.sh --train S-A … S-N` —
+`--train` lets the chain's members overlap each other (in-flight sprints and other waves'
+reservations still block); without it overlapping cars are refused. The
 wave id doubles as the train id, and this is checkpoint P1 (the train's one origin-sync
 push, `[skip ci]`, zero CI). Record the printed `pre_wave_sha` alongside the wave id — T7's
 close-the-train review uses it as the diff base. Create `.claude/sprint-orchestration/W-<id>/` with
@@ -877,14 +880,15 @@ close-the-train review uses it as the diff base. Create `.claude/sprint-orchestr
 lines are `S-NNN | started | DONE boundary=<sha> | report=… | landed@ckpt-n`).
 
 **T3 — Plan the train upfront.** Wave Step 2 (2a–2f) verbatim over **all** members: one
-planning worktree, parallel `sprint-planner` fan-out, constraints check, locked deepen
+planning worktree, parallel `sprint-planner` fan-out, constraints check (2c's per-member
+`claims.mjs check` takes `--train W-<id>` — overlap between cars is expected), locked deepen
 commit, **one batched decision round covering the entire chain** (the single biggest
 autonomy lever), locked decisions commit. A CROSS_SPRINT "shared foundation" signal in a
 serial chain usually means "make it the first car" — reorder rather than reshape.
 `NOT_READY` / `SPLIT_SUGGESTED` members are dropped (`reserve-wave.sh --drop`) or the chain
 re-cut **now** — never mid-train.
 
-**T4 — Open the train.** `start.sh S-A --wave W-<id> --no-push` →
+**T4 — Open the train.** `start.sh S-A --wave W-<id> --train --no-push` →
 `git worktree add .claude/worktrees/train-W-<id> -b train-W-<id> main` (once; never
 EnterWorktree) → `worktree-link.sh setup` (env files; links in link mode — install mode adds
 one `{{PACKAGE_MANAGER}}` install). Record the base SHA
@@ -892,8 +896,9 @@ in train-progress.md.
 
 **T5 — The sprint loop** (strictly serial, per member i):
 
-1. **Start + sync** (i > 1): `start.sh S-i --wave W-<id> --no-push`, then the ledger-sync
-   merge into the branch.
+1. **Start + sync** (i > 1): `start.sh S-i --wave W-<id> --train --no-push` (`--train`:
+   claims held by your own earlier and later cars don't block; without it, any car that
+   overlaps another fails with exit 2), then the ledger-sync merge into the branch.
 2. **Delta refresh (mechanical, master-only — no code reads).** `planStatus` is blind
    mid-train (dep `end_date`s flip only at checkpoints), so screen staleness yourself: take
    the predecessor's `deviations[]` from its `close-check.mjs --json` output and its

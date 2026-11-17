@@ -3,12 +3,16 @@
 # Runs entirely against the primary checkout (the lifecycle ledger on main);
 # call it BEFORE creating the sprint worktree, then branch from the SHA it prints.
 #
-#   start.sh S-NNN [--touches "p1,p2,…"] [--wave W-<id>] [--no-push] [--wait <secs>]
+#   start.sh S-NNN [--touches "p1,p2,…"] [--wave W-<id> [--train]] [--no-push] [--wait <secs>]
 #
 # --touches sets/replaces the claims manifest; omit it only when the backlog
 # file already carries a populated `touches:` (e.g. from /sprint plan).
 # --wave asserts this start belongs to a wave reservation (reserve-wave.sh);
 # a sprint reserved by a DIFFERENT wave refuses to start (exit 2).
+# --train (needs --wave) marks a serial-train member: claims held by your own
+# train's members don't block it (they run one at a time on one branch). A
+# parallel wave member omits it — its claims are checked against its own wave's
+# members like any other holder, since they run concurrently.
 #
 # Exit codes: 0 ok (prints new main SHA) · 2 claims overlap / sprint not in
 # backlog / reserved by another wave · 3 started locally but push withheld —
@@ -21,18 +25,23 @@ GIT_COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
 ROOT=${GIT_COMMON%/.git}
 MAIN=${SPRINT_MAIN_BRANCH:-main}
 
-SPRINT=${1:?usage: start.sh S-NNN [--touches "p1,p2"] [--wave W-<id>] [--no-push] [--wait secs]}
+SPRINT=${1:?usage: start.sh S-NNN [--touches "p1,p2"] [--wave W-<id> [--train]] [--no-push] [--wait secs]}
 shift
-TOUCHES="" WAVE_ARG="" NO_PUSH=0 WAIT=300
+TOUCHES="" WAVE_ARG="" TRAIN=0 NO_PUSH=0 WAIT=300
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --touches) TOUCHES=$2; shift 2 ;;
   --wave) WAVE_ARG=$2; shift 2 ;;
+  --train) TRAIN=1; shift ;;
   --no-push) NO_PUSH=1; shift ;;
   --wait) WAIT=$2; shift 2 ;;
   *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
 done
+if [[ $TRAIN -eq 1 && -z $WAVE_ARG ]]; then
+  echo "--train needs --wave W-<id> (the train's reservation id)" >&2
+  exit 1
+fi
 
 # Locate the backlog file (exit 2 if missing — likely already claimed by another agent).
 shopt -s nullglob
@@ -90,7 +99,9 @@ else
   CLAIM_PATHS=$(node "$SELF_DIR/frontmatter.mjs" get "$FILE" touches | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(Array.isArray(v)?v.join(","):"")')
   [[ -n $CLAIM_PATHS ]] || { echo "no claims: pass --touches or populate touches: in $BASENAME first" >&2; exit 2; }
 fi
-node "$SELF_DIR/claims.mjs" check --paths "$CLAIM_PATHS" --sprint "$SPRINT" ${WAVE_ARG:+--wave "$WAVE_ARG"} || exit $?
+TRAIN_ID=""
+if [[ $TRAIN -eq 1 ]]; then TRAIN_ID=$WAVE_ARG; fi
+node "$SELF_DIR/claims.mjs" check --paths "$CLAIM_PATHS" --sprint "$SPRINT" ${TRAIN_ID:+--train "$TRAIN_ID"} || exit $?
 
 # The transaction: move, flip frontmatter, write claims, regen, commit.
 MUTATING=1

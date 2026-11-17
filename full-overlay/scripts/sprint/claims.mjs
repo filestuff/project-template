@@ -4,8 +4,12 @@
 // on main; reserved = backlog files with a `wave:` set by reserve-wave.sh (the
 // primary checkout is parked clean on main — so reading the filesystem reads main).
 //
-//   claims.mjs check --sprint S-NNN              # that sprint's touches vs all OTHER in-flight sprints
-//   claims.mjs check --paths a,b [--sprint S-NNN] # explicit paths vs in-flight (excluding own sprint)
+//   claims.mjs check --sprint S-NNN [--train W-<id>]   # that sprint's touches vs all OTHER holders
+//   claims.mjs check --paths a,b [--sprint S-NNN] [--train W-<id>]
+//                                                 # explicit paths vs holders (excluding own sprint)
+//                                                 # --train: a serial-train member — holders in that
+//                                                 # same train don't block. A parallel wave passes
+//                                                 # nothing: its own members are checked like any other.
 //   claims.mjs add S-NNN <path...> [--no-push]   # locked main commit appending to touches
 //   claims.mjs covers --sprints S-A,S-B           # paths on stdin (one per line) vs those
 //                                                 # sprints' touches; prints the uncovered ones
@@ -249,7 +253,8 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--sprint") args.sprint = argv[++i];
     else if (argv[i] === "--paths") args.paths = argv[++i].split(",").map((s) => s.trim());
-    else if (argv[i] === "--wave") args.wave = argv[++i];
+    else if (argv[i] === "--wave") args.wave = argv[++i]; // accepted by `check`, no effect (see --train)
+    else if (argv[i] === "--train") args.train = argv[++i] ?? "";
     else if (argv[i] === "--sprints") args.sprints = argv[++i].split(",").map((s) => s.trim()).filter(Boolean);
     else if (argv[i] === "--no-push") args.noPush = true;
     else args.positional.push(argv[i]);
@@ -291,7 +296,11 @@ if (cmd === "check") {
     }
     mine = readSprintFile(file).touches ?? [];
   } else {
-    console.error("usage: claims.mjs check --sprint S-NNN | --paths a,b [--sprint S-NNN]");
+    console.error("usage: claims.mjs check --sprint S-NNN | --paths a,b [--sprint S-NNN] [--train W-<id>]");
+    process.exit(1);
+  }
+  if (args.train !== undefined && !/^W-\S+$/.test(args.train)) {
+    console.error(`--train needs a wave id (W-<id>), got '${args.train}'`);
     process.exit(1);
   }
 
@@ -304,10 +313,11 @@ if (cmd === "check") {
     for (const myClaim of mine) expand(myClaim); // validate even when nothing else is in flight
     for (const other of holders) {
       if (args.sprint && other.sprint === args.sprint) continue;
-      // Same-wave holders are our own train/wave roster: a reservation guards
-      // against OTHER sessions, and a serial train's members legitimately share
-      // claims (they run one at a time on one branch). Foreign waves still block.
-      if (args.wave && other.wave === args.wave) continue;
+      // Only a serial train's members legitimately share claims: they run one at a
+      // time on one branch. A parallel wave's members run concurrently, so a
+      // same-wave overlap is exactly what this check must catch — `--wave` grants
+      // no exemption. Foreign waves and solo sprints block a train too.
+      if (args.train && other.wave === args.train) continue;
       for (const theirClaim of other.touches ?? [])
         for (const myClaim of mine)
           if (claimsOverlap(myClaim, theirClaim))
