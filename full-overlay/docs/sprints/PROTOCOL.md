@@ -439,15 +439,20 @@ proposal + stage: Grep `backlog/` and `in-progress/` on `main` for the same cita
 Step 4. (Wave/train sprints skip this step — the master runs the check once at wave close /
 train close; see ORCHESTRATION.md.)
 
+**Where proposal state is written.** A proposal that opens with a `---` header (v1.18+):
+stage state is the stage's row in its `## Status` table (State column), and proposal
+status is the header's `status:` key, with `closed:` set to the date. An older proposal:
+stage state is the stage's `- Status:` line, and proposal status is the `**Status**:`
+line, written `delivered YYYY-MM-DD`.
+
 If this was the last:
-- **Staged proposal** → set that stage's status line to `delivered YYYY-MM-DD` in the
+- **Staged proposal** → set that stage's state to `delivered YYYY-MM-DD` in the
   proposal file — stage the edit in the worktree; it lands with the sprint via Steps 4–5's
   normal merge (no separate main-lock commit). Then tell the user: "Stage k of proposal
   NNN is complete — the proposal defines a gate here: [gate question]." Offer
   `/proposal NNN` to decide it. Do NOT decide the gate inline at sprint close, and do not
   plan the next stage without it.
-- **Un-staged proposal** → flip its `**Status**:` to `delivered YYYY-MM-DD` the same way
-  and say so.
+- **Un-staged proposal** → set its status to delivered the same way and say so.
 
 ### Step 3.7: Learnings
 

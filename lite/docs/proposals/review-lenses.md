@@ -8,7 +8,8 @@ view would catch, then reports only what it can ground.
 
 ## Which lenses run
 
-Proposals — by the `**Rigor**:` line:
+Proposals — by the rigor tier (the header's `rigor:` key; a `**Rigor**:` line in proposals
+written before v1.18):
 
 | Rigor | Lenses |
 |---|---|
@@ -19,7 +20,7 @@ Proposals — by the `**Rigor**:` line:
 Plans — always: coverage, slicing, contracts, executability.
 
 More lenses than the table gives is noise, not rigor: do not add one because the work
-"feels important". Raise the Rigor line instead (it is the user's call) if the table
+"feels important". Raise the rigor tier instead (it is the user's call) if the table
 under-serves the proposal.
 
 ## Scoring
@@ -58,7 +59,7 @@ No compliments, no restating the artifact, no findings outside the lens.
 ## Proposal lenses
 
 ### feasibility
-Is every claim about the current system true, and can the recommended alternative actually
+Is every claim about the current system true, and can the chosen direction actually
 be built on it? Verify the Problem's "what is happening now" against the code. Check that
 each alternative's "how it works" matches the interfaces, data shapes and dependencies
 that exist — cite where it does not. Check the effort notes against the size of what must
@@ -74,7 +75,7 @@ year from now. Prefer the structurally simpler design when two reach the same ou
 Is this the smallest thing that delivers the stated value, and is everything in it
 needed? Apply the decision ladder and YAGNI from `docs/ENGINEERING_PRINCIPLES.md`: does the
 codebase, the standard library or an installed dependency already do part of it? Is any
-Non-Goal quietly delivered, or any Goal quietly dropped, by the recommended alternative?
+Non-Goal quietly delivered, or any Goal quietly dropped, by the chosen direction?
 Is "do nothing" dismissed without its cost being stated?
 
 ### security

@@ -45,7 +45,9 @@
 //                           (Whether the named signal holds is the brief-auditor's check.)
 //   touches-empty           WARN only, and only when <root>/scripts/sprint/claims.mjs exists
 //                           (full tier): `touches:` has no entries
-// Plan record (--record <file>), a proposal or plan doc:
+// Plan record (--record <file>), a proposal or plan doc. A proposal's records may live
+// beside it: when `<file-without-.md>/record.md` exists and holds a `## Plan record`, it
+// is read instead of <file>. Passing that record.md directly works too.
 //   record-missing          no `## Plan record` section
 //   record-coverage-missing the latest entry has no table/list line referencing an S-NNN
 //   record-sentinel-missing the section's last line is not `NO UNRESOLVED DECISIONS` (and no
@@ -59,7 +61,7 @@
 // --json: {ok, sprints:[{sprint, file, risk, tier, failures, warnings}], record, failures}.
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { resolve, join, basename, relative, isAbsolute } from "node:path";
+import { resolve, join, basename, dirname, relative, isAbsolute } from "node:path";
 
 const USAGE = "usage: plan-check.mjs [--root <repo-root>] [--record <file>] [--json] [S-NNN …]";
 const die = (msg, code = 1) => { console.error(msg); process.exit(code); };
@@ -485,6 +487,16 @@ if (recordArg !== null) {
   if (!existsSync(rf) && !isAbsolute(recordArg) && existsSync(resolve(process.cwd(), recordArg))) rf = resolve(process.cwd(), recordArg);
   let raw;
   try { raw = readFileSync(rf, "utf8"); } catch (e) { die(`cannot read ${recordArg}: ${e.message}`); }
+  // `owner` names the proposal the record belongs to (its number drives coverage-ghost);
+  // `rf` becomes the file the record is actually read from.
+  let owner = basename(rf);
+  if (owner === "record.md") owner = basename(dirname(rf));
+  else {
+    const side = join(rf.replace(/\.md$/i, ""), "record.md");
+    let sideRaw = null;
+    try { sideRaw = readFileSync(side, "utf8"); } catch { /* no record folder */ }
+    if (sideRaw !== null && parseDoc(stripComments(sideRaw)).sectionOf("Plan record", 2)) { raw = sideRaw; rf = side; }
+  }
   const doc = parseDoc(stripComments(raw));
   const { lines } = doc;
   const failures = [];
@@ -514,12 +526,12 @@ if (recordArg !== null) {
   }
   // coverage-ghost: backlog mode only
   if (!explicit && sec) {
-    const num = /^(\d+)/.exec(basename(rf));
+    const num = /^(\d+)/.exec(owner);
     if (num) {
       for (const r of results) {
         if (r.proposal === null || !/^\d+$/.test(r.proposal) || Number(r.proposal) !== Number(num[1])) continue;
         if (!new RegExp(`\\b${r.id}\\b`).test(entryText)) {
-          r.failures.push({ rule: "coverage-ghost", line: r.proposalLine + 1, text: `${r.id} cites proposal ${r.proposal} but is not in the latest Plan record entry of ${basename(rf)}` });
+          r.failures.push({ rule: "coverage-ghost", line: r.proposalLine + 1, text: `${r.id} cites proposal ${r.proposal} but is not in the latest Plan record entry of ${owner}` });
         }
       }
     }

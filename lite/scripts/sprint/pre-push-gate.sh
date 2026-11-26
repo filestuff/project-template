@@ -75,8 +75,10 @@ changed=$(git diff --name-only "$gate_base"...HEAD 2>/dev/null || true)
 # --- Planning-artifact lint (changed proposals + certified backlog briefs) ---
 # The prose rules for proposals and sprint briefs decay unless something checks them.
 # Scope is deliberately narrow so this never blocks a ledger push it should not:
-#   - proposals: every changed docs/proposals/NNN-*.md (a file with no `**Rigor**:` line
-#     is treated as legacy/imported by the lint itself and only shape-checked);
+#   - proposals: every changed docs/proposals/NNN-*.md, and the proposal that owns a
+#     changed file in its folder (docs/proposals/NNN-title/record.md → NNN-title.md). A
+#     file with neither a `rigor:` header key nor a `**Rigor**:` line is treated as
+#     legacy/imported by the lint itself and only shape-checked;
 #   - sprint briefs: changed BACKLOG files that are certified (`plan_date` set) AND carry
 #     a `risk:` key, i.e. were written under the 1.11+ template. Unplanned skeletons,
 #     in-progress files (their citations move as the sprint edits code) and pre-1.11
@@ -94,7 +96,7 @@ if command -v node >/dev/null 2>&1 && [ -f scripts/sprint/plan-check.mjs ] && [ 
     # shellcheck disable=SC2086 # word-splitting the id list is the point
     node scripts/sprint/plan-check.mjs $plan_ids
   fi
-  for f in $(printf '%s\n' "$changed" | grep -E '^docs/proposals/[0-9]{3}-[^/ ]*\.md$' || true); do
+  for f in $(printf '%s\n' "$changed" | sed -E 's#^(docs/proposals/[0-9]{3}-[^/ ]+)/[^/ ]+\.md$#\1.md#' | grep -E '^docs/proposals/[0-9]{3}-[^/ ]*\.md$' | sort -u || true); do
     [ -f "$f" ] || continue
     echo "pre-push: linting $f"
     node scripts/sprint/proposal-check.mjs "$f"

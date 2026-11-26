@@ -153,12 +153,89 @@ gate
 echo "$out" | grep -q 'legacy-proposal' || { echo "imported proposal was not shape-checked:"; echo "$out"; exit 1; }
 reset
 
-cp docs/proposals/PROPOSAL_TEMPLATE.md docs/proposals/002-unfilled.md   # has a Rigor line and every placeholder
+cp docs/proposals/PROPOSAL_TEMPLATE.md docs/proposals/002-unfilled.md   # has a rigor: key and every placeholder
 commit "unfilled proposal"
 gate
 [[ $code -ne 0 ]] || { echo "an unfilled rigor-bearing proposal was not blocked:"; echo "$out"; exit 1; }
 echo "$out" | grep -q 'placeholder-left' || { echo "block did not name placeholder-left:"; echo "$out"; exit 1; }
 reset
+
+# --- 4b. v1.18: a change to a file in a proposal's folder lints the proposal itself ------
+v2_proposal() { # $1 = status
+  cat <<EOS
+---
+status: $1
+rigor: light
+created: 2026-11-12
+---
+
+# Proposal 004: Cache the lookup
+
+## Summary
+
+Lookups are slow; cache them. Appetite: minimal.
+
+## Problem
+
+Lookups are slow, see \`src/a.js:1\`.
+
+## Goals / Non-Goals
+
+- Goal: faster lookups.
+
+## Direction
+
+Cache it in memory.
+
+## Alternatives considered
+
+### Do nothing
+Leave it.
+Why not: stays slow
+
+## Decision criteria
+
+Effort.
+
+## Production readiness
+
+### Risks and rollback
+
+Stale reads; rollback is removing the cache call.
+
+## Decisions
+
+- D-1 2026-11-12 (interactive, reserved, owner): cache in memory — changes: Direction
+
+## Open questions
+
+— none
+
+## References
+
+Prior decisions consulted: none apply — searched docs/decisions/ for cache
+EOS
+}
+mkdir -p docs/proposals/004-cache
+v2_proposal active >docs/proposals/004-cache.md
+printf '## Review record\n\n### 2026-11-12 round 1\n\nREVIEW: PASS\n' >docs/proposals/004-cache/record.md
+commit "v2 proposal with a record folder"
+git push -q origin main 2>/dev/null
+gate
+[[ $code -eq 0 ]] || { echo "an unchanged tree was blocked:"; echo "$out"; exit 1; }
+printf '## Review record\n\n### 2026-11-12 round 1\n\nlooks fine\n' >docs/proposals/004-cache/record.md
+commit "break the record only"
+gate
+[[ $code -ne 0 ]] || { echo "a record-only change that breaks the review record was not blocked:"; echo "$out"; exit 1; }
+echo "$out" | grep -q 'linting docs/proposals/004-cache.md' || { echo "a record.md change did not lint its proposal:"; echo "$out"; exit 1; }
+echo "$out" | grep -q 'review-missing' || { echo "block did not name review-missing:"; echo "$out"; exit 1; }
+git reset -q --hard origin/main && git clean -qfd
+printf 'Supporting detail.\n' >docs/proposals/004-cache/evidence.md
+commit "add a detail file only"
+gate
+[[ $code -eq 0 ]] || { echo "a valid detail-file change was blocked:"; echo "$out"; exit 1; }
+[[ $(echo "$out" | grep -c 'linting docs/proposals/004-cache.md') -eq 1 ]] || { echo "a detail-file change must lint its proposal exactly once:"; echo "$out"; exit 1; }
+git reset -q --hard origin/main && git clean -qfd
 
 # --- 5. a repo without the lint scripts (pre-1.11 payload) is unaffected ----------------
 rm scripts/sprint/plan-check.mjs scripts/sprint/proposal-check.mjs

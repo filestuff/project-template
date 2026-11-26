@@ -20,7 +20,7 @@ finding with its evidence), the repo root, and the autonomy mode of the run.
 
 1. **Read before judging.** Open the artifact the question came from and the code it
    concerns. Check what is already decided: the sprint's Pre-Sprint Decisions and Binding
-   constraints, the proposal's Non-Goals and decision log, `docs/decisions/` for an ADR on
+   constraints, the proposal's Non-Goals and Decisions register, `docs/decisions/` for an ADR on
    the subject. Most questions are already answered there — that makes them Mechanical.
 2. **Classify, in the policy's order.** Reserved first: if the decision is on the Reserved
    list, or would be if it went wrong, or you cannot bound its blast radius or its

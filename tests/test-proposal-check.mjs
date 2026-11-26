@@ -130,7 +130,7 @@ for (const tier of ["light", "standard", "critical"]) {
   check("shipped template exits 5", r.code === 5, r.out);
   check("template: rigor-invalid", /FAIL rigor-invalid/.test(r.out), r.out);
   check("template: placeholder-left", /FAIL placeholder-left/.test(r.out), r.out);
-  check("template: not legacy (has a Rigor line)", !/legacy-proposal/.test(r.out), r.out);
+  check("template: not legacy (has a rigor: key)", !/legacy-proposal/.test(r.out), r.out);
 }
 
 // 3. rigor-invalid
@@ -150,7 +150,7 @@ rejects("section-empty", proposal().replace("Users wait too long. The slow path 
 }
 
 // 5. placeholder-left (and its false-positive guards)
-rejects("placeholder brace", proposal().replace("Keeps hot rows in a map.", "{How it works.}"), "placeholder-left");
+rejects("placeholder brace", proposal().replace("Keeps hot rows in a map.", "{How it would work.}"), "placeholder-left");
 rejects("placeholder title", proposal().replace("Cache the thing", "Title In Plain Words"), "placeholder-left");
 rejects("placeholder date", proposal().replace("2026-09-01\n", "YYYY-MM-DD\n"), "placeholder-left");
 rejects("placeholder H1", proposal().replace("# Proposal 007:", "# Proposal NNN:"), "placeholder-left");
@@ -159,7 +159,7 @@ rejects("placeholder H1", proposal().replace("# Proposal 007:", "# Proposal NNN:
   check("braces in code span and fence are not placeholders", r.code === 0, r.out);
 }
 {
-  const r = run("comment-placeholder-ok.md", proposal().replace("Keeps hot rows in a map.", "Keeps hot rows in a map.\n<!-- {How it works.} Title In Plain Words -->"));
+  const r = run("comment-placeholder-ok.md", proposal().replace("Keeps hot rows in a map.", "Keeps hot rows in a map.\n<!-- {How it would work.} Title In Plain Words -->"));
   check("placeholder inside a comment is ignored", r.code === 0, r.out);
 }
 
@@ -275,7 +275,7 @@ rejects("review-malformed on draft", proposal() + "\n## Review record\n\nREVIEW:
   check("legacy still enforces citation-unresolved", bad2.code === 5 && /citation-unresolved/.test(bad2.out), bad2.out);
   const bad3 = run("legacy-alt.md", legacy.replace("### B — do nothing\nLeave as is. Trade-offs: users keep waiting.\n", ""));
   check("legacy still enforces alternatives-too-few", bad3.code === 5 && /alternatives-too-few/.test(bad3.out), bad3.out);
-  const bad4 = run("legacy-ph.md", legacy.replace("Keeps hot rows", "{How it works.} hot rows"));
+  const bad4 = run("legacy-ph.md", legacy.replace("Keeps hot rows", "{How it would work.} hot rows"));
   check("legacy still enforces placeholder-left", bad4.code === 5 && /placeholder-left/.test(bad4.out), bad4.out);
   const bad5 = run("legacy-empty.md", legacy.replace("Reversibility and effort.", ""));
   check("legacy still enforces section-empty", bad5.code === 5 && /section-empty/.test(bad5.out), bad5.out);
@@ -306,7 +306,7 @@ rejects("review-malformed on draft", proposal() + "\n## Review record\n\nREVIEW:
 
 // 16. excerpt cap and line numbers
 {
-  const r = run("excerpt.md", proposal().replace("Keeps hot rows in a map.", `{How it works.} ${"x".repeat(200)}`));
+  const r = run("excerpt.md", proposal().replace("Keeps hot rows in a map.", `{How it would work.} ${"x".repeat(200)}`));
   const line = r.out.split("\n").find((l) => l.startsWith("FAIL placeholder-left")) ?? "";
   check("excerpt is capped at 100 chars", line.length > 0 && line.replace(/^FAIL placeholder-left L\d+: /, "").length <= 100, line);
 }
@@ -321,10 +321,196 @@ rejects("review-malformed on draft", proposal() + "\n## Review record\n\nREVIEW:
   writeFileSync(join(bare, "src/a.js"), Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join("\n") + "\n");
   writeFileSync(join(bare, "src/b.js"), "one\ntwo\nthree\n");
   const f = join(tmp, "no-template.md");
-  writeFileSync(f, proposal().replace("Keeps hot rows in a map.", "{How it works.}"));
+  writeFileSync(f, proposal().replace("Keeps hot rows in a map.", "{How it would work.}"));
   let out = "", code = 0;
   try { out = execFileSync("node", [SCRIPT, f, "--root", bare], { encoding: "utf8" }); } catch (e) { code = e.status; out = e.stdout ?? ""; }
   check("no template under --root: brace check skipped with a WARN", code === 0 && /WARN template-not-found/.test(out), out);
+}
+
+// 18. v2 — the frontmatter shape (PROPOSAL_TEMPLATE.md from v1.18)
+const DECISIONS = `## Decisions
+
+- D-1 2026-09-01 (interactive, reserved, owner): cache in memory — changes: Direction — rejected: do nothing
+- D-2 2026-09-02 (gated, taste, agent): TTL defaults to 60s — changes: Direction — principle: reversible
+  — rejected: 5m — undo: change one constant
+`;
+const v2 = ({ rigor = "light", status = "draft", fm = "", top = "", mid = "", decisions = DECISIONS, extra = "" } = {}) => `---
+status: ${status}
+rigor: ${rigor}
+created: 2026-09-01
+closed:
+status_note:
+supersedes: []
+superseded_by:
+blocked_by: []
+${fm}---
+
+# Proposal 007: Cache the thing
+
+## Summary
+
+Reads are slow; we cache hot rows in memory. Appetite: minimal. Done when p95 halves.
+
+${top}## Problem
+
+Users wait too long. The slow path is at \`src/a.js:3\` and src/a.js:2-5.
+
+## Goals / Non-Goals
+
+- Goal: faster reads
+- Non-Goal: new storage engine
+
+## Direction
+
+Keep hot rows in a map; it wins on effort and is trivially reversible.
+
+## Alternatives considered
+
+### Do nothing
+Leave as is.
+Why not: users keep waiting · Effort: none · Reversible: yes
+
+## Decision criteria
+
+Reversibility and effort.
+
+${readiness(rigor)}
+${mid}${decisions}
+## Open questions
+
+- [ ] TTL length — options: 60s (recommended: fresh enough), 5m — if deferred: ships with 60s
+
+## References
+
+Prior decisions consulted: none apply — searched docs/decisions/ for cache terms
+${extra}`;
+const warns = (label, body, rule) => {
+  const r = run(`${label.replace(/\W+/g, "-")}.md`, body);
+  check(`${label}: a warning never fails`, r.code === 0, r.out);
+  check(`${label}: names ${rule}`, new RegExp(`WARN ${rule} L\\d+`).test(r.out), r.out);
+};
+// a record that lives beside the proposal: <name>/record.md
+const withSide = (name, body, record) => {
+  mkdirSync(join(tmp, name), { recursive: true });
+  writeFileSync(join(tmp, name, "record.md"), record);
+  return run(`${name}.md`, body);
+};
+for (const tier of ["light", "standard", "critical"]) {
+  const r = run(`v2-ok-${tier}.md`, v2({ rigor: tier }));
+  check(`v2 valid ${tier} draft exits 0`, r.code === 0, r.out);
+  check(`v2 ${tier}: no warnings on a small file`, !/WARN/.test(r.out), r.out);
+  const a = run(`v2-active-${tier}.md`, withReview(v2({ rigor: tier, status: "active" })));
+  check(`v2 valid ${tier} active (inline record) exits 0`, a.code === 0, a.out);
+}
+{
+  const r = run("v2-json.md", v2({ rigor: "standard" }), "--json");
+  const j = JSON.parse(r.out);
+  check("v2 json: shape v2, legacy false, status is the bare word", j.shape === "v2" && j.legacy === false && j.status === "draft" && j.rigor === "standard", r.out);
+  const j1 = JSON.parse(run("v1-json.md", proposal(), "--json").out);
+  check("v1 json: shape v1", j1.shape === "v1", JSON.stringify(j1));
+  const j0 = JSON.parse(run("legacy-shape.md", proposal({ header: false }), "--json").out);
+  check("legacy json: shape legacy", j0.shape === "legacy", JSON.stringify(j0));
+  // a leading block with no rigor: key belongs to an imported document
+  const imp = run("imported.md", `---\ntitle: a plan\n---\n\n${proposal({ header: false })}`);
+  check("frontmatter without rigor: stays legacy", imp.code === 0 && /WARN legacy-proposal/.test(imp.out), imp.out);
+}
+// header rules
+rejects("v2 status-invalid", v2({ status: "active (stage 1/2)" }), "status-invalid");
+rejects("v2 rigor-invalid", v2({ rigor: "fast" }), "rigor-invalid");
+rejects("v2 status-note-too-long", v2().replace("status_note:", `status_note: ${"x".repeat(121)}`), "status-note-too-long");
+{
+  const r = run("v2-note-ok.md", v2().replace("status_note:", `status_note: ${"x".repeat(120)}`));
+  check("v2 status_note of exactly 120 characters passes", r.code === 0, r.out);
+}
+rejects("v2 ref-malformed", v2().replace("supersedes: []", "supersedes: [proposal 28]"), "ref-malformed");
+{
+  const r = run("v2-refs-ok.md", v2().replace("supersedes: []", "supersedes: [028, 036]").replace("superseded_by:", "superseded_by: 040"));
+  check("v2 3-digit refs (list and bare) pass", r.code === 0, r.out);
+}
+rejects("v2 created placeholder", v2().replace("created: 2026-09-01", "created: YYYY-MM-DD"), "placeholder-left");
+rejects("v2 created not a date", v2().replace("created: 2026-09-01", "created: last week"), "frontmatter-invalid");
+rejects("v2 closed not a date", v2().replace("closed:", "closed: soon"), "frontmatter-invalid");
+rejects("v2 status key missing", v2().replace("status: draft\n", ""), "frontmatter-invalid");
+rejects("v2 junk header line", v2({ fm: "just some words\n" }), "frontmatter-invalid");
+rejects("v2 unclosed header", v2().replace("blocked_by: []\n---\n", "blocked_by: []\n"), "frontmatter-invalid");
+rejects("v2 header-duplicated", v2({ top: "**Status**: active (stage 1/1)\n\n" }), "header-duplicated");
+// sections
+rejects("v2 Summary missing", v2().replace(/## Summary[\s\S]*?(?=## Problem)/, ""), "section-missing");
+rejects("v2 Direction missing", v2().replace(/## Direction[\s\S]*?(?=## Alternatives considered)/, ""), "section-missing");
+rejects("v2 Decisions missing", v2({ decisions: "" }), "section-missing");
+rejects("v2 no alternative considered", v2().replace(/### Do nothing[\s\S]*?(?=## Decision criteria)/, "Nothing else was looked at.\n\n"), "alternatives-too-few");
+// decisions
+rejects("v2 decision entry malformed", v2({ decisions: "## Decisions\n\n- 2026-09-01 we picked the cache\n" }), "decisions-malformed");
+rejects("v2 decisions prose only", v2({ decisions: "## Decisions\n\nWe picked the cache.\n" }), "decisions-malformed");
+rejects("v2 decision id repeated", v2({ decisions: DECISIONS.replace("- D-2", "- D-1") }), "decisions-malformed");
+rejects("v2 supersedes an unknown id", v2({ decisions: `${DECISIONS}- D-3 2026-09-03 (interactive, reserved, owner): go back to 5m — changes: Direction — supersedes: D-9\n` }), "decisions-malformed");
+{
+  const r = run("v2-supersedes-ok.md", v2({ decisions: `${DECISIONS}- D-3 2026-09-03 (interactive, reserved, owner): go back to 5m — changes: Direction — supersedes: D-2\n` }));
+  check("v2 supersedes a real earlier entry passes", r.code === 0, r.out);
+}
+// stages: the Status table is the only home of stage state
+const TABLE = (s1 = "pending", s2 = "pending") => `## Status
+
+| Stage | Outcome | Gate question | State |
+|---|---|---|---|
+| 1 | faster reads | is the hit rate high enough? | ${s1} |
+| 2 | warm restarts | — | ${s2} |
+
+`;
+const BLOCK1 = `## Stages
+
+### Stage 1 — Cache
+- Delivers: faster reads
+- Tests: that a map is enough
+${GATE}
+
+`;
+const BLOCK2 = "### Stage 2 — Persist\n- Delivers: warm restarts\n\n";
+{
+  const r = run("v2-staged-ok.md", v2({ top: TABLE(), mid: BLOCK1 }));
+  check("v2 staged: stage 1 in full, stage 2 a sketch, passes", r.code === 0, r.out);
+  const due = run("v2-gate-due.md", withReview(v2({ status: "active", top: TABLE("delivered 2026-09-10"), mid: BLOCK1 })));
+  check("v2 staged: stage 1 delivered, gate due, stage 2 still a sketch, passes", due.code === 0, due.out);
+  const gated = run("v2-gated.md", withReview(v2({ status: "active", top: TABLE("gate: A 2026-09-11", "planned (S-010..S-012)"), mid: BLOCK1 + BLOCK2 })));
+  check("v2 staged: gate decided and stage 2 elaborated + planned, passes", gated.code === 0, gated.out);
+  const stopped = run("v2-stopped.md", withReview(v2({ status: "stopped", top: TABLE("gate: stop here 2026-09-11"), mid: BLOCK1 })));
+  check("v2 staged: stopped at the gate leaves later sketches alone", stopped.code === 0, stopped.out);
+}
+rejects("v2 first stage is only a sketch", v2({ top: TABLE() }), "stage-block-missing");
+rejects("v2 sketch planned", withReview(v2({ status: "active", top: TABLE("gate: A 2026-09-11", "planned (S-010..S-012)"), mid: BLOCK1 })), "stage-block-missing");
+rejects("v2 next stage not elaborated after its gate", withReview(v2({ status: "active", top: TABLE("gate: A 2026-09-11"), mid: BLOCK1 })), "stage-block-missing");
+rejects("v2 Stages without a Status table", v2({ mid: BLOCK1 }), "stage-table-invalid");
+rejects("v2 state outside the grammar", v2({ top: TABLE("in progress"), mid: BLOCK1 }), "stage-table-invalid");
+rejects("v2 row with too few cells", v2({ top: TABLE().replace("| 2 | warm restarts | — | pending |", "| 2 | pending |"), mid: BLOCK1 }), "stage-table-invalid");
+rejects("v2 block with no row", v2({ top: TABLE(), mid: BLOCK1 + "### Stage 3 — Extra\n- Delivers: more\n\n" }), "stage-table-invalid");
+rejects("v2 Status line inside a block", v2({ top: TABLE(), mid: BLOCK1.replace("- Tests:", "- Status: pending\n- Tests:") }), "stage-table-invalid");
+rejects("v2 non-last stage without Gate", v2({ top: TABLE(), mid: BLOCK1.replace(GATE, "") }), "stage-gate-missing");
+// review record: status words, and where the record lives
+rejects("v2 review-missing past draft", v2({ status: "active" }), "review-missing");
+for (const s of ["rejected", "parked"]) {
+  const r = run(`v2-${s}.md`, v2({ status: s }));
+  check(`v2 ${s} needs no review record`, r.code === 0, r.out);
+}
+{
+  const ok = withSide("side-ok", v2({ status: "active" }), `# Record\n\n${REVIEW_PASS}\n## Plan record\n\nlater entries\n`);
+  check("v2 review record in <proposal>/record.md is found", ok.code === 0, ok.out);
+  const bad = withSide("side-bad", v2({ status: "active" }), "## Review record\n\nAll good.\n");
+  check("v2 malformed record.md fails review-missing", bad.code === 5 && /FAIL review-missing/.test(bad.out), bad.out);
+  const fallback = withSide("side-fallback", withReview(v2({ status: "active" })), "## Plan record\n\nonly a plan record here\n");
+  check("record.md without the section falls back to the proposal", fallback.code === 0 && !/record-duplicated/.test(fallback.out), fallback.out);
+  const v1moved = withSide("side-v1", proposal(ACTIVE), REVIEW_PASS);
+  check("a v1 proposal whose record was moved to record.md still passes", v1moved.code === 0, v1moved.out);
+  const both = withSide("side-both", withReview(v2({ status: "active" })), REVIEW_PASS);
+  check("record in both places: passes with WARN record-duplicated", both.code === 0 && /WARN record-duplicated/.test(both.out), both.out);
+}
+// size budgets and amendments warn, never fail — and never on v1
+warns("v2 size-core", v2({ extra: `\n${"A line of supporting detail.\n".repeat(420)}` }), "size-core");
+warns("v2 size-summary", v2().replace("Reads are slow;", `${"One more line of summary.\n".repeat(16)}Reads are slow;`), "size-summary");
+warns("v2 size-decision", v2({ decisions: `${DECISIONS}  and a third line\n  and a fourth line\n` }), "size-decision");
+warns("v2 amended-in-place", v2({ top: TABLE(), mid: BLOCK1.replace("- Tests:", "- Amended 2026-09-05 (owner): now also warms the cache\n- Tests:") }), "amended-in-place");
+{
+  const r = run("v1-long.md", proposal({ extra: `\n${"A line of supporting detail.\n".repeat(420)}` }));
+  check("v1 files get no size warnings", r.code === 0 && !/WARN size-/.test(r.out), r.out);
 }
 
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }

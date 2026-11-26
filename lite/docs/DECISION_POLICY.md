@@ -135,8 +135,8 @@ overrules a decision made upstream of them.
 
 Every Mechanical and Taste decision is written into the artifact it concerns, at the
 moment it is made — the sprint file's **Pre-Sprint Decisions**, the proposal's
-**Decision log**, the **Plan record**'s scope-decisions table. A decision that lives only
-in a conversation or an agent's context is lost when that context ends.
+**Decisions** register, the **Plan record**'s scope-decisions table. A decision that lives
+only in a conversation or an agent's context is lost when that context ends.
 
 One line each:
 
@@ -149,6 +149,18 @@ One line each:
 - `<class>`: `mechanical` | `taste` | `reserved`.
 - `<decider>`: `agent` | `arbiter` | `orchestrator` | `user`.
 - `rejected:` and `undo:` are required for `taste`, optional otherwise.
+
+A proposal's register is numbered, and it holds the user's own decisions too — the
+direction, the appetite, every gate — so a later section can cite `D-7` and a reversal can
+name the entry it replaces:
+
+```
+- D-9 YYYY-MM-DD (interactive, reserved, owner): <decision> — changes: <section> — supersedes: D-7
+```
+
+`owner` and `user` are the same decider. An entry is at most three lines; the detail of a
+decision belongs in the section it changed. (Proposals written before v1.18 call the
+section `## Decision log` and do not number it; both are read.)
 
 `node scripts/sprint/decisions.mjs` lists them across every artifact (`--class taste`
 shows what was decided on the user's behalf; `--since YYYY-MM-DD` narrows it). There is no

@@ -72,7 +72,7 @@ for (const f of files.filter((f) => f.includes(`${join("lite", ".claude")}`) && 
 }
 
 // 3. tier parity for shadowed files — each must mention the same mechanisms.
-const SHADOWED = { ".claude/skills/sprint/SKILL.md": ["plan-check.mjs", "brief-auditor", "close-check.mjs"], "docs/sprints/PROTOCOL.md": ["learnings.mjs", "close-check.mjs", "PLANNING_LEARNINGS.md"] };
+const SHADOWED = { ".claude/skills/sprint/SKILL.md": ["plan-check.mjs", "brief-auditor", "close-check.mjs"], "docs/sprints/PROTOCOL.md": ["learnings.mjs", "close-check.mjs", "PLANNING_LEARNINGS.md", "`## Status` table (State column)"] };
 for (const [rel, needles] of Object.entries(SHADOWED)) {
   for (const t of TIERS) {
     const p = join(REPO, t, rel);

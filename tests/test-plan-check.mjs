@@ -438,6 +438,34 @@ recordRejects("record-unresolved", RECORD({ tail: "UNRESOLVED DECISIONS:\n- whic
   check("coverage-ghost: S-001 is covered by the S-001 mention (word-bounded)", rp.code === 0, rp.out);
 }
 {
+  // v1.18: a proposal's records may live beside it, in <proposal>/record.md
+  const CORE = "---\nstatus: active\nrigor: light\ncreated: 2026-09-01\n---\n\n# Proposal 007: Cache\n\n## Problem\n\nSlow.\n";
+  const SIDE = RECORD().replace(/^[\s\S]*?(?=## Plan record)/, "# Record — proposal 007\n\n");
+  const files = {
+    [`${BL}/S-001-first.md`]: sprint({ id: "S-001", proposal: "7", blocks: "[S-002]", produces: "- `Widget` — `src/a.js`: sig" }),
+    [`${BL}/S-002-second.md`]: B({ proposal: "7" }),
+  };
+  const side = { "docs/proposals/007-cache/record.md": SIDE };
+  const ok = withRecord(CORE, "007-cache.md", { ...files, ...side });
+  const r = run(ok.root, ["--record", ok.rec]);
+  check("record folder: the core path resolves <proposal>/record.md", r.code === 0, r.out + r.err);
+  const rj = JSON.parse(run(ok.root, ["--record", ok.rec, "--json"]).out);
+  check("record folder: --json names the file actually read", rj.record && rj.record.ok === true && /007-cache\/record\.md$/.test(rj.record.file), JSON.stringify(rj.record));
+  const direct = run(ok.root, ["--record", "docs/proposals/007-cache/record.md"]);
+  check("record folder: record.md may be passed directly", direct.code === 0, direct.out + direct.err);
+  const ghost = { [`${BL}/S-003-third.md`]: sprint({ id: "S-003", proposal: "7" }) };
+  const bad = withRecord(CORE, "007-cache.md", { ...files, ...side, ...ghost });
+  for (const arg of [bad.rec, "docs/proposals/007-cache/record.md"]) {
+    const rb = run(bad.root, ["--record", arg]);
+    check(`record folder: coverage-ghost still fires via ${arg}`, rb.code === 5 && /FAIL coverage-ghost S-003 L\d+/.test(rb.out), rb.out);
+  }
+  const noSection = withRecord(RECORD(), "007-cache.md", { ...files, "docs/proposals/007-cache/record.md": "## Review record\n\nREVIEW: PASS\n" });
+  check("record folder: a record.md without ## Plan record falls back to the proposal", run(noSection.root, ["--record", noSection.rec]).code === 0);
+  const neither = withRecord(CORE, "007-cache.md", { ...files, "docs/proposals/007-cache/record.md": "## Review record\n\nREVIEW: PASS\n" });
+  const rn = run(neither.root, ["--record", neither.rec]);
+  check("record folder: no Plan record anywhere is record-missing", rn.code === 5 && /record-missing/.test(rn.out), rn.out);
+}
+{
   const missing = run(mkRoot(twoSprints()), ["--record", "docs/proposals/nope.md"]);
   check("unreadable --record exits 1", missing.code === 1, missing.out + missing.err);
 }

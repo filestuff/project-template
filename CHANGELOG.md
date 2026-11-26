@@ -4,6 +4,72 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.18.0] - 2026-11-26
+
+**Proposals are now built to live as long as the feature does.** Proposals had become
+project documents: across three downstream repos the median ran from about 230 to over
+500 lines and the largest passed 2,000, with status lines up to 2,200 characters, the owner's decisions parked in
+improvised lists above `## Problem`, stage specs buried under dated "Amended" blocks, and
+appended plan records making up about a seventh of the text. The format was compared with
+Kubernetes KEPs, Rust RFCs and project goals, PEPs, Google design docs, Spec Kit, Kiro,
+OpenSpec, BMAD and Anthropic's guidance on long documents. The new shape gives each kind
+of fact one home, split by how fast it changes.
+
+- **State moves to a header block.** A new proposal opens with `---` frontmatter:
+  `status` (one word: `draft | active | delivered | stopped | rejected | parked`), `rigor`,
+  `created`, `closed`, a `status_note` of at most 120 characters, and `supersedes` /
+  `superseded_by` / `blocked_by`. The free-text `**Status**:` line is gone from new files.
+- **`## Summary` comes first** (about 12 lines: problem, direction, appetite, success
+  signal), and staged proposals get one **`## Status` table** (stage, outcome, gate
+  question, state). The table is the only place stage state is written; the per-stage
+  `- Status:` bullet is gone from new files. The state grammar itself is unchanged.
+- **The chosen design is `## Direction`.** It is no longer filed as "Alternative A —
+  Recommended"; the approaches passed over become `## Alternatives considered`.
+- **One numbered `## Decisions` register replaces `## Decision log`**, and it now holds
+  your own decisions too — the direction is `D-1`, every gate gets an entry — so later
+  text can cite `D-7` and a reversal can name what it replaces. `decisions.mjs` reads the
+  `D-n` prefix, wrapped entries, `— changes:` / `— supersedes:`, and `owner` as `user`.
+- **The body is current truth.** When a gate or correction changes the design, the
+  section is rewritten to say what is true now and a `D-n` line records what changed and
+  why. "Amended <date>" blocks are out; the lint warns when it finds one under Stages.
+- **Only the next stage is specified.** Later stages are rows in the Status table until
+  the gate in front of them is decided; the gate flow then writes the stage's block from
+  the evidence that landed. `/plan` refuses to plan a stage that is still a sketch, and
+  `proposal-check.mjs` fails a planned or delivered stage that has no block.
+- **History moves out, for large proposals.** Staged and critical proposals get a folder
+  `docs/proposals/NNN-title/` with an append-only `record.md` (`## Review record`,
+  `## Plan record`, and a new `## Gate record`), plus room for long supporting detail.
+  Every writer follows one rule: if `record.md` exists, append there; otherwise append to
+  the proposal as before. Small proposals stay a single file. `proposal-check.mjs`,
+  `plan-check.mjs --record` and the pre-push gate all find the folder from the proposal's
+  own path, and a change to a file in the folder lints the proposal it belongs to.
+- **Size budgets, as warnings only.** `proposal-check.mjs` prints `WARN size-core` past
+  400 lines, `size-summary` past 15 and `size-decision` past 3. They never change the exit
+  code. No source gave a tested threshold, so treat the numbers as guardrails to tune.
+- **`/proposal NNN restructure` converts an older proposal, only when you ask.** Two
+  commits: a verbatim move of the records to `record.md`, then the reshaped body (header,
+  numbered decisions, Status table, amendments folded into current-truth stage text,
+  Direction, Summary), shown to you before it lands. Nothing converts automatically.
+- **New lint rules for the new shape:** `frontmatter-invalid`, `status-invalid`,
+  `status-note-too-long`, `ref-malformed`, `header-duplicated`, `decisions-malformed`,
+  `stage-table-invalid`, `stage-block-missing`; `--json` gains `shape` (`v2 | v1 | legacy`).
+
+**What to change:** nothing in existing proposals. A proposal with a `**Rigor**:` line is
+linted by exactly the rules it was linted by before, and one without is still treated as
+imported — this was checked against 61 real proposals, which lint identically before and
+after. `/plan`, sprint close and the wave/train close all write status and stage state
+where each proposal keeps it. New proposals get the new shape. If you edited
+`PROPOSAL_TEMPLATE.md` locally, expect a three-way merge conflict: it is a whole-file
+rewrite, so take the new file and re-apply your additions — and resolve it before running
+the lint, which reads that template to know which `{…}` strings are placeholders. If your
+own tooling greps `**Status**:` or `## Decision log`, new proposals will not match; read
+the header's `status:` key and `## Decisions` instead.
+
+Edited managed files: PROPOSAL_TEMPLATE.md, the proposals README, review-lenses.md,
+DECISION_POLICY.md, the proposal and plan skills, design-reviewer, arbiter, both PROTOCOLs,
+ORCHESTRATION.md, proposal-check.mjs, plan-check.mjs, decisions.mjs and pre-push-gate.sh.
+No new managed files and no migration.
+
 ## [1.17.0] - 2026-11-26
 
 **The sprint template now says why, proves the goal end to end, and names each file
