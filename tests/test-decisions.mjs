@@ -62,6 +62,22 @@ try {
   const j = JSON.parse(run("--json", "--class", "reserved"));
   check(j.total === 1 && j.entries[0].decider === "user" && j.entries[0].rejected === "all at once" && j.counts.reserved === 1, "--json shape");
 
+  // v1.18: a proposal's numbered Decisions register — `D-n` prefix, `owner`, wrapped lines
+  w("docs/proposals/041-register.md", `## Decisions
+
+- D-1 2026-11-20 (interactive, reserved, owner): cache in memory — changes: Direction — rejected: do nothing
+- D-2 2026-11-21 (gated, taste, agent): TTL defaults to 60s — changes: Direction — principle: reversible
+  — rejected: 5m — undo: change one constant
+- D-3 2026-11-22 (interactive, taste, owner): back to 5m — changes: Direction — supersedes: D-2
+`);
+  out = run("--since", "2026-11-20");
+  check(/3 of 3 shown — 0 mechanical, 2 taste, 1 reserved, 0 unclassified; 0 thin/.test(out), `numbered entries are read, owner = user, wrapped rejected/undo keep D-2 from being THIN:\n${out}`);
+  check(/2026-11-20\s+reserved\s+user\s+041-register D-1: cache in memory\n/.test(out), `D-n is shown and the decision stops before "— changes:":\n${out}`);
+  check(/changes: Direction · principle: reversible · rejected: 5m · undo: change one constant/.test(out), `wrapped parts are joined:\n${out}`);
+  const jd = JSON.parse(run("--json", "--since", "2026-11-22"));
+  check(jd.total === 1 && jd.entries[0].id === "D-3" && jd.entries[0].decider === "user" && jd.entries[0].supersedes === "D-2" && jd.entries[0].changes === "Direction", `--json carries id / changes / supersedes: ${JSON.stringify(jd.entries[0])}`);
+  check(JSON.parse(run("--json", "--decider", "user", "--since", "2026-11-20")).total === 2, "--decider user finds owner decisions");
+
   for (const bad of [["--class", "nope"], ["--since", "yesterday"], ["--limit", "0"], ["--decider", "me"]]) {
     const r = spawnSync("node", [SCRIPT, "--root", tmp, ...bad], { encoding: "utf8" });
     check(r.status === 1 && /usage:/.test(r.stderr), `bad args ${bad.join(" ")} should exit 1`);

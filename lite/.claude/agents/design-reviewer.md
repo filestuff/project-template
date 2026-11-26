@@ -17,7 +17,11 @@ lens, the scoring scale, the severities and the evidence rules. They bind you.
 
 1. Read the artifact in full, then read the code it implicates. Its claims about the
    system are claims to check, not facts to accept — a reviewer who only reads the document
-   can only review its prose.
+   can only review its prose. A proposal may have a folder beside it
+   (`docs/proposals/NNN-title/`): read the detail files the proposal links to, and do NOT
+   read `record.md` — it is the history of earlier reviews and plans, and a reviewer who
+   reads the last panel's verdict is no longer independent. The design under review is
+   `## Direction` ("Alternative A — Recommended" in proposals written before v1.18).
 2. Look for what your lens would catch that the author, who already believes in this
    design, would not. Do not review outside your lens: other reviewers hold the other
    lenses, and a finding outside yours is noise they will duplicate.

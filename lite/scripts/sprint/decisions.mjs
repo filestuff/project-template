@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Cross-artifact view of the decision record (docs/DECISION_POLICY.md). Decisions are
-// written where they apply — a sprint file's Pre-Sprint Decisions, a proposal's Decision
-// log, a Plan record — and nowhere else; this lists them, so "what was decided on my
-// behalf this week?" is one command instead of a search. Zero-dep, read-only.
+// written where they apply — a sprint file's Pre-Sprint Decisions, a proposal's Decisions
+// register (`## Decision log` before v1.18), a Plan record — and nowhere else; this lists
+// them, so "what was decided on my behalf this week?" is one command instead of a search.
+// Zero-dep, read-only.
 //
 //   decisions.mjs [--class mechanical,taste,reserved] [--decider agent,arbiter,orchestrator,user]
 //                 [--since YYYY-MM-DD] [--limit N] [--root <repo-root>] [--json]
@@ -10,6 +11,9 @@
 // Reads every .md under docs/sprints/{backlog,in-progress,done,done/archive,rejected}/
 // and docs/proposals/. A decision line is
 //   - YYYY-MM-DD (<mode>[, <class>[, <decider>]]): <decision> [— principle: …] [— rejected: …] [— undo: …]
+// A proposal's register numbers its entries and may wrap them over indented lines:
+//   - D-7 YYYY-MM-DD (<mode>, <class>, <decider>): <decision> — changes: <section> […] [— supersedes: D-4]
+// `owner` is read as the decider `user`.
 // Lines written before the policy existed carry only a mode — `(wave)`, `(train, auto)`,
 // `(wave, in-flight)` — and are listed with class `unclassified` (`(train, auto)` reads
 // as taste decided by the orchestrator, which is what it meant).
@@ -34,9 +38,10 @@ if (since !== null && !/^\d{4}-\d{2}-\d{2}$/.test(since)) usage();
 if (!(limit === Number.POSITIVE_INFINITY || (Number.isInteger(limit) && limit > 0))) usage();
 
 const DIRS = ["docs/sprints/backlog", "docs/sprints/in-progress", "docs/sprints/done", "docs/sprints/done/archive", "docs/sprints/rejected", "docs/proposals"];
-const LINE = /^\s*-\s+(\d{4}-\d{2}-\d{2})\s+\(([^)]+)\):\s*(.+)$/;
+const LINE = /^\s*-\s+(?:D-(\d+)\s+)?(\d{4}-\d{2}-\d{2})\s+\(([^)]+)\):\s*(.+)$/;
+const KEYS = "principle|rejected|undo|changes|supersedes";
 const part = (text, key) => {
-  const m = text.match(new RegExp(`—\\s*${key}:\\s*(.*?)(?=\\s+—\\s*(?:principle|rejected|undo):|$)`, "i"));
+  const m = text.match(new RegExp(`—\\s*${key}:\\s*(.*?)(?=\\s+—\\s*(?:${KEYS}):|$)`, "i"));
   return m ? m[1].trim() : "";
 };
 
@@ -61,17 +66,21 @@ for (const dir of DIRS) {
       // a decision that is recorded and then invisible here is worse than a loose parse,
       // so split on spaces too. Only lines whose parenthetical is made of decision tags
       // count — not `- 2026-01-02 (Tuesday): …`.
-      const tags = m[2].toLowerCase().split(/[,\s]+/).filter(Boolean);
+      const tags = m[3].toLowerCase().split(/[,\s]+/).filter(Boolean).map((t) => (t === "owner" ? "user" : t));
       const MODES = ["interactive", "gated", "unattended", "wave", "train", "in-flight", "auto", "solo", "start", "plan", "proposal", "recut"];
       if (!tags.every((t) => MODES.includes(t) || CLASSES.includes(t) || DECIDERS.includes(t))) return;
       let cls = tags.find((t) => ["mechanical", "taste", "reserved"].includes(t)) ?? "unclassified";
       let decider = tags.find((t) => ["agent", "arbiter", "orchestrator", "user"].includes(t)) ?? "unknown";
       if (cls === "unclassified" && tags.includes("auto")) { cls = "taste"; decider = "orchestrator"; }
       const mode = tags.filter((t) => MODES.includes(t)).join(", ") || "unknown";
-      const text = m[3].trim();
-      const decision = text.split(/\s+—\s*(?:principle|rejected|undo):/i)[0].trim();
+      const id = m[1] ? `D-${m[1]}` : null;
+      let text = m[4].trim();
+      // A numbered register entry may wrap: indented lines up to the next item belong to it.
+      if (id) for (let j = i + 1; j < lines.length && /^\s+\S/.test(lines[j]) && !/^\s*[-*]\s/.test(lines[j]); j++) text += ` ${lines[j].trim()}`;
+      const decision = text.split(new RegExp(`\\s+—\\s*(?:${KEYS}):`, "i"))[0].trim();
       const sprint = (name.match(/^S-\d+/) ?? [null])[0];
-      entries.push({ date: m[1], mode, class: cls, decider, decision, principle: part(text, "principle"), rejected: part(text, "rejected"), undo: part(text, "undo"), where: sprint ?? name.replace(/\.md$/, ""), file: `${dir}/${name}`, line: i + 1 });
+      const where = sprint ?? name.replace(/\.md$/, "");
+      entries.push({ date: m[2], mode, class: cls, decider, decision, principle: part(text, "principle"), rejected: part(text, "rejected"), undo: part(text, "undo"), changes: part(text, "changes"), supersedes: part(text, "supersedes"), id, where: id ? `${where} ${id}` : where, file: `${dir}/${name}`, line: i + 1 });
     });
   }
 }
@@ -87,7 +96,7 @@ if (json) {
 } else {
   for (const e of shown) {
     console.log(`${e.date}  ${e.class.padEnd(12)} ${e.decider.padEnd(12)} ${e.where}: ${e.decision}`);
-    const extra = [e.principle && `principle: ${e.principle}`, e.rejected && `rejected: ${e.rejected}`, e.undo && `undo: ${e.undo}`].filter(Boolean).join(" · ");
+    const extra = [e.changes && `changes: ${e.changes}`, e.principle && `principle: ${e.principle}`, e.rejected && `rejected: ${e.rejected}`, e.undo && `undo: ${e.undo}`, e.supersedes && `supersedes: ${e.supersedes}`].filter(Boolean).join(" · ");
     if (extra) console.log(`            ${extra}`);
     console.log(`            ${e.file}:${e.line}`);
   }

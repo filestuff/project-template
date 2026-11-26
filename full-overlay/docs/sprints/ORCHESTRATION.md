@@ -624,12 +624,17 @@ wave-plan.md exactly as for the first review.
 **Proposal stage check (master, once per wave).** Grep the landed sprints' frontmatter
 `proposal:` fields / Context `Source: docs/proposals/NNN-…` lines for proposal citations.
 For each cited stage with no remaining open sprints (`backlog/` + `in-progress/` on
-`main`), mark the stage `delivered YYYY-MM-DD` in the proposal file (commit on `main`
-under the lock, `[skip ci]`; un-staged proposals: flip `**Status**:` to `delivered
-YYYY-MM-DD`). For a non-final stage, report: the stage's gate is now due — offer
-`/proposal NNN`. For the FINAL stage (no gate by design), also flip `**Status**:` to
-`delivered YYYY-MM-DD` in the same commit and say so. Never fold a gate decision
+`main`), set the stage's state to `delivered YYYY-MM-DD` in the proposal file (commit on
+`main` under the lock, `[skip ci]`; un-staged proposals: set the proposal's status to
+delivered). For a non-final stage, report: the stage's gate is now due — offer
+`/proposal NNN`. For the FINAL stage (no gate by design), also set the proposal's status
+to delivered in the same commit and say so. Never fold a gate decision
 into the wave close; it needs the proposal's evidence spec, not the wave report.
+**Where proposal state is written.** A proposal that opens with a `---` header (v1.18+):
+stage state is the stage's row in its `## Status` table (State column), and proposal
+status is the header's `status:` key, with `closed:` set to the date. An older proposal:
+stage state is the stage's `- Status:` line, and proposal status is the `**Status**:`
+line, written `delivered YYYY-MM-DD`.
 (Executors skip PROTOCOL Step 3.6 — this master-side check replaces it, so simultaneous
 finishers can't each see a sibling in-progress and silently drop the gate offer.)
 

@@ -68,23 +68,37 @@ instead — Phase 2 step 4 then confirms the boundaries as it always did.
    highest existing S-NNN).
 2. Read the plan source:
    - A path → that document.
-   - A number → treat as a proposal: read `docs/proposals/NNN-*.md`. **Staged proposals**
-     (a `## Stages` section exists): plan ONLY the current stage — the first stage whose
-     status is `pending`, or the stage the last recorded gate chose. Never pre-plan a stage
-     whose entry gate is undecided: the gate exists so that plan is made with post-stage
-     evidence. If the previous stage is `delivered` but carries no `gate:` line, the gate
-     is due — stop and ask via AskUserQuestion: **"Decide the gate first — run
-     `/proposal NNN`"** (recommended) / **"Plan the next stage anyway"**. On override,
-     record `gate: skipped by user YYYY-MM-DD` on that stage before planning — a skipped
-     gate is a recorded decision, not an invisible one.
-     **Reviewed proposals only.** A proposal that carries a `**Rigor**:` line must also
-     carry a `## Review record` (written by `/proposal` Step 6) before it is broken down —
-     without one, stop and ask via AskUserQuestion: **"Run the review first —
-     `/proposal NNN`"** (recommended) / **"Break it down unreviewed"**. On override, write
+   - A number → treat as a proposal: read `docs/proposals/NNN-*.md`. That file is the
+     whole brief. If a folder `docs/proposals/NNN-title/` exists, read from it only the
+     detail files the current stage links to, and — for a recut — the LATEST entry of
+     `record.md`'s `## Plan record`; never load the whole record, it is history.
+     **Where state is read and written** depends on the proposal's shape. A proposal that
+     opens with a `---` header (v1.18+): proposal status is the header's `status:` key,
+     stage state is the stage's row in its `## Status` table (State column), and its rigor
+     tier is the header's `rigor:` key. An older proposal: the `**Status**:` line, each
+     stage's `- Status:` line, and the `**Rigor**:` line.
+     **Staged proposals** (a `## Stages` section exists): plan ONLY the current stage —
+     the first stage whose state is `pending`, or the stage the last recorded gate chose.
+     Never pre-plan a stage whose entry gate is undecided: the gate exists so that plan is
+     made with post-stage evidence. If the previous stage is `delivered` but carries no
+     `gate:` state, the gate is due — stop and ask via AskUserQuestion: **"Decide the
+     gate first — run `/proposal NNN`"** (recommended) / **"Plan the next stage
+     anyway"**. On override, record `gate: skipped by user YYYY-MM-DD` as that stage's
+     state before planning — a skipped gate is a recorded decision, not an invisible one.
+     **Never plan a sketch.** In a v1.18+ proposal a stage with a row in the Status table
+     but no `### Stage k` block is a sketch: its outcome is known, its design is not.
+     Stop and run `/proposal NNN` — its gate flow writes the block from the evidence that
+     landed. The "plan the next stage anyway" override skips the gate DECISION, never the
+     elaboration: the block is written first, then planned.
+     **Reviewed proposals only.** A proposal that carries a rigor tier must also carry a
+     `## Review record` (written by `/proposal` Step 6 — in `NNN-title/record.md` when
+     that folder exists, otherwise in the proposal) before it is broken down — without
+     one, stop and ask via AskUserQuestion: **"Run the review first — `/proposal NNN`"**
+     (recommended) / **"Break it down unreviewed"**. On override, write
      `REVIEW: OPEN — skipped by user YYYY-MM-DD` as that section. A record ending
      `REVIEW: OPEN — …` is not a block: read the carried findings under Open questions —
-     they are inputs to the cut. Proposals with no Rigor line (filed plans, pre-1.11
-     proposals) pass through unchanged. Note the proposal's Rigor tier: it scales Phase 4's
+     they are inputs to the cut. Proposals with no rigor tier (filed plans, pre-1.11
+     proposals) pass through unchanged. Note the proposal's rigor tier: it scales Phase 4's
      review and seeds the sprints' `risk:`.
    - Free text → treat as a feature description; supplement from existing planning docs.
    - No argument → if `docs/execution-plan.md` exists, default to it; otherwise ask the user
@@ -335,14 +349,19 @@ AskUserQuestion. Apply what the user overturns (re-run `plan-check.mjs`, and the
 panel lenses if a boundary moved), update the table, then commit. Nothing to decide →
 say so in one line and commit.
 
-When the source is a proposal, include its status write-back in the same commit: flip
+When the source is a proposal, include its status write-back in the same commit. A
+v1.18+ proposal (opens with a `---` header): set the header's `status:` to `active` on
+first consumption, and set the consumed stage's State cell to
+`planned (S-{first}..S-{last})` (staged proposals only). An older proposal: flip
 `**Status**: draft` → `active (stage k/N)` on first consumption (`1/1` for un-staged
-proposals), and set the consumed stage's status line to `planned (S-{first}..S-{last})`
-(staged proposals only).
+proposals), and set the consumed stage's status line to `planned (S-{first}..S-{last})`.
 
 **Plan record (durable).** When the source is a document (proposal or plan doc), append a
-dated entry to its terminal `## Plan record` section (create the section at the end of the
-file if absent) in the same commit:
+dated entry to its `## Plan record` section in the same commit. For a proposal whose
+folder `docs/proposals/NNN-title/` exists, that section lives in the folder's `record.md`;
+otherwise it is the terminal section of the source document (create it at the end of the
+file if absent). Records are append-only — never edit an earlier entry. `plan-check.mjs
+--record` takes the proposal's own path either way and finds the folder itself.
 
 - Heading: `### YYYY-MM-DD — stage k breakdown (S-{first}..S-{last})` (or `— recut …`,
   see Recut flow).
@@ -420,8 +439,11 @@ premise-level failures here; direction changes are NOT recuts — those go throu
    accordingly.
 6. **Exit gate + record.** Run the Phase 4 exit gate over the recut subset (coverage map
    spans the replaced requirements). Append a `### YYYY-MM-DD — recut (S-A..S-B →
-   S-X..S-Y)` entry to the source doc's `## Plan record`: the Expected/Found/Why
-   mismatch, the rejected → replacement mapping, and the sentinel last line.
+   S-X..S-Y)` entry to the source doc's `## Plan record` (in `NNN-title/record.md` when
+   the proposal has that folder): the Expected/Found/Why mismatch, the rejected →
+   replacement mapping, and the sentinel last line. When the recut changes what a stage
+   delivers, a v1.18+ proposal's stage block is edited to say what is true now and a
+   `D-n` line is added to its `## Decisions` — never an "Amended" note.
    Commit everything together:
    `sprint: recut S-X..S-Y — [reason] (from /plan recut) [skip ci]`
    (full tier: on `main` under the lock, like Phase 4).

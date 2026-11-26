@@ -233,17 +233,23 @@ proposal + stage: Grep `backlog/` and `in-progress/` for the same citation (same
 `stage k/` when staged). Others remain → note "stage still in progress" and continue to
 Step 4.
 
+**Where proposal state is written.** A proposal that opens with a `---` header (v1.18+):
+stage state is the stage's row in its `## Status` table (State column), and proposal
+status is the header's `status:` key, with `closed:` set to the date. An older proposal:
+stage state is the stage's `- Status:` line, and proposal status is the `**Status**:`
+line, written `delivered YYYY-MM-DD`.
+
 If this was the last:
-- **Staged proposal, non-final stage** → set that stage's status line to
+- **Staged proposal, non-final stage** → set that stage's state to
   `delivered YYYY-MM-DD` in the proposal file (stage the edit; it rides Step 4's close
   commit). Then tell the user: "Stage k of proposal NNN is complete — the proposal defines
   a gate here: [gate question]." Offer `/proposal NNN` to decide it. Do NOT decide the
   gate inline at sprint close, and do not plan the next stage without it.
-- **Staged proposal, final stage** (no gate by design) → set the stage line to
-  `delivered YYYY-MM-DD` AND flip the proposal's `**Status**:` to `delivered YYYY-MM-DD`
-  (both ride the close commit) and say so — there is no gate to decide.
-- **Un-staged proposal** → flip its `**Status**:` to `delivered YYYY-MM-DD` (rides the
-  close commit) and say so.
+- **Staged proposal, final stage** (no gate by design) → set the stage's state to
+  `delivered YYYY-MM-DD` AND set the proposal's status to delivered (both ride the close
+  commit) and say so — there is no gate to decide.
+- **Un-staged proposal** → set its status to delivered (rides the close commit) and say
+  so.
 
 ### Step 3.7: Learnings
 

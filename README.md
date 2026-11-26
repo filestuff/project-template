@@ -34,7 +34,10 @@ full) copy `full-overlay/` over it, replace every `{{PLACEHOLDER}}` (see
    and how many independent review lenses it faces; reviewers' findings are verified
    before anyone acts on them, and the panel has a pass mark. Sequential directions become **Stages** with measurable gates:
    `/plan` consumes one stage at a time, and when a stage's sprints land, `/proposal NNN`
-   runs the gate decision before the next stage is planned. It skips itself when a finished
+   runs the gate decision before the next stage is planned. A proposal is built to live
+   as long as the feature does: state in a short header, a body that always says what is
+   true now, a numbered decision register, only the next stage specified in detail, and
+   review/plan/gate history kept apart in an append-only record. It skips itself when a finished
    plan is handed in or a proposal already exists — then continue directly below.
 1. **Plan** a feature however you like (design doc, proposal, conversation), ideally review it
    (e.g. an external plan-review skill), then run `/plan` — it challenges scope against the
@@ -107,6 +110,7 @@ taste` lists what was decided on your behalf.
 | Update checks + `/template-upgrade` (three-way merge, migrations) | ✅ | ✅ |
 | Planning gates (scope challenge, coverage map, readiness checklist, `PLANNING_LEARNINGS.md` loop) | ✅ | ✅ |
 | Proposal rigor tiers + production-readiness sections, design-it-twice | ✅ | ✅ |
+| Long-lived proposal format (header state, decision register, rolling-wave stages, `record.md`, size budgets, opt-in `/proposal NNN restructure`) | ✅ | ✅ |
 | Independent review panels for proposals and plans (`design-reviewer` per lens, verified findings, pass mark) | ✅ | ✅ |
 | Planning lints (`proposal-check.mjs`, `plan-check.mjs`) + cold-read brief certification (`brief-auditor`) | ✅ | ✅ (also inside the wave planning pass) |
 | Learnings read back into review (`learnings.mjs`, recurring-rule promotion) | ✅ | ✅ |
