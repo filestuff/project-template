@@ -34,8 +34,9 @@ against the code — its premises are claims to check, not facts to transcribe.
 3. **Deepening.** Bring every deliverable to the SPRINT_TEMPLATE bar: Files with
    exact paths (new|modified — no bare globs), a Reference to the most similar
    existing file, an Interface with `file:line`, Setup, Changes, and acceptance
-   criteria that state an observable difference. Verify the Testing section names
-   a real test file to follow. Changes text must be executable as written —
+   criteria that state an observable difference. Verify the Verification section names
+   a real test file to follow and carries an End-to-end criterion that proves the
+   `goal:` (a pre-1.17 file's `## Testing` section is read the same way). Changes text must be executable as written —
    "appropriate error handling", "as needed", "similar to X" are gaps to fill,
    not instructions. For sprints with UI deliverables (or `frontend`/`design`
    tags): apply `docs/sprints/design-checks.md` — its UI-scope test decides
@@ -53,8 +54,9 @@ against the code — its premises are claims to check, not facts to transcribe.
    as a `(wave)` entry. Mark a recommended option per question (one-line why + the
    stake if wrong).
 6. **Doc drift.** Do the tag-scoped, DOC_HEALTH-gated read from PROTOCOL.md Phase 1.
-   Record findings in a `<!-- PLAN NOTES -->` block at the end of the sprint file —
-   do NOT fix other docs; the execution agent applies fixes on its branch.
+   Record findings as `- YYYY-MM-DD [plan]: …` lines in the sprint file's
+   `## Execution Notes` (add the section above `## Completion Log` if the file predates
+   it) — do NOT fix other docs; the execution agent applies fixes on its branch.
 7. **Risk, then tier.** Re-check the frontmatter `risk:` against what the deepened Files
    lists now touch: `risk: high` when they reach a surface in the risk-tier table of
    `docs/sprints/review-calibration.md` (then `## Production notes` is mandatory — fill

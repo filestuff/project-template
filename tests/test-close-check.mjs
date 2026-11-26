@@ -140,6 +140,32 @@ r = run("json-bad.md", FM + deliverables({ evidence: false }) + log(), "--json")
 try { j = JSON.parse(r.out); } catch { j = null; }
 check("--json ok:false with failure rule", j && j.ok === false && j.failures[0].rule === "criterion-unevidenced", r.out);
 
+// 11. no `### Deliverables` heading → fails instead of passing 0/0 (1.17.0)
+r = run("nodeliv.md", FM + "## Scope\n\n1. **Thing**\n   - [x] `npm test` → ok\n" + log());
+check("missing Deliverables heading → deliverables-missing, exit 5", r.code === 5 && /FAIL deliverables-missing/.test(r.out), r.out);
+r = run("deliv-variant.md", FM + deliverables({ evidence: false }).replace("### Deliverables", "## Deliverables (execution order)") + log());
+check("`## Deliverables (execution order)` is still scanned (unevidenced criterion caught)", r.code === 5 && /criterion-unevidenced/.test(r.out) && !/deliverables-missing/.test(r.out), r.out);
+r = run("nodeliv-legacy.md", FM + "## Scope\n\n## Completion Log\n\nShipped it.\n");
+check("missing Deliverables on a legacy file → WARNING only, exit 0", r.code === 0 && /WARNING deliverables-missing/.test(r.out), r.out);
+
+// 12. `## Verification` end-to-end criteria use the same grammar (1.17.0)
+const verification = ({ checked = true, evidence = true } = {}) => `
+## Verification
+
+- Test pattern: follow \`tests/x.test.ts\`
+- End-to-end — proves the goal:
+  - Automated:
+    - [${checked ? "x" : " "}] \`npm run e2e\` → goal visible
+${evidence && checked ? "      - Evidence: `npm run e2e` → 1 passed\n" : ""}  - Manual (user-confirmed at close):
+    - [x] Looks right — confirmed 2026-11-26
+`;
+r = run("verif-ok.md", FM + deliverables() + verification() + log());
+check("evidenced Verification criteria pass; counted in SUMMARY", r.code === 0 && /automated=2\/2/.test(r.out) && /manual=2\/2/.test(r.out), r.out);
+r = run("verif-unchecked.md", FM + deliverables() + verification({ checked: false }) + log());
+check("unchecked Verification criterion → criterion-unchecked", r.code === 5 && /criterion-unchecked/.test(r.out), r.out);
+r = run("verif-noevidence.md", FM + deliverables() + verification({ evidence: false }) + log());
+check("Verification [x] without Evidence → criterion-unevidenced", r.code === 5 && /criterion-unevidenced/.test(r.out), r.out);
+
 // 10. usage
 r = run("nofm.md", "# no frontmatter\n");
 check("no frontmatter exits 1", r.code === 1);

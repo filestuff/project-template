@@ -349,7 +349,8 @@ For each remaining member, in the primary checkout:
 
 These run one-at-a-time: `start.sh` serializes on the lock anyway (each start is a fast
 commit, so brief contention). PROTOCOL Phase 1's doc validation and tradeoff questions are
-already covered by Step 2 (doc drift recorded in each file's PLAN NOTES; decisions in
+already covered by Step 2 (doc drift recorded as `[plan]` lines in each file's `## Execution
+Notes` — a pre-1.17 file's `<!-- PLAN NOTES -->` block; decisions in
 Pre-Sprint Decisions).
 
 After the **last** member's start: **checkpoint P2** —

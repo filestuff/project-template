@@ -181,7 +181,7 @@ Scan `README.md` and `docs/*.md` (top level only) for pre-existing documentation
 - Add a "Needs review" row per doc to `docs/DOC_HEALTH.md`.
 - Seed the tag→doc table in `docs/sprints/PROTOCOL.md` (replace the
   `<!-- BOOTSTRAP: ... -->` starter rows with real mappings; keep tags aligned with
-  SPRINT_TEMPLATE's starter tags).
+  the starter tags in `docs/sprints/sprint-file-guide.md` §Frontmatter).
 - If the repo has established conventions (an `AGENTS.md`, a style doc), seed the
   "Project-Specific Checks" section of `.claude/skills/review/SKILL.md` with 3–5 concrete,
   checkable rules; otherwise leave its `_(none yet)_` stub.

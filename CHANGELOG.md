@@ -4,6 +4,58 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.17.0] - 2026-11-26
+
+**The sprint template now says why, proves the goal end to end, and names each file
+once.** The template was benchmarked against Claude Code plan mode, OpenAI ExecPlans,
+GitHub Spec Kit, Kiro specs, HumanLayer and BMAD. Its rigor already led; its shape did not.
+New sprint files open with the reason for the work, carry one place to prove the whole goal,
+and drop about 40% of the skeleton.
+
+- **New `docs/sprints/sprint-file-guide.md`.** The template is now 176 lines instead of
+  298, because 111 lines of HTML instructions moved into this guide. Each section keeps a
+  one-line `<!-- guide: §X -->` pointer, and `/plan` and `/sprint create` delete those
+  pointers from the files they generate. Your sprint files stop carrying the template's
+  instructions around.
+- **`## Context` opens with `- Why:`**: the problem, what prompted it, and what the user can
+  do afterwards. It also gains `- Prerequisites:`, which replaces the old
+  `## Dependencies` section (that section only restated `depends_on`).
+- **`## Testing` is replaced by `## Verification`.** It keeps the test-pattern line and
+  adds **End-to-end** criteria that prove the frontmatter `goal:` with all the deliverables
+  together. They use the Automated/Manual and Evidence grammar, and **`close-check.mjs`
+  now lints criteria under `## Verification`**, so a sprint whose parts pass but whose goal
+  doesn't cannot land. The RED/GREEN checkboxes are gone. Test-first was always a PROTOCOL
+  Phase 2 rule, and nothing ever checked those boxes.
+- **Files are named once, in each deliverable's `Files:`.** The Technical Details
+  New/Modified/Deleted tables are removed (`touches:` is derived from `Files:`). Technical
+  Details is now optional: Schema / Data-Model Changes and Design notes.
+- **Sections reordered for top-down reading:** Context → Open Questions → Pre-Sprint
+  Decisions → Scope → … → Production notes. Binding decisions now come before the work.
+  Scripts find headings by title, so nothing breaks.
+- **New `## Execution Notes`** (`- YYYY-MM-DD [plan|exec]: <finding>`). It replaces the
+  planner's lint-invisible `<!-- PLAN NOTES -->` comment and gives executor drift notes a
+  defined home. The square brackets keep these lines out of `decisions.mjs`.
+- **The brief is fixed once `plan_date` is set.** A line above Execution Notes, mirrored in
+  both PROTOCOLs and the sprint-executor, says execution writes only checkboxes, Evidence,
+  in-flight decisions, Execution Notes and the Completion Log. A wrong brief becomes a
+  Deviation or PLAN_GAP, never a reworded criterion.
+- **Fix: `close-check.mjs` passed a file with no `### Deliverables` heading** as 0/0
+  criteria. It now fails `deliverables-missing` (exit 5); a pre-1.10 legacy file gets a
+  warning instead.
+- **Template placeholders are now `{…}`**, so `plan-check.mjs` flags any left in a planned
+  brief, the same way it already treated the Production-notes placeholders.
+
+**What to change:** nothing in existing sprint files. Backlog, in-progress and done files
+keep their old sections (`## Testing`, file tables, `## Dependencies`, PLAN NOTES), and
+every reader accepts both shapes. New sprints get the new shape. If you edited
+`SPRINT_TEMPLATE.md` locally, expect a three-way merge conflict there. Keep your additions
+and take the new section order. If any of your own tooling greps `## Testing` or the
+`<!-- PLAN NOTES -->` block, point it at `## Verification` and `## Execution Notes`.
+
+Edited managed files: SPRINT_TEMPLATE.md, the new sprint-file-guide.md, close-check.mjs,
+both PROTOCOLs, ORCHESTRATION.md, both sprint skills, the plan skill, sprint-planner,
+sprint-executor, brief-auditor, and the CLAUDE.md project block (one new entry-point line).
+
 ## [1.16.1] - 2026-11-17
 
 **Fix (full tier): two members of one parallel wave could both run with overlapping file

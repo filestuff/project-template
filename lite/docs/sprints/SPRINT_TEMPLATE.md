@@ -21,94 +21,42 @@ touches: []
 
 # S-NNN: [Sprint Name]
 
-<!-- Starter tags: frontend, backend, database, infra, security, design, devops.
-     Freeform — add a new tag when clearly distinct from existing ones. Keep the
-     tag→doc table in PROTOCOL.md in sync with the tags you actually use. -->
-
-<!-- touches: is the file-claims manifest — FULL TIER ONLY (ignored in lite).
-     /sprint plan populates it from the deliverables' Files lists: exact paths,
-     `dir/**` prefixes, or tokens from scripts/sprint/claims-tokens.json.
-     /sprint start re-derives or verifies it and checks overlap with in-flight
-     sprints. -->
-
-<!-- plan_date: is set ONLY by /sprint plan (or the wave planning pass) after its
-     readiness checklist passes — never by hand and never at creation. null =
-     unplanned: /sprint start warns, and /sprint wave runs a planning subagent
-     over the sprint before dispatching it. A plan_date older than a
-     dependency's end_date renders as "stale plan" in the waves output — the
-     plan's file:line premises predate landed work and need re-verification. -->
-
-<!-- risk: low | high — set by /plan, raised (never lowered) by /sprint plan. high =
-     the sprint touches a surface in the risk-tier table of
-     docs/sprints/review-calibration.md (auth/permissions, schema/migrations, public or
-     cross-sprint contracts, secrets, payment or irreversible mutation, trust-boundary
-     parsing). It makes `## Production notes` below mandatory and deepens the review.
-     tier: routine | standard | complex | critical — how HARD the work is (not how big,
-     not how risky — risk: high never sets the tier): it decides which model and how much reasoning effort executes and
-     reviews the sprint. docs/sprints/tier-rubric.md is the rule. /plan sets a provisional
-     standard or complex; the PLANNER assigns the real tier at certification (/sprint
-     plan, or the wave's planning pass) and writes tier_reason: — one line naming the
-     signal that decided it (`follows src/routes/users.ts:12-40 — same handler shape`;
-     `new retry state machine across two services`). routine needs every criterion in the
-     rubric; anything above standard needs a rubric signal the brief shows; unsure means
-     standard. After
-     the sprint starts the tier only goes up (ESCALATE). A file with none of these keys
-     (pre-1.11 sprints) is read as risk: low, tier: standard.
-     outcome: is written by the orchestrator when a wave or train lands the sprint —
-     assigned/final tier, escalations, fix rounds, findings — and read by
-     scripts/sprint/tiers.mjs to calibrate the rubric. Never set it by hand. -->
-
-<!-- proposal:/stage: are informational backlinks, ignored by scripts — set by /plan
-     when the source is a proposal (proposal: NNN, stage: k; stage: 1 for un-staged
-     proposals). Sprint close (PROTOCOL Step 3.6) uses them, together with the Context
-     Source citation, to detect when a proposal stage's last sprint lands. -->
-
-<!-- Deliverables are numbered in execution order. Claude executes 1, then 2, etc.
-     Dependency marking is MANDATORY per deliverable: state either "depends on #N"
-     or "independent of all prior deliverables" in its description. Independence is
-     what allows a subagent-driven executor to dispatch deliverables in parallel;
-     an unmarked deliverable is treated as depending on its predecessor. -->
+<!-- guide: docs/sprints/sprint-file-guide.md holds the rules for every section below.
+     Delete these guide comments when creating a sprint from this template. -->
 
 ## Context
 
-<!-- Populated by /plan (or by hand for standalone sprints): source plan path +
-     originating task IDs, and the source plan's GLOBAL constraints that bind this
-     sprint — copied verbatim, not paraphrased. This file is the executor's entire
-     brief; a constraint living only in the source plan is invisible to it.
-     "— none" is a valid entry for standalone sprints. For staged proposals /plan
-     writes the citation form below verbatim — sprint close greps it to detect stage
-     completion. -->
+<!-- guide: §Context -->
 
+- Why: {the problem, what prompted it, and what the user can do afterwards that they can't today}
 - Source: `path/to/plan.md` (tasks: T-x, T-y) | `docs/proposals/NNN-{kebab}.md` (stage k/N — gate on completion: [one-line gate question]) | — none
-- Binding constraints: …
+- Binding constraints: {copied verbatim from the source plan} | — none
+- Prerequisites: {external services, keys, infra needed first} | — none
+
+## Open Questions
+
+<!-- guide: §Open Questions -->
+
+- [ ] Question about an architectural tradeoff — options: A …, B … — recommend A: {one-line why}; stake: {cost if wrong}
+
+## Pre-Sprint Decisions
+
+<!-- guide: §Pre-Sprint Decisions -->
+
+_(none yet)_
 
 ## Scope
 
 ### Deliverables
 
-<!-- Acceptance criteria are classified Automated or Manual. Automated: the exact
-     runnable command plus the observable difference it demonstrates — the executor
-     checks the box only by citing that command's output. Manual: verifiable only by a
-     human (visual look, real-device feel, third-party dashboard); the executor REPORTS
-     what to check but never checks the box — the user confirms it at sprint close
-     (PROTOCOL Phase 3 Step 1). A criterion that can't name its command is Manual by
-     definition. Omit whichever list is empty.
-
-     Evidence grammar (linted by scripts/sprint/close-check.mjs at close):
-       - A checked Automated criterion is followed by an indented
-         `- Evidence: <test name | file:line | \`cmd\` → output tail | docs/sprints/evidence/S-NNN/…>`
-         line — the proof, written at the same keystroke as the `[x]`.
-       - A criterion left unchecked at close ends `— descoped: <why> (TODOS #N)`.
-       - A Manual criterion is checked ONLY by the user and ends `— confirmed YYYY-MM-DD`.
-     Evidence lives in THIS file (or under docs/sprints/evidence/S-NNN/ for artifacts that
-     don't fit a line) — never in the conversation and never in the gitignored wave ledger. -->
+<!-- guide: §Deliverables -->
 
 1. **[Feature/Task Name]**
-   - Files: `path/to/file` (new | modified)
-   - Reference: `path/to/similar_file` — follow this for code style, error handling, structure
-   - Interface: `ClassName` / `functionName()` from `path/to/module:L##-L##` — the contract this code must satisfy
-   - Setup: install commands, env vars, or config needed before implementation
-   - Changes: what exactly needs to happen
+   - Files: `path/to/file` (new | modified | deleted)
+   - Reference: `path/to/similar_file` — follow for style, error handling, structure
+   - Interface: `functionName()` from `path/to/module:L##-L##`
+   - Setup: {install / env / config needed first — omit the field if none}
+   - Changes: {what exactly must happen} — independent of all prior deliverables
    - Acceptance criteria:
      - Automated:
        - [ ] `command to run` → the observable difference it must show
@@ -116,88 +64,52 @@ touches: []
        - [ ] What the user verifies by hand, and where
 
 2. **[Feature/Task Name]**
-   - Files: `path/to/file` (new | modified)
+   - Files: `path/to/file` (new | modified | deleted)
    - Reference: `path/to/similar_file`
-   - Interface: what contract this must implement or expose
-   - Setup: pre-requisites if any
-   - Changes: what exactly needs to happen
+   - Interface: {contract this must implement or expose}
+   - Changes: {what exactly must happen} — depends on #1
    - Acceptance criteria:
      - Automated:
        - [ ] `command to run` → expected observable
 
 ### Out of Scope
 
-- Things explicitly NOT included in this sprint (defer to `docs/TODOS.md` with a backlink)
-
----
-
-## Technical Details
-
-### Schema / Data-Model Changes
-
-<!-- Migration or schema change needed? Describe here; claim the schema token (full tier). -->
-
-### New Files
-
-| File | Purpose |
-|------|---------|
-| `path/to/new-file` | Description |
-
-### Modified Files
-
-| File | Changes |
-|------|---------|
-| `path/to/existing` | What changes |
-
-### Deleted Files
-
-| File | Reason |
-|------|--------|
-| `path/to/old` | Replaced by X |
-
----
-
-## Dependencies
-
-- External services, API keys, or infrastructure needed
-- Sprint dependencies captured in frontmatter `depends_on` / `blocks`
+- {what this sprint explicitly does NOT do} — deferred to `docs/TODOS.md` #N | permanent non-goal
 
 ## Interface Contract
 
-<!-- The contracts that cross sprint boundaries. Filling these lets a dependent
-     sprint be built IN PARALLEL against an agreed signature instead of waiting
-     for this sprint to land (full tier surfaces the resulting waves in
-     ROADMAP.md). Leave a section "— none" if this sprint neither exposes nor
-     consumes a cross-sprint contract. -->
+<!-- guide: §Interface Contract -->
 
 ### Produces
-
-<!-- Signatures / types / endpoints / schemas this sprint creates that other
-     sprints (its `blocks:`) may code against. Name each with file:symbol. -->
 
 - `ExportedThing` — `path/to/module`: the shape/signature dependents may rely on
 
 ### Consumes
 
-<!-- Contracts this sprint depends on, from its `depends_on:` sprints. Code
-     against these agreed signatures; the blocker need not be merged yet. -->
-
 - `UpstreamThing` from S-NNN — `path/to/module`: signature relied on
 
-## Testing
+## Technical Details
 
-<!-- Test-first (RED → GREEN → REFACTOR): write the failing test BEFORE the
-     implementation and watch it fail for the right reason. Reference an existing
-     test file for style/patterns. Avoid the traps in
-     docs/sprints/testing-anti-patterns.md. When test-first doesn't fit
-     (exploratory spike, pure config, visual/UI), say so here and state how the
-     deliverable is verified instead. -->
+<!-- guide: §Technical Details — optional; delete the section when neither subsection applies -->
+
+### Schema / Data-Model Changes
+
+- {migration or schema change; full tier: claim the schema token}
+
+### Design notes
+
+- {UI sprints only: interaction-states table from docs/sprints/design-checks.md}
+
+## Verification
+
+<!-- guide: §Verification -->
 
 - Test pattern: follow `path/to/existing_test` for mocking approach and assertions
-- [ ] RED: failing test written for X, observed to fail for the right reason
-- [ ] GREEN: simplest code makes it pass (YAGNI — see `docs/ENGINEERING_PRINCIPLES.md`)
-- [ ] Integration test for Y
-- [ ] Manual verification of Z
+- End-to-end — proves the `goal:` with the deliverables together:
+  - Automated:
+    - [ ] `command to run against the integrated result` → the observable that shows the goal met
+  - Manual (user-confirmed at close):
+    - [ ] What the user sees or does, and where
 
 ## Risks
 
@@ -207,88 +119,54 @@ touches: []
 
 ## Production notes
 
-<!-- MANDATORY when frontmatter `risk: high`; otherwise delete this section. The executor
-     reads these as binding. Each line is a concrete answer or `n/a — [why]` (a bare
-     "n/a" fails plan-check.mjs). -->
+<!-- guide: §Production notes — MANDATORY when `risk: high`; otherwise delete this section -->
 
 - Rollback: {how this sprint's change is undone after it lands — flag, revert, down-migration — and what undoing loses}
 - Observability: {the log line, metric or alert that shows it working, and the one that shows it failing}
 - Security: {the trust boundary or permission this touches and what enforces it}
 
-## Open Questions
+---
 
-<!-- Non-obvious decisions, written DECISION-READY: each question carries 2–4
-     concrete options with their plan/touches implications, a recommended option
-     with a one-line why, and the stake if the choice is wrong. Resolved during
-     /sprint plan (preferred — the planner has the most context) or the
-     pre-sprint AskUserQuestion phase; every answer moves to Pre-Sprint
-     Decisions below and the item is checked off. An unresolved question
-     without concrete options blocks plan_date — the sprint is not
-     implementation-ready while an open decision has no shaped choices. -->
+> **Above this line is the brief — fixed once `plan_date` is set.** Execution writes only
+> checkboxes, `- Evidence:` lines, in-flight Pre-Sprint Decisions, and the sections below.
+> A brief that turns out wrong is a Deviation or a PLAN_GAP, never an edit.
+> (`docs/sprints/sprint-file-guide.md` §Brief vs record)
 
-- [ ] Question about an architectural tradeoff — options: A …, B …
-- [ ] Question about a data-model choice — options: A …, B …
+## Execution Notes
 
-## Pre-Sprint Decisions
-
-<!-- Binding decisions carried into execution — the sprint file is the entire
-     brief for an execution agent, so an answer that lives only in a
-     conversation is invisible to it. Appended by /sprint plan, the wave
-     planning pass, or the Phase 1 tradeoff round. Format:
-     - YYYY-MM-DD (plan|start|wave): [decision] — [one-line rationale]
-     Execution treats these as settled: do not re-litigate them mid-sprint. -->
+<!-- guide: §Execution Notes — `- YYYY-MM-DD [plan|exec]: <finding>` -->
 
 _(none yet)_
 
----
-
 ## Completion Log
 
-<!-- Written INTO this file by whoever executes (solo Claude or the sprint-executor) before
-     close, committed `S-NNN: completion log`. This file is the durable record — not the
-     conversation, not the wave ledger (`.claude/sprint-orchestration/` is gitignored).
-     `node scripts/sprint/close-check.mjs <this file>` lints it: every Automated criterion
-     above is `[x]` + `- Evidence:` or `— descoped: …`, every Manual one is user-confirmed
-     or descoped, every section below is filled (or `— none`), and every checklist row
-     carries an annotation. Artifacts too big for a line (screenshots, smoke transcripts,
-     measurement reports) go in `docs/sprints/evidence/S-NNN/` and are cited by path. -->
+<!-- guide: §Completion Log — the seven `###` titles below are linted; never rename them -->
 
 ### Outcome
 
-_(2–4 sentences at close: what actually shipped, what changed for the user, what surprised
-you. This is the narrative — INDEX.md's Outcome cell is ONE sentence pointing here.)_
+_(2–4 sentences at close: what actually shipped, what changed for the user, what surprised you)_
 
 ### Commits
 
 _(stamped at land)_
 
-<!-- Full tier: merge-sprint.sh land replaces the line above with the `S-NNN:` deliverable
-     commits + the merge SHA. Lite: paste `git log --reverse --oneline <start-sha>..HEAD
-     --grep '^S-NNN:'` here at close (start-sha = the `sprint: start S-NNN` commit). -->
-
 ### Review
 
-_(fill at close: findings by severity with disposition — `Critical/Important/Minor: <finding>
-— fixed <sha>` or `— declined: <why>` — or the literal `— not run: low risk (Step 3.5)`)_
+_(findings by severity with disposition, or `— not run: low risk (Step 3.5)`)_
 
 ### Deviations from brief
 
-_(fill at close: what was built differently from the deliverable text, and why; `— none`)_
+_(what was built differently from the brief, and why; `— none`)_
 
 ### Deferred
 
-_(fill at close: `TODOS #N — <item>` per line; `— none`)_
+_(`TODOS #N — <item>` per line; `— none`)_
 
 ### Learnings
 
-_(fill at close: `- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what happened> → rule:
-<one line>`; `— none`. Same grammar as docs/sprints/PLANNING_LEARNINGS.md — a `plan`-class
-line that would have changed another sprint's brief is also prepended there.)_
+_(`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what happened> → rule: <one line>`; `— none`)_
 
 ### Close checklist
-
-<!-- Every row is `- [x] <label> — <annotation>`. A bare "done"/"yes"/"ok" fails the lint;
-     `n/a` and `descoped` need `: reason`. -->
 
 - [ ] Gate green — <last line of `scripts/sprint/gate.sh` output>
 - [ ] Docs synced — <docs updated | none: reason>

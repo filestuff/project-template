@@ -133,8 +133,8 @@ for (const [rel, needles] of Object.entries(SHADOWED)) {
   }
   check(geq(strength(routing.roles.arbiter), strength(routing.roles.executor?.critical)), "routing.json: the arbiter must be at least as strong as the strongest executor — it settles their disputes");
   eqList(routing.escalation, TIER_NAMES.map((t) => `executor.${t}`), "routing.json: escalation must climb the four tiers in order");
-  // the rubric, the template comment and the lint must name the same four tiers
-  for (const rel of ["lite/docs/sprints/tier-rubric.md", "lite/docs/sprints/SPRINT_TEMPLATE.md", "lite/scripts/sprint/plan-check.mjs", "full-overlay/docs/sprints/ORCHESTRATION.md"]) {
+  // the rubric, the sprint-file guide and the lint must name the same four tiers
+  for (const rel of ["lite/docs/sprints/tier-rubric.md", "lite/docs/sprints/sprint-file-guide.md", "lite/scripts/sprint/plan-check.mjs", "full-overlay/docs/sprints/ORCHESTRATION.md"]) {
     const text = readFileSync(join(REPO, rel), "utf8");
     for (const t of TIER_NAMES) check(text.includes(t), `${rel}: does not mention tier "${t}"`);
   }

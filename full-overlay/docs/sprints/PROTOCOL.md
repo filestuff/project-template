@@ -253,7 +253,7 @@ ambiguous cases. Commit doc fixes separately on the sprint branch:
 ### Step 6: Architectural Tradeoff Questions
 
 Read the sprint's **Pre-Sprint Decisions section first** — those decisions are already made;
-do not re-ask them. Then read Scope and Technical Details, cross-reference the codebase, and
+do not re-ask them. Then read Context (Why), Scope, Technical Details and Verification, cross-reference the codebase, and
 surface only the **non-obvious** decisions still open via AskUserQuestion (2–4 max, grouped
 in one call) — starting with any Open Questions items explicitly deferred to start:
 
@@ -285,11 +285,17 @@ already done by the planning pass — see `ORCHESTRATION.md` Step 2.)
 
 - All deliverable work, gate commands, and commits run **inside the sprint worktree**
   (Phase 1 Step 4).
+- **The brief is fixed.** Once `plan_date` is set, execution writes only checkboxes,
+  `- Evidence:` lines, in-flight Pre-Sprint Decisions, `## Execution Notes` and the
+  Completion Log — never a reworded deliverable or criterion. A brief that turns out wrong
+  is a stop-and-ask / **PLAN_GAP** (below) or a Deviation recorded at close
+  (`docs/sprints/sprint-file-guide.md` §Brief vs record).
 - **Verify the brief first.** Before deliverable 1, confirm the plan's premises against the
   worktree's actual code: the referenced files/symbols exist as described, cited APIs match
   the installed versions (check the dependency manifest when a versioned API is cited), and
   Pre-Sprint Decisions are reflected in what you're about to build. Trivial drift (a symbol
-  moved lines) → locate it, note it in the sprint file, proceed. An approach-invalidating gap
+  moved lines) → locate it, record it as a `- YYYY-MM-DD [exec]: …` line in the sprint file's
+  `## Execution Notes`, proceed. An approach-invalidating gap
   (stale premise, missing referenced file, unresolved decision, an acceptance criterion you
   cannot evaluate) → do not code around it: a solo session asks via AskUserQuestion with
   concrete alternatives; an execution subagent stops and returns **PLAN_GAP** per
@@ -310,7 +316,7 @@ already done by the planning pass — see `ORCHESTRATION.md` Step 2.)
      NOT commit broken code and defer.
   5. Check off acceptance criteria only when you can point to the file/test/output that
      proves each — and write that proof into the sprint file as the criterion's
-     `- Evidence:` line (SPRINT_TEMPLATE grammar) in the same edit as the `[x]`; the
+     `- Evidence:` line (sprint-file-guide grammar) in the same edit as the `[x]`; the
      branch may edit its own sprint file in place (invariant 3). Automated criteria only —
      Manual criteria stay unchecked: report what to verify and leave the box for the user
      at close (Phase 3 Step 1).
@@ -352,9 +358,9 @@ already done by the planning pass — see `ORCHESTRATION.md` Step 2.)
 
 ### Step 1: Acceptance Criteria Evidence Check
 
-For each criterion, cite one of: a test name that asserts it, a file path + line range that
+For each criterion — the deliverables' and Verification's End-to-end ones alike — cite one of: a test name that asserts it, a file path + line range that
 implements it, or command output that demonstrates it — **written into the sprint file** as
-the criterion's indented `- Evidence:` line (SPRINT_TEMPLATE grammar). A checked box without
+the criterion's indented `- Evidence:` line (sprint-file-guide grammar). A checked box without
 an Evidence line does not count; evidence that lives only in a conversation or in the
 gitignored wave ledger is lost. **Verify the observable difference** the criterion
 describes — the value in the response, the row actually written, the model that answered —
@@ -445,7 +451,7 @@ If this was the last:
 
 ### Step 3.7: Learnings
 
-Fill `### Learnings` in the worktree copy — one line per lesson in the SPRINT_TEMPLATE
+Fill `### Learnings` in the worktree copy — one line per lesson in the sprint-file-guide
 grammar (`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what happened> → rule: <one
 line>`), or `— none`. A `plan`-class line — a gap that would have changed another sprint's
 brief — is also prepended to `docs/sprints/PLANNING_LEARNINGS.md` (a doc-sync target: on
