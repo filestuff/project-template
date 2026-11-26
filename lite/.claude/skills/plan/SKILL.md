@@ -187,7 +187,8 @@ instead — Phase 2 step 4 then confirms the boundaries as it always did.
 ### Phase 3: Sprint File Generation
 
 For each sprint, starting at S-{highest+1}, create a file from
-`docs/sprints/SPRINT_TEMPLATE.md` in `docs/sprints/backlog/` and populate:
+`docs/sprints/SPRINT_TEMPLATE.md` in `docs/sprints/backlog/` — delete its `<!-- guide: … -->`
+comments (the rules live in `docs/sprints/sprint-file-guide.md`) — and populate:
 - **Frontmatter**: sprint ID, `status: backlog`, goal, a concise `short:` label,
   `depends_on`, `blocks`, `tags`, `story_points`, `risk`, `tier`. **`risk: high`** when
   the sprint's Files touch a surface in the risk-tier table of
@@ -205,8 +206,10 @@ For each sprint, starting at S-{highest+1}, create a file from
   don't ask. When the source is a proposal, also set
   `proposal: NNN` and `stage: k` (`stage: 1` for un-staged proposals; both stay `null`
   otherwise) — informational backlinks, ignored by scripts.
-- **Context** (top of body): the source plan's path + this sprint's originating task
-  IDs, and every global constraint from the source plan that binds this sprint (stack
+- **Context** (top of body): **Why** — the problem, what prompted it, and what the user
+  can do afterwards (2–3 sentences, so the executor can make the judgment calls the brief
+  did not anticipate); the source plan's path + this sprint's originating task
+  IDs; **Prerequisites** (external services/keys/infra, or `— none`); and every global constraint from the source plan that binds this sprint (stack
   pins, perf budgets, compatibility promises) — copied **verbatim**, not paraphrased.
   For a staged proposal, the Source line is exactly
   `Source: docs/proposals/NNN-{kebab}.md (stage k/N — gate on completion: [one-line gate
@@ -217,10 +220,10 @@ For each sprint, starting at S-{highest+1}, create a file from
   Interface contract (file:line where code exists), Setup, Changes, Acceptance criteria —
   each criterion classified **Automated** (the exact command that demonstrates the
   observable difference) or **Manual** (human-confirmed only; the executor reports but
-  never checks it — see SPRINT_TEMPLATE). A criterion that can't name its command is
+  never checks it — see `docs/sprints/sprint-file-guide.md`). A criterion that can't name its command is
   Manual by definition.
   Mark each deliverable's dependency explicitly — "depends on #N" or "independent of
-  all prior deliverables" (mandatory per the template comment; independence enables
+  all prior deliverables" (mandatory per `docs/sprints/sprint-file-guide.md`; independence enables
   parallel dispatch within the sprint).
   Apply YAGNI — only the deliverables the plan actually needs (`docs/ENGINEERING_PRINCIPLES.md`).
 - **Interface Contract** (Produces / Consumes): the cross-sprint signatures. For every
@@ -230,13 +233,17 @@ For each sprint, starting at S-{highest+1}, create a file from
   Rollback, Observability, Security, each a concrete answer carried down from the
   proposal's Production readiness section where one exists, narrowed to what THIS sprint
   changes. The executor treats them as binding.
-- **Technical Details**, **Dependencies**, **Testing** (test-first pattern reference),
-  **Risks**, **Open Questions** — written **decision-ready**: each question carries 2–4
+- **Verification**: the test file to follow, plus one or two **End-to-end** criteria
+  (Automated or Manual, same grammar as deliverable criteria) that prove the sprint's
+  `goal:` with the deliverables together — close-check lints them like any criterion.
+- **Technical Details** (optional — Schema / Data-Model Changes, Design notes; delete when
+  empty; files are named once, in each deliverable's `Files:`), **Risks**, **Open
+  Questions** — written **decision-ready**: each question carries 2–4
   concrete options with their implications, so a later planning pass or pre-sprint round
   can resolve it in one AskUserQuestion call.
 - **Design checks (UI-scoped sprints only)**: apply `docs/sprints/design-checks.md` —
   its UI-scope test decides; no UI scope means skip entirely. For UI sprints, the
-  interaction-states table goes into Technical Details, and unresolved design decisions
+  interaction-states table goes into Technical Details → Design notes, and unresolved design decisions
   become decision-ready Open Questions (they ride the batched question rounds — never a
   per-issue quiz).
 - **Leave `plan_date: null`.** Batch breakdown is not per-sprint certification: it plans

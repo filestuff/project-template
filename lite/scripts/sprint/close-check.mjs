@@ -14,8 +14,10 @@
 //          review:[], deviations:[], deferred:[], learnings:[]} — the wave master
 // consumes this instead of reading the sprint body.
 //
-// Rules (criteria are scanned ONLY between `### Deliverables` and the next `### `
-// heading, so Testing / Open Questions checkboxes are untouched):
+// Rules (criteria are scanned ONLY under `### Deliverables` (to the next `### `) and under
+// `## Verification` (the sprint-level end-to-end criteria, to the next `## `), so Out of
+// Scope / Open Questions / legacy `## Testing` checkboxes are untouched):
+//   deliverables-missing   no `### Deliverables` heading — a record with 0/0 criteria is not a record
 //   criterion-unevidenced  checked Automated criterion not followed by `- Evidence:`
 //   criterion-unchecked    unchecked Automated criterion without `descoped:`
 //   manual-unconfirmed     Manual criterion not `[x] … confirmed` (any case) and not descoped
@@ -132,9 +134,9 @@ const criterionFinding = (rule, i) =>
 
 // --- acceptance criteria ------------------------------------------------------
 const counts = { automated: 0, automated_evidenced: 0, descoped: 0, manual: 0, manual_confirmed: 0, checklist: 0, checklist_annotated: 0 };
-const delivStart = findHeading(3, "Deliverables");
-if (delivStart !== -1) {
-  const [a, b] = sectionRange(delivStart, 3);
+// One grammar for both criterion regions: a numbered deliverable (or a section start) resets
+// the mode; `- Automated` / `- Manual` set it; an unclassified box counts as Automated.
+const scanCriteria = ([a, b]) => {
   let mode = null; // null = unclassified (treated as Automated), "automated", "manual"
   for (let i = a; i < b; i++) {
     if (inComment[i]) continue;
@@ -163,7 +165,23 @@ if (delivStart !== -1) {
       else criterionFinding("criterion-unchecked", i);
     }
   }
+};
+// The template writes `### Deliverables`; hand-edited briefs drift to `## Deliverables` or
+// `### Deliverables (execution order)`. Accept those, or their criteria go unlinted.
+let delivStart = -1;
+let delivLevel = 3;
+for (let i = 0; i < lines.length && delivStart === -1; i++) {
+  if (inComment[i]) continue;
+  const m = /^(#{2,3}) (Deliverables\b.*)$/i.exec(lines[i]);
+  if (m) { delivStart = i; delivLevel = m[1].length; }
 }
+if (delivStart === -1) {
+  // Without the heading every criterion is invisible and the lint would pass 0/0.
+  if (legacy) warnings.push("deliverables-missing: no `### Deliverables` heading (legacy file — not enforced)");
+  else fail("deliverables-missing", 0, "no `### Deliverables` heading — criteria cannot be checked; restore the heading from docs/sprints/SPRINT_TEMPLATE.md");
+} else scanCriteria(sectionRange(delivStart, delivLevel));
+const verifStart = findHeading(2, "Verification");
+if (verifStart !== -1) scanCriteria(sectionRange(verifStart, 2));
 
 // --- completion log -----------------------------------------------------------
 const REQUIRED = ["Outcome", "Commits", "Review", "Deviations from brief", "Deferred", "Learnings", "Close checklist"];

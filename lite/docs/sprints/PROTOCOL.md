@@ -67,7 +67,7 @@ List drift found. Fix obvious issues; ask for ambiguous cases. Commit doc fixes 
 ### Step 5: Architectural Tradeoff Questions
 
 Read the sprint's **Pre-Sprint Decisions section first** — those decisions are already made;
-do not re-ask them. Then read Scope and Technical Details, cross-reference the codebase, and
+do not re-ask them. Then read Context (Why), Scope, Technical Details and Verification, cross-reference the codebase, and
 surface only the **non-obvious** decisions still open via AskUserQuestion (2–4 max, grouped in
 one call) — starting with any Open Questions items explicitly deferred to start.
 
@@ -101,7 +101,7 @@ every implementer subagent (hand them into each dispatch as global constraints �
 the gate before every commit and the `S-NNN:` commit grammar). The execution skill's own
 final review complements Phase 3, it does not replace it: `/sprint done` (evidence check,
 doc sync, ADR check) always runs afterwards. Deliverables marked "independent of all
-prior deliverables" (see SPRINT_TEMPLATE) may be dispatched to implementer subagents
+prior deliverables" (`docs/sprints/sprint-file-guide.md`) may be dispatched to implementer subagents
 in parallel — one message, multiple dispatches — when each implementer works in its
 own worktree/checkout; in a single shared checkout execute serially (concurrent
 implementers would gate and commit over each other's half-done changes). Dependent
@@ -109,10 +109,16 @@ deliverables stay serial, and every implementer still obeys the gate-before-comm
 rule. Only when no such skill is available, execute
 Phase 2 solo exactly as written.
 
+- **The brief is fixed.** Once `plan_date` is set, execution writes only checkboxes,
+  `- Evidence:` lines, in-flight Pre-Sprint Decisions, `## Execution Notes` and the
+  Completion Log — never a reworded deliverable or criterion. A brief that turns out wrong
+  is a stop-and-ask (below) or a Deviation recorded at close
+  (`docs/sprints/sprint-file-guide.md` §Brief vs record).
 - **Verify the brief first.** Before deliverable 1, confirm the plan's premises against the
   actual code: the referenced files/symbols exist as described, cited APIs match the installed
   versions, and Pre-Sprint Decisions are reflected in what you're about to build. Trivial
-  drift (a symbol moved lines) → locate it, note it, proceed. An approach-invalidating gap
+  drift (a symbol moved lines) → locate it, record it as a `- YYYY-MM-DD [exec]: …` line in
+  `## Execution Notes`, proceed. An approach-invalidating gap
   (stale premise, missing referenced file, an acceptance criterion you cannot evaluate) →
   stop and ask via AskUserQuestion with concrete alternatives — do not code around a broken
   premise.
@@ -131,7 +137,7 @@ Phase 2 solo exactly as written.
      failures before committing — do NOT commit broken code and defer.
   5. Check off acceptance criteria only when you can point to the file/test/output that
      proves each — and write that proof into the sprint file as the criterion's
-     `- Evidence:` line (SPRINT_TEMPLATE grammar) in the same edit as the `[x]`. Automated
+     `- Evidence:` line (sprint-file-guide grammar) in the same edit as the `[x]`. Automated
      criteria only — Manual criteria stay unchecked: report what to verify and leave the
      box for the user at close (Phase 3 Step 1).
   6. Commit atomically per deliverable (not per file): `S-NNN: [deliverable description]`.
@@ -163,9 +169,9 @@ Phase 2 solo exactly as written.
 
 ### Step 1: Acceptance Criteria Evidence Check
 
-For each criterion, cite one of: a test name that asserts it, a file path + line range that
+For each criterion — the deliverables' and Verification's End-to-end ones alike — cite one of: a test name that asserts it, a file path + line range that
 implements it, or command output that demonstrates it — **written into the sprint file** as
-the criterion's indented `- Evidence:` line (SPRINT_TEMPLATE grammar). A checked box without
+the criterion's indented `- Evidence:` line (sprint-file-guide grammar). A checked box without
 an Evidence line does not count; evidence that lives only in this conversation is lost.
 **Verify the observable difference** the criterion describes — the value in the response,
 the row actually written, the model that answered — not merely that the operation returned
@@ -241,7 +247,7 @@ If this was the last:
 
 ### Step 3.7: Learnings
 
-Fill `### Learnings` — one line per lesson in the SPRINT_TEMPLATE grammar
+Fill `### Learnings` — one line per lesson in the sprint-file-guide grammar
 (`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what happened> → rule: <one line>`),
 or `— none`. A `plan`-class line — a gap that would have changed another sprint's brief —
 is also prepended to `docs/sprints/PLANNING_LEARNINGS.md` (create if absent; never delete

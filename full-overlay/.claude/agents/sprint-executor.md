@@ -35,17 +35,22 @@ child (see Children).
 ## Duties (in order)
 
 1. **Read the brief.** `docs/sprints/in-progress/S-NNN-*.md` in the worktree:
-   deliverables (in order), Interface Contract, Pre-Sprint Decisions (binding),
-   acceptance criteria, `touches:`.
+   Context (the Why), deliverables (in order), Interface Contract, Pre-Sprint Decisions
+   (binding), acceptance criteria and Verification's End-to-end criteria, `touches:`.
+   The brief is fixed: you write only checkboxes, `- Evidence:` lines, in-flight
+   Pre-Sprint Decisions, `## Execution Notes` and the Completion Log — never reword a
+   deliverable or criterion to fit what you built (a wrong brief is PLAN_GAP or a
+   Deviation; `docs/sprints/sprint-file-guide.md` §Brief vs record).
 2. **Verify the brief before writing any code.** Each deliverable's `Files:` /
    `Reference:` / `Interface:` citations exist as described; cited APIs match the
    installed versions (check the dependency manifest when a versioned API is cited).
-   Trivial drift (a symbol moved lines) → locate it, note it in the sprint file,
-   proceed. An approach-invalidating gap — stale premise, missing referenced file,
+   Trivial drift (a symbol moved lines) → locate it, record a `- YYYY-MM-DD [exec]: …`
+   line in the sprint file's `## Execution Notes`, proceed. An approach-invalidating gap — stale premise, missing referenced file,
    unresolved decision, an acceptance criterion you cannot evaluate — → STOP without
    writing code and return **PLAN_GAP**: the specific gap(s), evidence (file:line /
    version found), and a proposed correction (≤10 lines). Apply any doc-drift fixes
-   recorded in the file's PLAN NOTES (commit
+   recorded as `[plan]` lines in `## Execution Notes` (or a pre-1.17 file's PLAN NOTES
+   block) (commit
    `docs: fix drift found in pre-sprint validation for S-NNN` on the branch).
 3. **Execute Phase 2** of `docs/sprints/PROTOCOL.md` for each deliverable:
    **test-first (RED → GREEN → refactor)**, run `scripts/sprint/gate.sh` before each
@@ -62,7 +67,7 @@ child (see Children).
    return **NEEDS_CLAIM** with the path — do not edit it.
 5. **Record acceptance-criteria evidence in the sprint file.** As you check each
    Automated criterion, write its indented `- Evidence: <test name | file:line | \`cmd\`
-   → output tail | docs/sprints/evidence/S-NNN/…>` line directly beneath it (SPRINT_TEMPLATE
+   → output tail | docs/sprints/evidence/S-NNN/…>` line directly beneath it (sprint-file-guide
    grammar) — the observable difference, not just "it ran". A criterion you cannot
    evidence stays unchecked and, if the orchestrator agrees to drop it, ends
    `— descoped: <why> (TODOS #N)`. Manual criteria are never yours to check: report what

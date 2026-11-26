@@ -89,7 +89,8 @@ connected auto-deploy).
 
 1. Glob all sprint files to find the highest S-NNN; assign the next number.
 2. **Check `docs/TODOS.md`** for deferred items this sprint could absorb; offer them.
-3. Copy `docs/sprints/SPRINT_TEMPLATE.md` → `docs/sprints/backlog/S-{NNN}-{kebab-title}.md`.
+3. Copy `docs/sprints/SPRINT_TEMPLATE.md` → `docs/sprints/backlog/S-{NNN}-{kebab-title}.md`
+   and delete its `<!-- guide: … -->` comments (rules: `docs/sprints/sprint-file-guide.md`).
 4. Fill frontmatter: sprint ID, `status: backlog`, goal from title, a concise `short:` label.
 5. Ask via AskUserQuestion for: `depends_on`, `blocks`, `tags`, `story_points`.
 6. Add a Backlog row to INDEX.md. Commit: `sprint: create S-NNN — [title]`.
@@ -98,8 +99,10 @@ connected auto-deploy).
 
 Populate a backlog sprint with implementation-ready detail (Files w/ new|modified, a
 **Reference** to the most similar existing file, Interface contract w/ file:line, Setup,
-Changes, testable Acceptance criteria), ordered in execution sequence; populate Technical
-Details, Testing (pattern reference), Dependencies, Risks, Open Questions; update
+Changes, testable Acceptance criteria), ordered in execution sequence; populate Context
+(Why, Source, Binding constraints, Prerequisites), Verification (test pattern + End-to-end
+criteria proving the `goal:`), Technical Details (optional), Risks, Open Questions —
+per `docs/sprints/sprint-file-guide.md`; update
 `story_points` if scope reveals different complexity. If
 `docs/sprints/PLANNING_LEARNINGS.md` exists, read its newest 20 entries first — it lists how
 past briefs failed; don't repeat those gaps.
@@ -114,10 +117,12 @@ past briefs failed; don't repeat those gaps.
    an ask-at-start question with 2–4 concrete options.
 4. Every acceptance criterion states an observable difference — not "works correctly" —
    and is classified **Automated** (with the exact command that demonstrates it) or
-   **Manual** (human-confirmed only, per SPRINT_TEMPLATE). A criterion that can't name
+   **Manual** (human-confirmed only, per `docs/sprints/sprint-file-guide.md`). A criterion that can't name
    its command is Manual by definition.
-5. Testing names an existing test file to follow, or states why test-first doesn't fit and
-   how the deliverable is verified instead.
+5. Verification names an existing test file to follow (or states why test-first doesn't
+   fit and how the work is verified instead) and carries at least one End-to-end criterion
+   that proves the `goal:` — not a restatement of a deliverable's criterion. A pre-1.17 file's
+   `## Testing` section is read the same way.
 6. **No placeholders**: every deliverable's Changes/Interface text is executable as
    written — "appropriate error handling", "as needed", "similar to deliverable N"
    are gaps, not instructions. Name the handling, the values, the exact difference.

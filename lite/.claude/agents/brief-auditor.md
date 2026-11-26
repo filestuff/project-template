@@ -26,6 +26,8 @@ repository. Walk the deliverables in order and, for each, try to begin:
   behavior, a name others depend on? An unchecked Open Question is one.
 - Could you evaluate every acceptance criterion, and name the test file each Automated
   criterion lands in?
+- Does `## Verification` carry an End-to-end criterion that would fail if the sprint's
+  `goal:` were not met — not just a restatement of one deliverable's criterion?
 - Does anything depend on a `Consumes` contract that the dependency's `Produces` does not
   actually state?
 - **If the frontmatter says `tier: routine`**, check the claim — a brief's author
