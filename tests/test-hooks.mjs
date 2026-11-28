@@ -44,7 +44,7 @@ story_points: 1
 plan_date: 2026-11-01
 start_date: 2026-11-01
 end_date: null
-${wave ? `wave: ${wave}\n` : ""}touches:${touches.length ? "\n" + touches.map((t) => `  - ${t}`).join("\n") : " []"}
+${complete ? `summary: "Shipped the thing."\n` : ""}${wave ? `wave: ${wave}\n` : ""}touches:${touches.length ? "\n" + touches.map((t) => `  - ${t}`).join("\n") : " []"}
 ---
 
 # ${id}: thing

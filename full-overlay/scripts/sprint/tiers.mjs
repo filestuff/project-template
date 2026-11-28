@@ -20,7 +20,8 @@
 //             does not withdraw it: review finds things at every tier, and two or more
 //             on one sprint already count as strain.)
 // Exit 0 always. Sprints with no `outcome:` (solo, lite-era, pre-1.14) are counted apart.
-import { allSprints, repoRoot } from "./frontmatter.mjs";
+import { allSprints } from "./frontmatter.mjs";
+import { repoRoot } from "./paths.mjs";
 
 const argv = process.argv.slice(2);
 const flag = (n) => { const i = argv.indexOf(n); return i === -1 ? null : (argv[i + 1] ?? ""); };
@@ -42,7 +43,7 @@ const parse = (line) => {
   return { assigned: o.assigned, final: o.final, runs: Number(o.runs) || 1, escalations: Number(o.escalations) || 0, arbiter: Number(o.arbiter) || 0, fix_rounds: Number(o.fix_rounds) || 0, confirmed, raised };
 };
 
-const done = allSprints(root).filter((s) => ["done", "done/archive"].includes(s.dir) && (since === null || String(s.end_date ?? "") >= since));
+const done = allSprints(root).filter((s) => s.state === "done" && (since === null || String(s.end_date ?? "") >= since));
 const rows = [];
 let untracked = 0;
 for (const s of done) {

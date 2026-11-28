@@ -1,0 +1,208 @@
+#!/usr/bin/env node
+// The Done ledger, generated — nobody writes Done rows by hand. Zero-dep; both tiers.
+//
+// Every finished sprint carries a one-sentence `summary:` in its frontmatter (written at
+// close; close-check.mjs enforces it). From those this writes:
+//   - docs/sprints/INDEX.md, between <!-- BEGIN/END GENERATED: recent-done -->: the
+//     RECENT newest done sprints (by end_date, then id) and a pointer to the ledgers.
+//   - docs/sprints/done/<bucket>/LEDGER.md: every done sprint in that hundred, by id.
+// So the board stays a few KB however many sprints a project has closed, and the full
+// history is one file per hundred sprints. The full tier's regen.mjs imports these
+// generators, so `regen` / `regen --check` cover the same ground.
+//
+//   ledger.mjs           # write the block and the bucket ledgers
+//   ledger.mjs --check   # exit 2, listing problems, if anything is out of date or wrong
+//   (--root <repo-root>; default: the primary checkout via git, else cwd)
+//
+// Problems (both modes report them; exit 2):
+//   drift            a generated block or LEDGER.md is out of date (--check only — write fixes it)
+//   duplicate-id     two files hold one sprint number
+//   legacy-layout    a done sprint sits outside done/<bucket>/ (migrations/v1.19.0.sh moves them)
+//   index-header     INDEX.md (or ROADMAP.md, full tier) carries more than one `_Last updated`
+//                    line or any `_Previously` line — the header is ONE line, overwritten
+//                    (history lives in git)
+// Exit 0 clean · 1 usage / missing markers · 2 problems.
+//
+// Importable: RECENT, readFields, doneSprints, genRecentDone, bucketLedgers,
+//             syncBucketLedgers, ledgerProblems
+
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
+import { bucketOf, duplicateIds, listSprintFiles, repoRoot, SPRINTS } from "./paths.mjs";
+
+export const RECENT = 20;
+const KEYS = ["sprint", "goal", "short", "story_points", "end_date", "summary"];
+
+const unquote = (v) => {
+  if (/^".*"$/.test(v)) {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v.slice(1, -1);
+    }
+  }
+  if (/^'.*'$/.test(v)) return v.slice(1, -1).replace(/''/g, "'");
+  return v.replace(/\s+#.*$/, "");
+};
+
+// The few scalar frontmatter keys the ledger shows. Quoted values are taken whole.
+export function readFields(file) {
+  const lines = readFileSync(file, "utf8").split("\n");
+  const out = {};
+  if (lines[0] !== "---") return out;
+  for (let i = 1; i < lines.length && lines[i] !== "---"; i++) {
+    const m = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(lines[i]);
+    if (!m || !KEYS.includes(m[1])) continue;
+    const v = unquote(m[2].trim()).trim();
+    out[m[1]] = v === "" || v === "null" || v === "~" ? null : v;
+  }
+  return out;
+}
+
+// Done sprints: [{ id, num, rel, dir, label, points, end, summary }].
+export function doneSprints(root) {
+  return listSprintFiles(root)
+    .filter((s) => s.state === "done")
+    .map((s) => {
+      const f = readFields(s.file);
+      const label = f.short ?? s.name.replace(/^S-\d+-?/, "").replace(/\.md$/, "").replace(/-/g, " ");
+      return { ...s, label, points: f.story_points ?? "—", end: f.end_date ?? null, summary: f.summary ?? null };
+    });
+}
+
+const cell = (v) => String(v ?? "—").replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ");
+const HEAD = ["| Sprint | Goal | Pts | Completed | Summary |", "|--------|------|-----|-----------|---------|"];
+const row = (s, link) => `| [${s.id}](${link}) | ${cell(s.label)} | ${cell(s.points)} | ${cell(s.end)} | ${cell(s.summary)} |`;
+
+// INDEX.md's recent-done block (links relative to docs/sprints/).
+export function genRecentDone(root, done = doneSprints(root)) {
+  if (done.length === 0) return ["_(none yet)_"];
+  const recent = [...done]
+    .sort((a, b) => String(b.end ?? "").localeCompare(String(a.end ?? "")) || b.num - a.num)
+    .slice(0, RECENT);
+  const buckets = [...new Set(done.map((s) => bucketOf(s.id)))].sort().reverse();
+  return [
+    ...HEAD,
+    ...recent.map((s) => row(s, relative(join(root, SPRINTS), s.file))),
+    "",
+    `${recent.length} most recent of ${done.length} done. Full history, one ledger per hundred sprints: ` +
+      buckets.map((b) => `[${b}](done/${b}/LEDGER.md)`).join(" · "),
+  ];
+}
+
+// { "<rel path of LEDGER.md>": content } for every bucket holding a done sprint.
+export function bucketLedgers(root, done = doneSprints(root)) {
+  const groups = new Map();
+  for (const s of done) {
+    const b = bucketOf(s.id);
+    if (!groups.has(b)) groups.set(b, []);
+    groups.get(b).push(s);
+  }
+  const out = {};
+  for (const [b, list] of [...groups.entries()].sort()) {
+    const rel = `${SPRINTS}/done/${b}/LEDGER.md`;
+    const here = join(root, dirname(rel));
+    const [lo, hi] = b.split("-").map(Number);
+    out[rel] = [
+      `# Done ledger — S-${lo} to S-${hi}`,
+      "",
+      "<!-- GENERATED by scripts/sprint/ledger.mjs from each sprint's frontmatter — do not edit.",
+      "     Fix the sprint file (`summary:` is its row) and re-run the script. -->",
+      "",
+      ...HEAD,
+      ...list.sort((x, y) => x.num - y.num).map((s) => row(s, relative(here, s.file))),
+      "",
+    ].join("\n");
+  }
+  return out;
+}
+
+// Writes (or, with check, compares) every bucket LEDGER.md. Returns the drifted paths.
+export function syncBucketLedgers(root, { check = false, done } = {}) {
+  const drift = [];
+  for (const [rel, content] of Object.entries(bucketLedgers(root, done))) {
+    const abs = join(root, rel);
+    if (existsSync(abs) && readFileSync(abs, "utf8") === content) continue;
+    drift.push(rel);
+    if (!check) {
+      mkdirSync(dirname(abs), { recursive: true });
+      writeFileSync(abs, content);
+    }
+  }
+  return drift;
+}
+
+// Everything wrong that regenerating cannot fix: [message].
+export function ledgerProblems(root, done = doneSprints(root)) {
+  const out = [];
+  for (const d of duplicateIds(root)) out.push(`duplicate-id: ${d.id} is held by ${d.files.join(", ")}`);
+  const legacy = done.filter((s) => !/^done\/\d{4,}-\d{4,}$/.test(s.dir));
+  if (legacy.length > 0)
+    out.push(
+      `legacy-layout: ${legacy.length} done sprint(s) outside done/<bucket>/ (e.g. ${legacy[0].rel}) — ` +
+        "run migrations/v1.19.0.sh, or git mv each into `node scripts/sprint/paths.mjs done-home S-NNN`",
+    );
+  for (const name of ["INDEX.md", "ROADMAP.md"]) {
+    const path = join(root, SPRINTS, name);
+    if (!existsSync(path)) continue;
+    const lines = readFileSync(path, "utf8").split("\n");
+    const updated = lines.filter((l) => /^_Last updated\b/.test(l)).length;
+    const previously = lines.filter((l) => /^_Previously\b/.test(l)).length;
+    if (updated > 1 || previously > 0)
+      out.push(
+        `index-header: ${name} has ${updated} \`_Last updated\` and ${previously} \`_Previously\` line(s) — ` +
+          "keep ONE `_Last updated` line and overwrite it; git keeps the history",
+      );
+  }
+  return out;
+}
+
+// Splice `gen` into the marker block `name` of `text`. Returns null if the markers are missing.
+export function splice(text, name, gen) {
+  const begin = `<!-- BEGIN GENERATED: ${name} -->`;
+  const end = `<!-- END GENERATED: ${name} -->`;
+  const re = new RegExp(`${begin}\\n[\\s\\S]*?${end}`);
+  if (!re.test(text)) return null;
+  return text.replace(re, () => `${begin}\n${gen.join("\n")}\n${end}`);
+}
+
+function main() {
+  const argv = process.argv.slice(2);
+  const check = argv.includes("--check");
+  const i = argv.indexOf("--root");
+  let root = i === -1 ? null : argv[i + 1];
+  if (!root) {
+    try {
+      root = repoRoot();
+    } catch {
+      root = process.cwd();
+    }
+  }
+  const done = doneSprints(root);
+  const indexPath = join(root, SPRINTS, "INDEX.md");
+  const text = readFileSync(indexPath, "utf8");
+  const next = splice(text, "recent-done", genRecentDone(root, done));
+  if (next === null) {
+    console.error(
+      `missing <!-- BEGIN/END GENERATED: recent-done --> markers in ${SPRINTS}/INDEX.md — ` +
+        "replace the hand-written Done table with them (migrations/v1.19.0.sh does this)",
+    );
+    process.exit(1);
+  }
+  const drift = [];
+  if (next !== text) {
+    drift.push(`${SPRINTS}/INDEX.md#recent-done`);
+    if (!check) writeFileSync(indexPath, next);
+  }
+  drift.push(...syncBucketLedgers(root, { check, done }));
+  const problems = ledgerProblems(root, done);
+  if (check && drift.length > 0) problems.unshift(`drift: ${drift.join(", ")} — run node scripts/sprint/ledger.mjs`);
+  if (problems.length > 0) {
+    console.log(problems.join("\n"));
+    process.exit(2);
+  }
+  console.log(check ? "done ledger is current" : `ledger ${drift.length ? `written: ${drift.join(", ")}` : "unchanged"}`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) main();

@@ -3,13 +3,14 @@
 _Last updated: (bootstrap)._
 
 Kanban board for {{PROJECT_NAME}}. Sprint files live in
-`docs/sprints/{backlog,in-progress,done,rejected}/`. Lifecycle rules:
-`docs/sprints/PROTOCOL.md`.
+`docs/sprints/{backlog,in-progress,done/<bucket>,rejected}/` — a finished sprint's home is
+`done/<its hundred>/` (S-1384 → `done/1300-1399/`) and it never moves again. Lifecycle
+rules: `docs/sprints/PROTOCOL.md`.
 
-<!-- Lite tier: this file is maintained by hand via /sprint — no generator.
-     Keep the tables small; the sprint files are the source of truth. The Done-table
-     Outcome is ONE sentence (≤200 chars) — the narrative lives in the sprint file's
-     `### Outcome`. -->
+<!-- Lite tier: In Progress / Backlog / Rejected are maintained by hand via /sprint; the
+     Done section is generated (node scripts/sprint/ledger.mjs). Keep the tables small —
+     the sprint files are the source of truth. The `_Last updated_` line is ONE line,
+     overwritten, never stacked. -->
 
 ## In Progress
 
@@ -25,9 +26,13 @@ Kanban board for {{PROJECT_NAME}}. Sprint files live in
 
 ## Done
 
-| Sprint | Goal | Pts | Completed | Outcome |
-|--------|------|-----|-----------|---------|
-| _(none)_ | | | | |
+<!-- Generated from each finished sprint's `summary:` frontmatter (node scripts/sprint/ledger.mjs at
+     close) — never edit rows here; fix the sprint file and regenerate. The full history is
+     one LEDGER.md per hundred sprints under done/<bucket>/. -->
+
+<!-- BEGIN GENERATED: recent-done -->
+_(none yet)_
+<!-- END GENERATED: recent-done -->
 
 ## Rejected
 

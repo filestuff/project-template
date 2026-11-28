@@ -4,6 +4,60 @@ All notable changes to the project-template payload. Downstream repos read these
 entries during `/template-upgrade` — write every bullet for the person running a
 repo that installed this template, not for template maintainers.
 
+## [1.19.0] - 2026-11-28
+
+**The sprint ledger now scales to thousands of sprints.** In a repo with about 1,400
+sprints, finished files moved twice (in-progress → `done/` → `done/archive/`, keeping the
+newest 10 in `done/`), so every land shuffled an older file and broke the hand-written
+INDEX links that then had to be relinked. INDEX.md had grown to 2 MB: a 1,300-row
+hand-written Done table plus about 900 stacked `_Previously: Last updated_` lines.
+ROADMAP.md graphed every sprint ever finished, almost 1 MB. New ids came from an agent
+globbing five folders for the highest number.
+
+- **A finished sprint has one permanent home: `docs/sprints/done/<bucket>/`**, one
+  folder per hundred ids, zero-padded (S-001 → `done/0000-0099/`, S-1384 →
+  `done/1300-1399/`). The path follows from the id alone, so links never rot. Archive
+  rotation and the INDEX relinking in `merge-sprint.sh land` are gone; nothing else moves
+  when a sprint lands. Lite closes the same way (PROTOCOL Phase 3 Step 4).
+- **New `scripts/sprint/paths.mjs`** (both tiers) is the one place that knows where sprint
+  files live: `next-id` (use it instead of globbing — `/sprint create` and `/plan` now
+  do), `done-home S-NNN`, `find S-NNN`, `duplicates`. Every script that listed folders
+  (`frontmatter.mjs`, `claims.mjs`, `regen.mjs`, `tiers.mjs`, `plan-check.mjs`,
+  `decisions.mjs`, `learnings.mjs`) uses it. It still reads the old flat `done/` and
+  `done/archive/`, so nothing breaks before the migration runs.
+- **The Done ledger is generated.** A new frontmatter field, `summary:`, holds the
+  sprint's one sentence (≤200 chars, double-quoted). `close-check.mjs` blocks a close
+  without it (`summary-field`). New `scripts/sprint/ledger.mjs` writes INDEX.md's
+  `recent-done` block (the 20 newest, with links to the ledgers) and one
+  `done/<bucket>/LEDGER.md` per hundred sprints. The full tier's `regen.mjs` runs it; lite
+  runs it at close. Nobody writes Done rows by hand any more. (`outcome:` stays what it
+  was: the wave run's tier telemetry for `tiers.mjs`.)
+- **The INDEX and ROADMAP headers are one line again.** `ledger.mjs --check` and
+  `regen.mjs --check` fail on a second `_Last updated` line or any `_Previously` line in
+  either file, on two files holding one sprint number, and on a finished sprint outside its
+  bucket. `plan-check.mjs` gains
+  `duplicate-id`.
+- **ROADMAP shows open work.** The graph and critical path now cover the sprints not yet
+  done plus the done sprints they directly depend on, not the whole history.
+- **`check-ledger-links.mjs`** now rewrites any leftover `done/X` / `done/archive/X` link
+  in INDEX.md and TODOS.md to the bucket path, and `regen --check` checks both files.
+- `frontmatter.mjs` now reads a quoted value whole, so `summary: "… (TODOS #12)"` keeps
+  its `#12`, and `set` always quotes `summary`.
+
+**What to change:** nothing by hand — the `v1.19.0` migration (both tiers) does it during
+`/template-upgrade`. It `git mv`s every file in `done/` and `done/archive/` into its
+bucket, seeds `summary:` from each sprint's existing INDEX Done row (or the first sentence
+of its `### Outcome`), rewrites `done/…` and `done/archive/…` references across `docs/`,
+`CLAUDE.md` and `README.md`, replaces INDEX.md's hand-written Done table with the
+generated block, moves the stacked header lines of INDEX.md and ROADMAP.md verbatim to
+`docs/sprints/INDEX-HISTORY.md` / `ROADMAP-HISTORY.md`, regenerates, and stages it all for
+the upgrade commit. Other INDEX and ROADMAP sections are left alone. Expect one large
+rename commit in a big repo: on a copy of a 1,400-sprint repo it moved 1,327 files into 15
+folders, seeded 1,306 summaries, rewrote 1,906 references in 76 seconds, and INDEX.md went
+from 2.1 MB to 20 KB. From
+then on: write `summary:` with `### Outcome`, and overwrite the one `_Last updated` line
+instead of stacking a new one.
+
 ## [1.18.0] - 2026-11-26
 
 **Proposals are now built to live as long as the feature does.** Proposals had become

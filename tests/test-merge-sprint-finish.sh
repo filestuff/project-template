@@ -15,7 +15,7 @@ R="$TMP/repo" ORIGIN="$TMP/origin.git"
 
 mkdir -p "$R/scripts/sprint" "$R/docs/sprints/"{backlog,in-progress,done,rejected}
 cp "$REPO_DIR"/full-overlay/scripts/sprint/*.sh "$REPO_DIR"/full-overlay/scripts/sprint/*.mjs "$REPO_DIR"/full-overlay/scripts/sprint/claims-tokens.json "$R/scripts/sprint/"
-cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$R/scripts/sprint/"
+cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$REPO_DIR/lite/scripts/sprint/paths.mjs" "$REPO_DIR/lite/scripts/sprint/ledger.mjs" "$R/scripts/sprint/"
 cp "$REPO_DIR/full-overlay/docs/sprints/INDEX.md" "$REPO_DIR/full-overlay/docs/sprints/ROADMAP.md" "$R/docs/sprints/"
 cp "$REPO_DIR/lite/docs/DOC_HEALTH.md" "$R/docs/"
 chmod +x "$R"/scripts/sprint/*.sh
@@ -39,6 +39,7 @@ story_points: 1
 plan_date: 2026-09-01
 start_date: 2026-09-01
 end_date: null
+summary: "Shipped $2 (TODOS #7)."
 touches:
   - src/$2.txt
 ---

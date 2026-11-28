@@ -15,7 +15,7 @@ R="$TMP/repo"
 # --- fixture: a full-tier install with four in-progress sprints --------------
 mkdir -p "$R/scripts/sprint" "$R/docs/sprints/"{backlog,in-progress,done,rejected}
 cp "$REPO_DIR"/full-overlay/scripts/sprint/*.sh "$REPO_DIR"/full-overlay/scripts/sprint/*.mjs "$REPO_DIR"/full-overlay/scripts/sprint/claims-tokens.json "$R/scripts/sprint/"
-cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$R/scripts/sprint/"
+cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$REPO_DIR/lite/scripts/sprint/paths.mjs" "$REPO_DIR/lite/scripts/sprint/ledger.mjs" "$R/scripts/sprint/"
 cp "$REPO_DIR/full-overlay/docs/sprints/INDEX.md" "$REPO_DIR/full-overlay/docs/sprints/ROADMAP.md" "$R/docs/sprints/"
 cp "$REPO_DIR/lite/docs/DOC_HEALTH.md" "$R/docs/"
 chmod +x "$R"/scripts/sprint/*.sh
@@ -36,6 +36,7 @@ story_points: 1
 plan_date: 2026-09-01
 start_date: 2026-09-01
 end_date: null
+summary: "Shipped $2 (TODOS #7)."
 touches:
   - src/$2.txt
 ---
@@ -143,8 +144,8 @@ make_train train-W-a S-001 alpha S-002 beta
 prep train-W-a
 set +e; out=$(bash "$MS" land train-W-a --sprints S-001,S-002 2>&1); code=$?; set -e
 [[ $code -eq 4 ]] || { echo "expected train land exit 4, got $code:"; echo "$out"; exit 1; }
-assert_stamped docs/sprints/done/S-001-alpha.md S-001 S-002
-assert_stamped docs/sprints/done/S-002-beta.md  S-002 S-001
+assert_stamped docs/sprints/done/0000-0099/S-001-alpha.md S-001 S-002
+assert_stamped docs/sprints/done/0000-0099/S-002-beta.md  S-002 S-001
 bash "$MS" finish train-W-a --sprints S-001,S-002 --no-push >/dev/null
 
 # --- 2. --allow-incomplete: the note lands on the incomplete member only -----
@@ -156,7 +157,7 @@ set +e; out=$(bash "$MS" land train-W-b --sprints S-003,S-004 --allow-incomplete
 [[ $code -eq 4 ]] || { echo "expected train land exit 4 with --allow-incomplete, got $code:"; echo "$out"; exit 1; }
 echo "$out" | grep -q 'WARNING: landing with an incomplete completion log for S-003 — ' ||
   { echo "override warning does not name exactly S-003:"; echo "$out"; exit 1; }
-D3=docs/sprints/done/S-003-gamma.md D4=docs/sprints/done/S-004-delta.md
+D3=docs/sprints/done/0000-0099/S-003-gamma.md D4=docs/sprints/done/0000-0099/S-004-delta.md
 assert_stamped "$D3" S-003 S-004
 assert_stamped "$D4" S-004 S-003
 grep -q '^- [0-9-]\{10\} landed incomplete — train close, executor gone$' "$D3" ||

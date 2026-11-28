@@ -502,7 +502,8 @@ For the batch (up to 6 sprints; one ready sprint is simply a batch of one):
    `New docs registered` / `ADR check` checklist rows). You adjudicate the returns — you
    still never read a diff.
 3. **Pre-draft the semantic docs** (no lock; mandatory when another wave is live): per
-   sprint, the DOC_HEALTH rows/History entry, INDEX Done-row and ROADMAP narrative into
+   sprint, the DOC_HEALTH rows/History entry, the INDEX `_Last updated_` line and ROADMAP
+   narrative into
    `.claude/sprint-orchestration/W-<id>/S-NNN-docs-draft.md`. The exit-4 pause then becomes
    "apply the drafts" — seconds of lock-held time, not minutes.
 4. **Assemble and gate — once** (no lock):
@@ -531,8 +532,9 @@ For the batch (up to 6 sprints; one ready sprint is simply a batch of one):
    `/adr` — mechanical, not a question); **replace the `### Review` section's `— pending:
    independent review before land` line with that sprint's `review_record` lines,
    verbatim**; record how the run went —
-   `node scripts/sprint/frontmatter.mjs set docs/sprints/done/S-NNN-….md outcome "<the
-   run's outcome line>"` (the last run's, for a sprint that was re-launched); prepend any `plan`-class `learnings[]` line to
+   `node scripts/sprint/frontmatter.mjs set "$(node scripts/sprint/paths.mjs find S-NNN)"
+   outcome "<the run's outcome line>"` (`outcome:` is the run's tier telemetry for
+   `tiers.mjs`; `summary:` is the Done-ledger sentence — different fields) (the last run's, for a sprint that was re-launched); prepend any `plan`-class `learnings[]` line to
    `docs/sprints/PLANNING_LEARNINGS.md` → `merge-sprint.sh finish <land-branch> --sprints
    S-A,S-B,… --no-push`. Phase 3 Step 6's CI check does **not** run here — `finish`
    deferred its push; it runs once at checkpoint P3 (Step 6).
@@ -597,7 +599,7 @@ The wave is over when no run is executing, nothing is `READY_TO_LAND` or parked,
 `claims.mjs ready --wave W-<id>` admits nothing more (or the user stops it). After its
 sprints have all landed on `main`, dispatch one **`reviewer`** subagent
 (fresh context) over the merged wave result on `main` — a fresh reviewer catches cross-sprint
-integration issues per-sprint review can't. Hand it the landed `docs/sprints/done/S-NNN-*.md`
+integration issues per-sprint review can't. Hand it the landed `docs/sprints/done/<bucket>/S-NNN-*.md`
 paths as a starting map (their Completion Logs carry the evidence, review dispositions and
 deviations; the ledger reports are pointers). Hand it the diff base explicitly, too: `pre_wave_sha`, recorded at Step 1.5 from
 `reserve-wave.sh`'s output and committed as a trailer on the wave's reservation commit — the

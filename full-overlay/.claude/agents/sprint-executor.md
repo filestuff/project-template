@@ -90,7 +90,9 @@ child (see Children).
    - **7a — the record (the durable artifact).** In the worktree's
      `docs/sprints/in-progress/S-NNN-*.md`, fill the `## Completion Log` per
      SPRINT_TEMPLATE: `### Outcome` (2–4 sentences — what shipped, what changed for the
-     user, what surprised you), `### Review` (`— pending: independent review before land`, per
+     user, what surprised you) and its one-sentence version in the frontmatter `summary:`
+     (≤200 chars, double-quoted — the sprint's Done-ledger row; `land` refuses without it),
+     `### Review` (`— pending: independent review before land`, per
      duty 6), `### Deviations from brief`, `### Deferred`
      (TODOS #s), `### Learnings` (`- YYYY-MM-DD S-NNN <plan|test|review|design|exec>: <what
      happened> → rule: <one line>`; `— none` is valid for any section), and the

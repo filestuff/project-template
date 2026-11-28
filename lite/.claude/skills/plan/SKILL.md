@@ -64,8 +64,8 @@ instead — Phase 2 step 4 then confirms the boundaries as it always did.
 
 ### Phase 1: Context Gathering
 
-1. Read `docs/sprints/INDEX.md` for current state and existing dependency chains (find the
-   highest existing S-NNN).
+1. Read `docs/sprints/INDEX.md` for current state and existing dependency chains;
+   `node scripts/sprint/paths.mjs next-id` gives the first free sprint number.
 2. Read the plan source:
    - A path → that document.
    - A number → treat as a proposal: read `docs/proposals/NNN-*.md`. That file is the
@@ -200,9 +200,9 @@ instead — Phase 2 step 4 then confirms the boundaries as it always did.
 
 ### Phase 3: Sprint File Generation
 
-For each sprint, starting at S-{highest+1}, create a file from
-`docs/sprints/SPRINT_TEMPLATE.md` in `docs/sprints/backlog/` — delete its `<!-- guide: … -->`
-comments (the rules live in `docs/sprints/sprint-file-guide.md`) — and populate:
+For each sprint, starting at the id `paths.mjs next-id` printed and counting up, create a
+file from `docs/sprints/SPRINT_TEMPLATE.md` in `docs/sprints/backlog/` — delete its
+`<!-- guide: … -->` comments (the rules live in `docs/sprints/sprint-file-guide.md`) — and populate:
 - **Frontmatter**: sprint ID, `status: backlog`, goal, a concise `short:` label,
   `depends_on`, `blocks`, `tags`, `story_points`, `risk`, `tier`. **`risk: high`** when
   the sprint's Files touch a surface in the risk-tier table of

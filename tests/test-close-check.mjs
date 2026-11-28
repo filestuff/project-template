@@ -26,7 +26,7 @@ const check = (label, cond, extra = "") => {
   if (!cond) { failed++; console.error(`FAIL ${label}${extra ? `\n${extra}` : ""}`); }
 };
 
-const FM = "---\nsprint: S-001\nstatus: in-progress\ngoal: g\n---\n\n# S-001: X\n\n";
+const FM = "---\nsprint: S-001\nstatus: in-progress\ngoal: g\nsummary: \"Shipped the thing (TODOS #12).\"\n---\n\n# S-001: X\n\n";
 const deliverables = ({ evidence = true, manual = "confirmed", extraUnchecked = false } = {}) => `## Scope
 
 ### Deliverables
@@ -165,6 +165,21 @@ r = run("verif-unchecked.md", FM + deliverables() + verification({ checked: fals
 check("unchecked Verification criterion → criterion-unchecked", r.code === 5 && /criterion-unchecked/.test(r.out), r.out);
 r = run("verif-noevidence.md", FM + deliverables() + verification({ evidence: false }) + log());
 check("Verification [x] without Evidence → criterion-unevidenced", r.code === 5 && /criterion-unevidenced/.test(r.out), r.out);
+
+// 13. `summary:` — the one-sentence Done-ledger row (1.19.0)
+const withSummary = (v) => FM.replace(/^summary: .*$/m, v === undefined ? "" : `summary: ${v}`);
+r = run("sum-missing.md", withSummary(undefined) + deliverables() + log());
+check("no summary: → summary-field, exit 5", r.code === 5 && /FAIL summary-field/.test(r.out), r.out);
+r = run("sum-null.md", withSummary("null") + deliverables() + log());
+check("summary: null → summary-field", r.code === 5 && /FAIL summary-field/.test(r.out), r.out);
+r = run("sum-placeholder.md", withSummary('"TBD"') + deliverables() + log());
+check("summary: TBD → summary-field placeholder", r.code === 5 && /placeholder/.test(r.out), r.out);
+r = run("sum-long.md", withSummary(JSON.stringify("x".repeat(201))) + deliverables() + log());
+check("summary: over 200 chars → summary-field", r.code === 5 && /201 chars/.test(r.out), r.out);
+r = run("sum-unquoted.md", withSummary("Shipped it, unquoted.") + deliverables() + log());
+check("an unquoted summary passes", r.code === 0, r.out);
+r = run("sum-legacy.md", withSummary(undefined) + deliverables({ evidence: false }) + "\n## Completion Log\n\n- [ ] Implementation complete\n");
+check("a legacy file is not held to summary:", r.code === 0 && !/summary-field/.test(r.out), r.out);
 
 // 10. usage
 r = run("nofm.md", "# no frontmatter\n");

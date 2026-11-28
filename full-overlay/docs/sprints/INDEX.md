@@ -3,7 +3,8 @@
 _Last updated: (bootstrap)._
 
 Kanban board for {{PROJECT_NAME}}. Sprint files live in
-`docs/sprints/{backlog,in-progress,done,rejected}/`.
+`docs/sprints/{backlog,in-progress,done/<bucket>,rejected}/` — a finished sprint's home is
+`done/<its hundred>/` (S-1384 → `done/1300-1399/`) and it never moves again.
 Lifecycle and regeneration rules: `docs/sprints/PROTOCOL.md`.
 
 <!-- BEGIN GENERATED: totals -->
@@ -31,12 +32,13 @@ _(empty)_
 
 ## Done
 
-<!-- LLM-maintained: one row per completed sprint, newest first. The Outcome
-     column is ONE sentence (≤200 chars) — the narrative lives in the sprint file's
-     `### Outcome`; `finish` warns past 300 chars. -->
+<!-- Generated from each finished sprint's `summary:` frontmatter (scripts/sprint/ledger.mjs,
+     run by regen.mjs) — never edit rows here; fix the sprint file and regenerate. The
+     full history is one LEDGER.md per hundred sprints under done/<bucket>/. -->
 
-| Sprint | Goal | Pts | Completed | Outcome |
-|--------|------|-----|-----------|---------|
+<!-- BEGIN GENERATED: recent-done -->
+_(none yet)_
+<!-- END GENERATED: recent-done -->
 
 ## Rejected
 

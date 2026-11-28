@@ -102,7 +102,8 @@ taste` lists what was decided on your behalf.
 
 | | lite | full |
 |---|---|---|
-| Sprint kanban (`backlog/ → in-progress/ → done/`) | ✅ | ✅ |
+| Sprint kanban (`backlog/ → in-progress/ → done/<bucket>/` — a finished sprint's permanent home, one folder per hundred ids; `paths.mjs` hands out ids) | ✅ | ✅ |
+| Generated Done ledger (each file's `summary:` → INDEX's 20 newest + one `LEDGER.md` per hundred; `ledger.mjs`) | ✅ | ✅ (via `regen.mjs`) |
 | `/sprint`, `/plan`, `/adr` skills | ✅ | ✅ |
 | `/review`, `/explain-changes`, `/code-simplifier`, `/debug` skills + `reviewer` agent | ✅ | ✅ |
 | `DOC_HEALTH.md` staleness gate, `TODOS.md` ledger, ADRs | ✅ | ✅ |
@@ -132,7 +133,7 @@ taste` lists what was decided on your behalf.
 | Fail-closed CI verification (`verify-ci.sh` + `ci-gates.json`) | manual `gh run list` | ✅ |
 | Per-sprint git worktrees (`worktree-link.sh`: env-file copy; optional shared-install link mode) | — | ✅ |
 | Generated INDEX/ROADMAP blocks (`regen.mjs`, Mermaid dep graph; `check-ledger-links.mjs`) | — | ✅ |
-| INDEX.md maintenance | by hand (tiny) | regenerated |
+| INDEX.md maintenance | by hand (tiny) — the Done block is generated | regenerated |
 | PROTOCOL.md size | ~280 lines | ~580 lines |
 
 Start lite. Upgrade later with `/bootstrap-project --upgrade` (requires an empty

@@ -8,31 +8,43 @@
 //   frontmatter.mjs get <file> <field>            # prints JSON value (null if absent)
 //   frontmatter.mjs set <file> <field> <value>    # value parsed as JSON, else raw string
 //
-// Importable: parseFrontmatter, setField, readSprintFile, sprintDirs, repoRoot
+// Importable: parseFrontmatter, setField, readSprintFile, allSprints, shortLabel
+// (where sprint files live, and repoRoot, is scripts/sprint/paths.mjs's job)
 
-import { readFileSync, writeFileSync, readdirSync, existsSync, realpathSync } from "node:fs";
-import { join, basename } from "node:path";
+import { readFileSync, writeFileSync, realpathSync } from "node:fs";
+import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
-import { execFileSync } from "node:child_process";
-
-// The lifecycle ledger root (primary checkout) — identical from any worktree.
-// SPRINT_ROOT overrides it for testing or for operating on a non-ledger checkout.
-export function repoRoot() {
-  if (process.env.SPRINT_ROOT) return process.env.SPRINT_ROOT;
-  const common = execFileSync(
-    "git",
-    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    { encoding: "utf8" },
-  ).trim();
-  return common.replace(/\/\.git$/, "");
-}
+import { listSprintFiles } from "./paths.mjs";
 
 function stripComment(s) {
   const i = s.search(/\s#/);
   return (i === -1 ? s : s.slice(0, i)).trim();
 }
 
+// A quoted scalar is taken whole — `summary: "Fixed it (TODOS #12)"` must not lose its
+// tail to the ` #` comment rule. Double quotes use JSON escapes (what setField writes).
+function parseQuoted(raw) {
+  const t = raw.trim();
+  if (t.startsWith('"')) {
+    const m = /^"((?:[^"\\]|\\.)*)"/.exec(t);
+    if (m) {
+      try {
+        return { value: JSON.parse(`"${m[1]}"`) };
+      } catch {
+        return { value: m[1] };
+      }
+    }
+  }
+  if (t.startsWith("'")) {
+    const m = /^'((?:[^']|'')*)'/.exec(t);
+    if (m) return { value: m[1].replace(/''/g, "'") };
+  }
+  return null;
+}
+
 function parseScalar(raw) {
+  const q = parseQuoted(raw);
+  if (q) return q.value;
   const v = stripComment(raw);
   if (v === "" || v === "null" || v === "~") return null;
   if (v.startsWith("[")) {
@@ -81,6 +93,8 @@ export function parseFrontmatter(text) {
   return { fields, spans, lines, bodyStart: i + 1 };
 }
 
+const QUOTED_KEYS = new Set(["summary"]);
+
 function serializeField(key, value) {
   if (value === null) return [`${key}: null`];
   if (Array.isArray(value)) {
@@ -91,6 +105,9 @@ function serializeField(key, value) {
     }
     return [`${key}: [${value.join(", ")}]`];
   }
+  // Free text is always quoted, so a ` #` or a leading `[` survives the round trip.
+  if (QUOTED_KEYS.has(key) || (typeof value === "string" && /\s#|^[["'{]/.test(value)))
+    return [`${key}: ${JSON.stringify(String(value))}`];
   return [`${key}: ${value}`];
 }
 
@@ -111,21 +128,10 @@ export function readSprintFile(file) {
   return { file, name: basename(file), ...fields };
 }
 
-export const SPRINT_DIRS = ["backlog", "in-progress", "done", "done/archive", "rejected"];
-
-// All sprint files, each annotated with its dir. Skips .gitkeep/templates.
+// All sprint files, each annotated with `state` (backlog | in-progress | done |
+// rejected) and `dir` (its folder under docs/sprints/, e.g. done/1300-1399).
 export function allSprints(root) {
-  const out = [];
-  for (const dir of SPRINT_DIRS) {
-    const abs = join(root, "docs/sprints", dir);
-    if (!existsSync(abs)) continue;
-    for (const f of readdirSync(abs)) {
-      if (!/^S-\d+.*\.md$/.test(f)) continue;
-      if (dir === "done" && f === "archive") continue;
-      out.push({ dir, ...readSprintFile(join(abs, f)) });
-    }
-  }
-  return out.sort((a, b) => a.sprint.localeCompare(b.sprint, undefined, { numeric: true }));
+  return listSprintFiles(root).map(({ file, dir, state }) => ({ dir, state, ...readSprintFile(file) }));
 }
 
 // Short human label: explicit `short:` frontmatter, else derived from the filename.

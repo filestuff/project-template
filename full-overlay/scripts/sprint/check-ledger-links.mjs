@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// Ledger auditor for the two hand-maintained ledgers regen.mjs cannot rebuild:
-//   - every `(done/X.md)` link in docs/sprints/INDEX.md resolves. Archive
-//     rotation (merge-sprint.sh keeps the 10 newest sprints in done/) moves
-//     older files to done/archive/; merge-sprint.sh relinks those inline at
-//     land time — this catches everything else (a land that skipped the relink,
-//     typo'd paths, links into deleted files).
+// Ledger auditor for the hand-written ledgers regen.mjs cannot rebuild:
+//   - every link to a finished sprint file in docs/sprints/INDEX.md and docs/TODOS.md
+//     resolves. A finished sprint lives at done/<bucket>/ for good (scripts/sprint/
+//     paths.mjs), so a link only rots when it was written against the pre-v1.19.0
+//     layout (flat done/ or done/archive/), typo'd, or points at a deleted file.
 //   - every row id in docs/TODOS.md's table is unique.
 //
-//   check-ledger-links.mjs             # fix mode: rewrite done/X.md -> done/archive/X.md
-//                                      # where only the archived file exists, print each
-//                                      # rewrite; exit 0, or 2 if unfixable problems remain
+//   check-ledger-links.mjs             # fix mode: rewrite a legacy done/X.md or
+//                                      # done/archive/X.md link to done/<bucket>/X.md where
+//                                      # that file exists, print each rewrite; exit 0, or 2
+//                                      # if unfixable problems remain
 //   check-ledger-links.mjs --check     # read-only: exit 2 listing every unresolved /
 //                                      # rewrite-needed link or duplicate TODOS id, 0 if clean
 //   check-ledger-links.mjs --self-test # fixture assertions in a temp dir; exit 0/1,
@@ -21,35 +21,41 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { repoRoot } from "./frontmatter.mjs";
+import { bucketOf, repoRoot } from "./paths.mjs";
 
-// Same link shape merge-sprint.sh's inline relink greps for — keep the two in step.
-const DONE_LINK_RE = /\(done\/[A-Za-z0-9_.-]*\.md\)/g;
+// `(<prefix>done/[archive/|<bucket>/]S-NNN-….md)` — a markdown link target into done/.
+const DONE_LINK_RE = /\(([^()\s]*?)(done\/(?:archive\/|\d{4,}-\d{4,}\/)?)(S-(\d+)[A-Za-z0-9_.-]*\.md)\)/g;
 
-// Scan `indexPath` for every `(done/X.md)` link and resolve it against
-// `sprintsRoot`. Returns { rewrites, failures } — never throws on a bad link.
-// `rewrites`: links whose target now lives only under `done/archive/`.
-// `failures`: links whose target does not exist anywhere.
-// With `{ fix: true }`, rewrites `indexPath` in place for every entry in `rewrites`.
-export function checkLinks(indexPath, sprintsRoot, { fix = false } = {}) {
-  const text = readFileSync(indexPath, "utf8");
-  const links = [...new Set((text.match(DONE_LINK_RE) ?? []).map((m) => m.slice(1, -1)))];
-
+// Scan `filePath` for every link into done/ and resolve it against the file's folder, or
+// against `root` (prose often cites repo-root paths: `(docs/sprints/done/…)`).
+// Returns { rewrites, failures } — never throws on a bad link.
+// `rewrites`: links whose target exists at its bucket path instead.
+// `failures`: links whose target does not exist at either place.
+// With `{ fix: true }`, rewrites `filePath` in place for every entry in `rewrites`.
+export function checkLinks(filePath, { fix = false, root = null } = {}) {
+  const text = readFileSync(filePath, "utf8");
+  const bases = [dirname(filePath), ...(root ? [root] : [])];
+  const exists = (rel) => bases.some((b) => existsSync(join(b, rel)));
+  const seen = new Set();
   const rewrites = [];
   const failures = [];
-  for (const link of links) {
-    if (existsSync(join(sprintsRoot, link))) continue;
-    const archived = `done/archive/${link.slice("done/".length)}`;
-    if (existsSync(join(sprintsRoot, archived))) rewrites.push({ from: link, to: archived });
+  for (const m of text.matchAll(DONE_LINK_RE)) {
+    const [, prefix, folder, name, num] = m;
+    const link = `${prefix}${folder}${name}`;
+    if (seen.has(link)) continue;
+    seen.add(link);
+    if (exists(link)) continue;
+    const home = `${prefix}done/${bucketOf(`S-${num}`)}/${name}`;
+    if (exists(home)) rewrites.push({ from: link, to: home });
     else failures.push(link);
   }
 
   if (fix && rewrites.length > 0) {
     let out = text;
     for (const r of rewrites) out = out.split(`(${r.from})`).join(`(${r.to})`);
-    writeFileSync(indexPath, out);
+    writeFileSync(filePath, out);
   }
 
   return { rewrites, failures };
@@ -79,42 +85,56 @@ export function checkTodosIds(todosPath) {
 function runSelfTest() {
   const sprintsRoot = mkdtempSync(join(tmpdir(), "check-ledger-links-selftest-"));
   try {
-    mkdirSync(join(sprintsRoot, "done", "archive"), { recursive: true });
-    writeFileSync(join(sprintsRoot, "done", "S-7-resolvable.md"), "# S-7\n");
-    writeFileSync(join(sprintsRoot, "done", "archive", "S-8-archived.md"), "# S-8\n");
+    mkdirSync(join(sprintsRoot, "done", "0000-0099"), { recursive: true });
+    writeFileSync(join(sprintsRoot, "done", "0000-0099", "S-7-resolvable.md"), "# S-7\n");
+    writeFileSync(join(sprintsRoot, "done", "0000-0099", "S-8-moved.md"), "# S-8\n");
     // S-9 deliberately has no file anywhere — the dangling-link fixture.
 
     const indexPath = join(sprintsRoot, "INDEX.md");
     const fixture =
-      "| [S-7](done/S-7-resolvable.md) |\n" +
-      "| [S-8](done/S-8-archived.md) |\n" +
+      "| [S-7](done/0000-0099/S-7-resolvable.md) |\n" +
+      "| [S-8](done/archive/S-8-moved.md) |\n" +
       "| [S-9](done/S-9-missing.md) |\n";
     writeFileSync(indexPath, fixture);
 
     // read-only: reports the rewrite candidate and the hard failure, skips the
     // resolvable link, writes nothing.
     {
-      const { rewrites, failures } = checkLinks(indexPath, sprintsRoot, { fix: false });
-      assert.deepStrictEqual(rewrites.map((r) => r.from), ["done/S-8-archived.md"]);
+      const { rewrites, failures } = checkLinks(indexPath, { fix: false });
+      assert.deepStrictEqual(rewrites.map((r) => r.from), ["done/archive/S-8-moved.md"]);
       assert.deepStrictEqual(failures, ["done/S-9-missing.md"]);
       assert.strictEqual(readFileSync(indexPath, "utf8"), fixture, "read-only mode must not write");
     }
 
-    // fix: rewrites the archive-rotated link, leaves the dangling one as-is and reports it.
+    // fix: rewrites the legacy link to the bucket, leaves the dangling one as-is and reports it.
     {
-      const { rewrites, failures } = checkLinks(indexPath, sprintsRoot, { fix: true });
-      assert.deepStrictEqual(rewrites.map((r) => r.to), ["done/archive/S-8-archived.md"]);
+      const { rewrites, failures } = checkLinks(indexPath, { fix: true });
+      assert.deepStrictEqual(rewrites.map((r) => r.to), ["done/0000-0099/S-8-moved.md"]);
       assert.deepStrictEqual(failures, ["done/S-9-missing.md"]);
       const after = readFileSync(indexPath, "utf8");
-      assert.ok(after.includes("(done/archive/S-8-archived.md)"), "archive link rewritten");
+      assert.ok(after.includes("(done/0000-0099/S-8-moved.md)"), "legacy link rewritten");
       assert.ok(after.includes("(done/S-9-missing.md)"), "dangling link left unrewritten");
     }
 
     // idempotent re-run: nothing left to rewrite, the dangling link still fails.
     {
-      const { rewrites, failures } = checkLinks(indexPath, sprintsRoot, { fix: true });
+      const { rewrites, failures } = checkLinks(indexPath, { fix: true });
       assert.deepStrictEqual(rewrites, []);
       assert.deepStrictEqual(failures, ["done/S-9-missing.md"]);
+    }
+
+    // a link with a relative prefix (TODOS lives in docs/, the sprints one level down)
+    {
+      const todos = join(sprintsRoot, "T.md");
+      writeFileSync(todos, "see [S-8](./done/S-8-moved.md)\n");
+      const { rewrites } = checkLinks(todos, { fix: true });
+      assert.deepStrictEqual(rewrites.map((r) => r.to), ["./done/0000-0099/S-8-moved.md"]);
+      // a repo-root path in prose resolves against `root`
+      mkdirSync(join(sprintsRoot, "docs"), { recursive: true });
+      const nested = join(sprintsRoot, "docs", "N.md");
+      writeFileSync(nested, "(done/0000-0099/S-7-resolvable.md)\n");
+      assert.deepStrictEqual(checkLinks(nested).failures, ["done/0000-0099/S-7-resolvable.md"]);
+      assert.deepStrictEqual(checkLinks(nested, { root: sprintsRoot }).failures, []);
     }
 
     // TODOS ids: one duplicate across live rows, one clean id, and one renumber
@@ -158,12 +178,20 @@ function main() {
   const indexPath = join(sprintsRoot, "INDEX.md");
   const todosPath = join(root, "docs/TODOS.md");
 
-  const { rewrites, failures } = checkLinks(indexPath, sprintsRoot, { fix: !checkMode });
+  const rewrites = [];
+  const failures = [];
+  for (const file of [indexPath, todosPath]) {
+    if (!existsSync(file)) continue;
+    const rel = file.slice(root.length + 1);
+    const r = checkLinks(file, { fix: !checkMode, root });
+    rewrites.push(...r.rewrites.map((x) => ({ ...x, file: rel })));
+    failures.push(...r.failures.map((f) => `${rel}: (${f})`));
+  }
   const { duplicates } = existsSync(todosPath) ? checkTodosIds(todosPath) : { duplicates: [] };
 
   const problems = [
-    ...rewrites.map((r) => `${checkMode ? "needs rewrite" : "rewrote"}: (${r.from}) -> (${r.to})`),
-    ...failures.map((f) => `unresolved link, no target in done/ or done/archive/: (${f})`),
+    ...rewrites.map((r) => `${checkMode ? "needs rewrite" : "rewrote"} in ${r.file}: (${r.from}) -> (${r.to})`),
+    ...failures.map((f) => `unresolved link, no target at its path or its done/<bucket>/ home: ${f}`),
     ...(duplicates.length > 0 ? [`duplicate TODOS ids: ${duplicates.map((d) => `#${d}`).join(", ")}`] : []),
   ];
   if (problems.length > 0) console.log(problems.join("\n"));

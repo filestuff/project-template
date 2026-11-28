@@ -19,12 +19,13 @@
 #       or pass --allow-outside-claims "<reason>" to land anyway, recorded in
 #       Deviations). Claims are advisory everywhere else; this is where they bind.
 #       Then merge --no-ff into main,
-#       move the sprint file(s) in-progress/ → done/, flip status/end_date, stamp
-#       the `S-NNN:` deliverable commits + merge SHA under `### Commits`, rotate
-#       the archive, regenerate. Exits 4: author the semantic docs on main
-#       (docs/DOC_HEALTH.md row + History; INDEX.md Done-table row — ONE sentence,
-#       the narrative lives in the sprint file's ### Outcome — + header line;
-#       ROADMAP.md narrative), then `finish`.
+#       move the sprint file(s) in-progress/ → done/<bucket>/ (its permanent home —
+#       scripts/sprint/paths.mjs; nothing else moves), flip status/end_date, stamp
+#       the `S-NNN:` deliverable commits + merge SHA under `### Commits`, regenerate
+#       (INDEX/ROADMAP blocks + the bucket's LEDGER.md, from each file's `summary:`).
+#       Exits 4: author the semantic docs on main (docs/DOC_HEALTH.md row + History;
+#       INDEX.md's ONE `_Last updated_` line, overwritten; ROADMAP.md narrative),
+#       then `finish`.
 #   merge-sprint.sh finish <branch> [--sprints S-A,S-B,…] [--no-push]
 #       Verify, commit `sprint: complete S-NNN`, release the lock. Never pushes:
 #       local main is shared by every session in the checkout, so a push here
@@ -73,7 +74,9 @@ run_self_test() {
   fail() { echo "FAIL: $1"; [[ -n ${out:-} ]] && echo "$out"; exit 1; }
   in_scratch() { (cd "$work" && SPRINT_MAIN_BRANCH=main "$@"); }
   done_file() { # done_file <id> <slug> <title> — a landed sprint file, staged the way land leaves it
-    local path="docs/sprints/done/$1-$2.md"
+    local path
+    path="$(node "$SELF_DIR/paths.mjs" done-home "$1")/$1-$2.md"
+    mkdir -p "$work/${path%/*}"
     printf -- '---\nsprint: %s\nstatus: done\n---\n\n# %s: %s\n\n## Completion Log\n' "$1" "$1" "$3" >"$work/$path"
     git -C "$work" add -- "$path"
   }
@@ -197,7 +200,7 @@ sprint_title() { # $1 = sprint id, $2 = absolute sprint file path
 # Replace the sprint file's `_(stamped at land)_` marker with the sprint's
 # deliverable commits (the `S-NNN:` commits between the merge's two parents) and
 # the merge SHA — mechanical facts, zero LLM cost, and the file stays
-# self-contained after archive rotation. Never fatal: the merge has happened.
+# self-contained. Never fatal: the merge has happened.
 stamp_commits() { # $1 = sprint id, $2 = absolute done-file path
   local s=$1 file=$2 merge commits
   merge=$(git -C "$ROOT" rev-parse HEAD)
@@ -346,6 +349,7 @@ land)
     CHANGED=$(printf '%s\n' "$CHANGED" | grep -vxF "docs/sprints/in-progress/${BASENAMES[i]}" | grep -v "^docs/sprints/evidence/${SPRINTS[i]}/" || true)
   done
   for g in "${GENERATED[@]}"; do CHANGED=$(printf '%s\n' "$CHANGED" | grep -vxF "$g" || true); done
+  CHANGED=$(printf '%s\n' "$CHANGED" | grep -vE '^docs/sprints/done/[0-9]+-[0-9]+/LEDGER\.md$' || true)
   if [[ -n $CHANGED ]]; then
     set +e
     OUTSIDE=$(printf '%s\n' "$CHANGED" | node "$SELF_DIR/claims.mjs" covers --sprints "$CSV" 2>&1)
@@ -391,8 +395,10 @@ land)
   for ((i = 0; i < ${#SPRINTS[@]}; i++)); do
     s=${SPRINTS[i]} # rebind per member — the lint loop above leaves $s on the LAST id
     BASENAME=${BASENAMES[i]}
-    git -C "$ROOT" mv "docs/sprints/in-progress/$BASENAME" "docs/sprints/done/$BASENAME"
-    DONE_FILE="$ROOT/docs/sprints/done/$BASENAME"
+    HOME_DIR=$(node "$SELF_DIR/paths.mjs" done-home "$s")
+    mkdir -p "$ROOT/$HOME_DIR"
+    git -C "$ROOT" mv "docs/sprints/in-progress/$BASENAME" "$HOME_DIR/$BASENAME"
+    DONE_FILE="$ROOT/$HOME_DIR/$BASENAME"
     node "$SELF_DIR/frontmatter.mjs" set "$DONE_FILE" status done
     node "$SELF_DIR/frontmatter.mjs" set "$DONE_FILE" end_date "$(date +%F)"
     stamp_commits "$s" "$DONE_FILE"
@@ -402,35 +408,14 @@ land)
     if [[ -n $OUTSIDE_NOTE ]]; then note_deviation "$DONE_FILE" "$OUTSIDE_NOTE"; fi
   done
 
-  # Archive rotation: keep the 10 most recent (highest-numbered) in done/.
-  done_files=()
-  while IFS= read -r f; do done_files+=("$f"); done < <(ls "$ROOT/docs/sprints/done/" | grep -E '^S-[0-9]+.*\.md$' | sort -V)
-  excess=$((${#done_files[@]} - 10))
-  if ((excess > 0)); then
-    mkdir -p "$ROOT/docs/sprints/done/archive"
-    for ((i = 0; i < excess; i++)); do
-      git -C "$ROOT" mv "docs/sprints/done/${done_files[i]}" "docs/sprints/done/archive/${done_files[i]}"
-    done
-  fi
-
-  # Rotation moves sibling sprint files past the 10-file done/ boundary,
-  # orphaning their hand-authored INDEX.md Done-table links. Rewrite any
-  # (done/X.md) link whose target now exists only under done/archive/.
-  INDEX_MD="$ROOT/docs/sprints/INDEX.md"
-  while IFS= read -r rel; do
-    base=${rel#done/}
-    if [[ ! -f "$ROOT/docs/sprints/done/$base" && -f "$ROOT/docs/sprints/done/archive/$base" ]]; then
-      perl -pi -e "s{\(\Qdone/$base\E\)}{(done/archive/$base)}g" "$INDEX_MD"
-      echo "INDEX.md: relinked done/$base -> done/archive/$base"
-    fi
-  done < <(grep -o '(done/[A-Za-z0-9_.-]*\.md)' "$INDEX_MD" | tr -d '()' | sort -u)
-
   node "$SELF_DIR/regen.mjs" >/dev/null
+  # A sprint that opens a new hundred brings a new LEDGER.md — stage it with the move.
+  git -C "$ROOT" add -- 'docs/sprints/done/*/LEDGER.md'
 
   echo "landed $CSV onto main (uncommitted lifecycle changes staged)."
   echo "NOW author the semantic docs in the PRIMARY checkout ($ROOT):"
   echo "  - docs/DOC_HEALTH.md: Last Verified / By Sprint rows + History entry"
-  echo "  - docs/sprints/INDEX.md: Done-table row(s) for $CSV + '_Last updated_' header line"
+  echo "  - docs/sprints/INDEX.md: the ONE '_Last updated_' header line — overwrite it, never stack it (Done rows are generated from each file's summary:)"
   echo "  - docs/sprints/ROADMAP.md: narrative (Status / In progress / unblocked notes)"
   echo "  (waves/trains: apply any pre-drafted .claude/sprint-orchestration/W-*/S-NNN-docs-draft.md — the lock is held; keep this pause short)"
   echo "then run: merge-sprint.sh finish $BRANCH$FINISH_ARGS"
@@ -442,23 +427,26 @@ finish)
   require_roster
 
   shopt -s nullglob
-  # A low-numbered sprint can be archived by the land-step rotation immediately (keeps the 10
-  # highest-numbered in done/), so look in done/ AND done/archive/.
+  # land put each file at its permanent home, done/<bucket>/ (scripts/sprint/paths.mjs).
   REL_FILES=() TITLES=()
   for s in "${SPRINTS[@]}"; do
-    files=("$ROOT/docs/sprints/done/$s-"*.md "$ROOT/docs/sprints/done/archive/$s-"*.md)
-    [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one done/ file for $s (checked done/ + done/archive/)" >&2; exit 1; }
+    HOME_DIR=$(node "$SELF_DIR/paths.mjs" done-home "$s")
+    files=("$ROOT/$HOME_DIR/$s-"*.md)
+    [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one file for $s in $HOME_DIR/, found ${#files[@]}" >&2; exit 1; }
     grep -q '^status: done' "${files[0]}" || { echo "${files[0]} is not status: done" >&2; exit 1; }
     REL_FILES+=("${files[0]#"$ROOT"/}")
     TITLES+=("$(sprint_title "$s" "${files[0]}")")
     grep -q '^## Completion Log' "${files[0]}" ||
       echo "WARNING: ${files[0]#"$ROOT"/} has no ## Completion Log — the sprint leaves no durable record" >&2
-    # The Done-row Outcome is ONE sentence; the narrative belongs in the file's ### Outcome.
-    OUTCOME_LEN=$(awk -F'|' -v key="[$s](" 'index($0, key) { n = NF; while (n > 1 && $n ~ /^[ \t]*$/) n--; print length($n); exit }' "$ROOT/docs/sprints/INDEX.md")
-    if [[ -n $OUTCOME_LEN && $OUTCOME_LEN -gt 300 ]]; then
-      echo "WARNING: INDEX.md Done-row Outcome for $s is $OUTCOME_LEN chars — keep it to one sentence (≤200); move the narrative into the sprint file's ### Outcome" >&2
-    fi
+    # The Done ledger row is the file's `summary:` — land lints it; say so if it is still empty.
+    grep -Eq '^summary: *("|[^n ])' "${files[0]}" ||
+      echo "WARNING: ${files[0]#"$ROOT"/} has no summary: — its Done-ledger row reads \"—\"; write one sentence there and re-run regen" >&2
   done
+
+  # A summary: written during the pause must reach the ledger before the commit.
+  node "$SELF_DIR/regen.mjs" >/dev/null ||
+    echo "WARNING: regen failed — the generated INDEX/ROADMAP blocks and LEDGER.md may be stale; run scripts/sprint/regen.mjs" >&2
+  git -C "$ROOT" add -- 'docs/sprints/done/*/LEDGER.md' 2>/dev/null || true
 
   # Stage every dirty tracked file under docs/, not a fixed list — the
   # completion pass routinely edits docs beyond the lifecycle set (e.g.
@@ -479,7 +467,7 @@ finish)
   fi
 
   # grep without -q: -q exits on first match and SIGPIPEs git-show, which trips pipefail
-  # into a false FATAL. REL_FILES entries (not hardcoded done/ paths) so archived files resolve.
+  # into a false FATAL. REL_FILES entries (not hardcoded paths) so bucket homes resolve.
   for rel in "${REL_FILES[@]}"; do
     git -C "$ROOT" show "HEAD:$rel" | grep '^status: done' >/dev/null ||
       { echo "FATAL: committed sprint file $rel is not status: done — inspect HEAD" >&2; exit 1; }

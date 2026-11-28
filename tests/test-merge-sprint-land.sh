@@ -15,7 +15,7 @@ R="$TMP/repo"
 # --- fixture: a full-tier install with one in-progress sprint on a branch -----
 mkdir -p "$R/scripts/sprint" "$R/docs/sprints/"{backlog,in-progress,done,rejected}
 cp "$REPO_DIR"/full-overlay/scripts/sprint/*.sh "$REPO_DIR"/full-overlay/scripts/sprint/*.mjs "$REPO_DIR"/full-overlay/scripts/sprint/claims-tokens.json "$R/scripts/sprint/"
-cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$R/scripts/sprint/"
+cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$REPO_DIR/lite/scripts/sprint/paths.mjs" "$REPO_DIR/lite/scripts/sprint/ledger.mjs" "$R/scripts/sprint/"
 cp "$REPO_DIR/full-overlay/docs/sprints/INDEX.md" "$REPO_DIR/full-overlay/docs/sprints/ROADMAP.md" "$R/docs/sprints/"
 cp "$REPO_DIR/lite/docs/DOC_HEALTH.md" "$R/docs/"
 chmod +x "$R"/scripts/sprint/*.sh
@@ -36,6 +36,7 @@ story_points: 1
 plan_date: 2026-09-01
 start_date: 2026-09-01
 end_date: null
+summary: "Shipped $2 (TODOS #7)."
 touches:
   - src/$2.txt
 ---
@@ -130,7 +131,7 @@ sprint_file S-001 alpha complete >"$WT/docs/sprints/in-progress/S-001-alpha.md"
 git -C "$WT" commit -qam "S-001: completion log"
 set +e; out=$(bash "$MS" land S-001-alpha 2>&1); code=$?; set -e
 [[ $code -eq 4 ]] || { echo "expected land exit 4 after fixing the record, got $code:"; echo "$out"; exit 1; }
-DONE="docs/sprints/done/S-001-alpha.md"
+DONE="docs/sprints/done/0000-0099/S-001-alpha.md"
 [[ -f $DONE ]] || { echo "sprint file not moved to done/"; exit 1; }
 grep -q '^status: done' "$DONE" || { echo "status not flipped"; exit 1; }
 grep -q '^_(stamped at land)_$' "$DONE" && { echo "stamp placeholder left in place"; exit 1; }
@@ -147,24 +148,30 @@ prep S-002-beta
 set +e; out=$(bash "$MS" land S-002-beta --allow-incomplete "wave close, executor gone" 2>&1); code=$?; set -e
 [[ $code -eq 4 ]] || { echo "expected land exit 4 with --allow-incomplete, got $code:"; echo "$out"; exit 1; }
 echo "$out" | grep -q 'WARNING: landing with an incomplete completion log for S-002' || { echo "no override warning:"; echo "$out"; exit 1; }
-DONE2="docs/sprints/done/S-002-beta.md"
+DONE2="docs/sprints/done/0000-0099/S-002-beta.md"
 grep -q '^- [0-9-]\{10\} landed incomplete — wave close, executor gone$' "$DONE2" || { echo "override reason not recorded:"; sed -n '/### Deviations/,/### Deferred/p' "$DONE2"; exit 1; }
 # the placeholder `— none` under Deviations was replaced, not duplicated
 [[ $(sed -n '/### Deviations from brief/,/### Deferred/p' "$DONE2" | grep -c '^— none$') -eq 0 ]] || { echo "'— none' left under Deviations alongside the override note"; exit 1; }
 bash "$MS" finish S-002-beta --no-push >/dev/null
 
-# --- 4. finish warns on an oversized INDEX Outcome row -----------------------
-long=$(printf 'x%.0s' $(seq 1 320))
+# --- 4. land generates the Done ledger; finish commits it ------------------------
+# The Done row comes from the file's `summary:` (no hand-written INDEX row), the bucket's
+# LEDGER.md is written and staged, and no other done file moves (no archive rotation).
 sprint_file S-003 gamma complete >docs/sprints/in-progress/S-003-gamma.md
-printf '| [S-003](done/S-003-gamma.md) | gamma | 1 | 2026-09-01 | %s |\n' "$long" >>docs/sprints/INDEX.md
-git add -A && git commit -qm "start S-003 + index row"
+git add -A && git commit -qm "start S-003"
 make_branch S-003-gamma S-003 gamma
 prep S-003-gamma
+before=$(git ls-files docs/sprints/done | grep -v 'S-003\|LEDGER' | sort)
 set +e; bash "$MS" land S-003-gamma >/dev/null 2>&1; code=$?; set -e
 [[ $code -eq 4 ]] || { echo "expected land exit 4 for S-003, got $code"; exit 1; }
+grep -qF '| [S-003](done/0000-0099/S-003-gamma.md) | gamma | 1 |' docs/sprints/INDEX.md || { echo "no generated Done row for S-003:"; sed -n '/recent-done/,/END GENERATED: recent-done/p' docs/sprints/INDEX.md; exit 1; }
+grep -qF 'Shipped gamma (TODOS #7).' docs/sprints/INDEX.md || { echo "Done row lost the summary (or its #7)"; exit 1; }
+grep -qF '[S-003](S-003-gamma.md)' docs/sprints/done/0000-0099/LEDGER.md || { echo "bucket LEDGER.md missing S-003"; exit 1; }
 set +e; out=$(bash "$MS" finish S-003-gamma --no-push 2>&1); code=$?; set -e
 [[ $code -eq 0 ]] || { echo "finish S-003 exited $code:"; echo "$out"; exit 1; }
-echo "$out" | grep -Eq 'Outcome for S-003 is 3[0-9]{2} chars' || { echo "no oversized-Outcome warning:"; echo "$out"; exit 1; }
+git ls-files --error-unmatch docs/sprints/done/0000-0099/LEDGER.md >/dev/null 2>&1 || { echo "LEDGER.md not committed by finish"; exit 1; }
+[[ -z $(git status --porcelain -- docs/sprints) ]] || { echo "finish left docs/sprints dirty:"; git status --porcelain -- docs/sprints; exit 1; }
+[[ $(git ls-files docs/sprints/done | grep -v 'S-003\|LEDGER' | sort) == "$before" ]] || { echo "landing S-003 moved other done files"; exit 1; }
 
 # --- 5. train mode: --sprints stamps EACH member with ITS OWN commits ---------
 # Regression: the post-merge loop reused `$s` from the lint loop (left on the
@@ -181,7 +188,7 @@ echo e >"$TW/src/epsilon.txt"; git -C "$TW" add -A && git -C "$TW" commit -qm "S
 prep train-W-1
 set +e; out=$(bash "$MS" land train-W-1 --sprints S-004,S-005 --allow-incomplete "train close" 2>&1); code=$?; set -e
 [[ $code -eq 4 ]] || { echo "expected train land exit 4, got $code:"; echo "$out"; exit 1; }
-D4="docs/sprints/done/S-004-delta.md" D5="docs/sprints/done/S-005-epsilon.md"
+D4="docs/sprints/done/0000-0099/S-004-delta.md" D5="docs/sprints/done/0000-0099/S-005-epsilon.md"
 grep -q '^- [0-9a-f]\{7,\} S-004: build delta$' "$D4" || { echo "S-004 not stamped with its own commit:"; sed -n '/### Commits/,/### Review/p' "$D4"; exit 1; }
 grep -q 'S-005: build epsilon' "$D4" && { echo "S-004 stamped with S-005's commit"; exit 1; }
 grep -q '^- [0-9a-f]\{7,\} S-005: build epsilon$' "$D5" || { echo "S-005 not stamped with its own commit"; exit 1; }
@@ -213,8 +220,8 @@ bash "$R/scripts/sprint/lock.sh" continue land-S-006-zeta >/dev/null || { echo "
 # the audited escape lands it and records why, in the file
 set +e; out=$(bash "$MS" land S-006-zeta --allow-outside-claims "generated fixture, no other sprint touches it" 2>&1); code=$?; set -e
 [[ $code -eq 4 ]] || { echo "expected land exit 4 with --allow-outside-claims, got $code:"; echo "$out"; exit 1; }
-grep -q '^- [0-9-]\{10\} landed outside claims — generated fixture, no other sprint touches it: src/stray.txt' docs/sprints/done/S-006-zeta.md ||
-  { echo "outside-claims reason not recorded in Deviations:"; sed -n '/### Deviations/,/### Deferred/p' docs/sprints/done/S-006-zeta.md; exit 1; }
+grep -q '^- [0-9-]\{10\} landed outside claims — generated fixture, no other sprint touches it: src/stray.txt' docs/sprints/done/0000-0099/S-006-zeta.md ||
+  { echo "outside-claims reason not recorded in Deviations:"; sed -n '/### Deviations/,/### Deferred/p' docs/sprints/done/0000-0099/S-006-zeta.md; exit 1; }
 bash "$MS" finish S-006-zeta --no-push >/dev/null
 
 # --- 7. prefix + token claims cover what they should; an unclaimed sprint only warns ---

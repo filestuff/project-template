@@ -36,7 +36,8 @@ import { join, dirname, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-import { repoRoot, readSprintFile, setField, allSprints, shortLabel } from "./frontmatter.mjs";
+import { readSprintFile, setField, allSprints, shortLabel } from "./frontmatter.mjs";
+import { repoRoot } from "./paths.mjs";
 
 // Claim tokens are project-specific — defined in the sibling claims-tokens.json
 // ({ "tokens": { "name": ["path", "dir/**", …] } }), seeded at bootstrap.
@@ -159,7 +160,7 @@ export function planStatus(s, byId) {
   if (!s.plan_date) return "unplanned";
   for (const d of s.depends_on ?? []) {
     const dep = byId.get(d);
-    if (!dep || !["done", "done/archive"].includes(dep.dir)) continue;
+    if (!dep || dep.state !== "done") continue;
     if (dep.end_date && String(dep.end_date) > String(s.plan_date)) return "stale";
   }
   return "fresh";
@@ -173,10 +174,10 @@ function touchesOverlap(a, b) {
 }
 
 // "What can start right now?" — the mechanical admission query for a rolling wave.
-// A backlog sprint is READY iff: (a) every depends_on sprint is landed (done/ or
-// done/archive/); (b) it has non-empty touches; (c) it is unreserved or reserved by
-// `wave`; (d) its touches are disjoint from every in-flight sprint and from every
-// backlog sprint reserved by a wave OTHER than `wave`; (e) in ascending sprint-number
+// A backlog sprint is READY iff: (a) every depends_on sprint is landed (state done);
+// (b) it has non-empty touches; (c) it is unreserved or reserved by `wave`; (d) its
+// touches are disjoint from every in-flight sprint and from every backlog sprint
+// reserved by a wave OTHER than `wave`; (e) in ascending sprint-number
 // order, it is disjoint from the sprints already accepted (the whole set can start
 // together). Returns { ready: [sprint…], blocked: [{ sprint, reason }] } — each blocked
 // sprint carries its FIRST failing reason, checked in the order above.
@@ -193,8 +194,8 @@ export function computeReady(sprints, wave) {
     let unmet = null;
     for (const d of s.depends_on ?? []) {
       const dep = byId.get(d);
-      if (dep && ["done", "done/archive"].includes(dep.dir)) continue;
-      unmet = `depends on ${d} (${dep ? dep.dir : "missing"})`;
+      if (dep?.state === "done") continue;
+      unmet = `depends on ${d} (${dep ? dep.state : "missing"})`;
       break;
     }
     if (unmet) { block(unmet); continue; }

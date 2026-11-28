@@ -43,8 +43,10 @@ backlog sprint.
 | `gate.sh` | The commit gate — single source of truth for pre-commit checks (in a linked worktree with worktree gate commands set: a reduced gate, reported as such) | non-zero = fix first |
 | `lock.sh` | Mutex for all main mutations (`acquire`/`release`/`status`/`steal --force`) | 75 = busy |
 | `claims.mjs` | `check` claims overlap vs in-flight + reserved sprints (`--train W-<id>`: your own train's cars don't block — never for a parallel wave); `add` expands a claim (locked main commit, pushed via `ledger-push.sh`); `waves` (in-flight + reserved sprints pinned to Wave 1). Tokens: `claims-tokens.json` | 2 = overlap / unknown token, 3 = `add` committed, push withheld |
-| `regen.mjs` | Regenerate the marker-delimited blocks in INDEX.md + ROADMAP.md (`--check` for drift, broken INDEX `done/` links and duplicate TODOS ids) | 2 = drift / unknown token |
-| `check-ledger-links.mjs [--check]` | Relink INDEX `(done/…)` links orphaned by archive rotation; `--check` also flags unresolved links + duplicate TODOS ids | 2 = issues remain |
+| `regen.mjs` | Regenerate the marker-delimited blocks in INDEX.md + ROADMAP.md and every `done/<bucket>/LEDGER.md` (`--check` for drift, broken `done/` links, duplicate sprint or TODOS ids, done files outside their bucket, a stacked INDEX header) | 2 = drift / problems / unknown token |
+| `paths.mjs next-id \| done-home S-NNN \| find S-NNN \| duplicates` | Where sprint files live: the next free id, a sprint's permanent `done/<bucket>/` home, where a sprint is now | 1 = not found, 2 = duplicates |
+| `ledger.mjs [--check]` | The Done ledger from each file's `summary:` (regen runs it; lite runs it directly) | 2 = drift / problems |
+| `check-ledger-links.mjs [--check]` | Rewrite pre-v1.19 `done/X` / `done/archive/X` links in INDEX.md + TODOS.md to `done/<bucket>/X`; `--check` also flags unresolved links + duplicate TODOS ids | 2 = issues remain |
 | `start.sh S-NNN --touches "…" [--wave W-<id> [--train]]` | The whole locked start transaction on main (refuses a sprint reserved by another wave; a parallel wave's members are claims-checked against each other, `--train` exempts your own train's cars) | 2 = overlap/claimed/foreign-reserved, 3 = committed, push withheld, 75 = busy |
 | `unstart.sh S-NNN [--reason "…"]` | The locked inverse: in-progress → backlog (keeps `plan_date`/`touches:`/decisions; clears `wave:`) | 2 = not in flight / branch has commits, 3 = committed, push withheld, 75 = busy |
 | `reserve-wave.sh [--train] S-A S-B… \| --drop W-<id> S-NNN \| --release W-<id>` | Locked wave reservation: mints `W-<id>`, writes `wave:` into backlog members so concurrent sessions can't take them or overlapping claims. Members must be pairwise disjoint unless `--train` | 2 = member gone/reserved/overlap, 3 = committed, push withheld, 75 = busy |
@@ -84,7 +86,8 @@ Print the current kanban state:
    `/sprint plan`), and any with a `wave:` field as **reserved by that wave** (another
    session's roster — also list `W-*` dirs under `.claude/sprint-orchestration/` whose
    reservations no longer exist on main: likely finished or abandoned waves).
-3. Glob `docs/sprints/done/*.md` (and `done/archive/*.md`) — count total, show last 3 completed.
+3. Read INDEX.md's generated Done block (never glob `done/` — it holds every sprint the
+   project ever finished) — show its count line and the last 3 rows.
 4. **Orphan check**: run `git worktree list` and cross-reference —
    - an `in-progress/` file with **no matching worktree** → crashed/abandoned sprint; suggest
      recovery (PROTOCOL "The sprint-main lock").
@@ -146,10 +149,12 @@ Deferred / Learnings + Close checklist), commit `S-NNN: completion log`, lint it
 **`/adr check` (mandatory; `ADR check` checklist row)** →
 **`merge-sprint.sh prepare S-NNN-…`** (locked; on exit 3 re-run `gate.sh`) →
 **`merge-sprint.sh land S-NNN-…`** (re-lints the branch copy — exit 5 = incomplete record,
-main untouched, fix and re-run; merges to main, moves the file, stamps `### Commits`,
-regenerates; exits 4) →
-author the semantic docs on main (DOC_HEALTH.md, INDEX Done-row — one sentence — + header,
-ROADMAP narrative, the done-file's `Docs synced`/`New docs`/`ADR check` rows)
+main untouched, fix and re-run; merges to main, moves the file to its permanent
+`done/<bucket>/` home, stamps `### Commits`, regenerates the board and the Done ledger from
+the file's `summary:`; exits 4) →
+author the semantic docs on main (DOC_HEALTH.md, INDEX's ONE `_Last updated_` line —
+overwritten, never stacked — ROADMAP narrative, the done-file's `Docs synced`/`New
+docs`/`ADR check` rows)
 → **`merge-sprint.sh finish S-NNN-…`** (commits, releases the lock, **never pushes** — the
 completion commit intentionally carries no `[skip ci]`, since its eventual push is what
 lands the code) → **deploy gate**: ask via AskUserQuestion — **Push now (deploy)**
@@ -161,7 +166,8 @@ it; push later with `push-main.sh --expect S-NNN`, which carries the CI check wi
 
 ### `/sprint create [title]`
 
-1. Glob all sprint files to find the highest S-NNN; assign the next number.
+1. `node scripts/sprint/paths.mjs next-id` — the next number, on main (never glob for it:
+   ids live in five kinds of folder, and a missed one reuses an id).
 2. **Check `docs/TODOS.md`** for deferred items this sprint could absorb; offer them.
 3. Copy `docs/sprints/SPRINT_TEMPLATE.md` → `docs/sprints/backlog/S-{NNN}-{kebab-title}.md`
    and delete its `<!-- guide: … -->` comments (rules: `docs/sprints/sprint-file-guide.md`).
@@ -259,8 +265,9 @@ main-ledger transaction (same pattern as `/sprint create`):
 
 ### `/sprint next`
 
-Read `docs/sprints/INDEX.md`; for each backlog sprint check all `depends_on` are in `done/`
-or `done/archive/`; a dependency in `in-progress/` is **in flight by a parallel agent** —
+Read `docs/sprints/INDEX.md`; for each backlog sprint check all `depends_on` are finished
+(`node scripts/sprint/paths.mjs find S-NNN` prints a `docs/sprints/done/…` path); a
+dependency in `in-progress/` is **in flight by a parallel agent** —
 report it as such (it may land soon). Among unblocked sprints suggest the highest-priority
 one and show its goal, points, tags, notes.
 
