@@ -6,12 +6,16 @@
 // the minimum sample are pinned. The outcome line is written with the real frontmatter.mjs
 // — the same command the orchestrator runs at land — to prove it survives the round trip.
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, mkdirSync, readdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "full-overlay", "scripts", "sprint");
+// Installed layout: lite's scripts/sprint (paths.mjs) and the full overlay share one folder.
+const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
+const DIR = mkdtempSync(join(tmpdir(), "tiers-bin-"));
+for (const src of ["lite/scripts/sprint", "full-overlay/scripts/sprint"])
+  for (const f of readdirSync(join(REPO, src))) if (f.endsWith(".mjs")) copyFileSync(join(REPO, src, f), join(DIR, f));
 const SCRIPT = join(DIR, "tiers.mjs");
 const FM = join(DIR, "frontmatter.mjs");
 const tmp = mkdtempSync(join(tmpdir(), "tiers-"));
@@ -56,7 +60,7 @@ try {
   check(/^STRAINED routine: 2\/4 routine sprints/m.test(out) && !/UNDER routine/.test(out), `STRAINED when ≥40% finish uncleanly:\n${out}`);
 
   // OVER?: 4 complex sprints, none escalated or strained — never for 3, never for a lower tier
-  for (let i = 0; i < 3; i++) landed("complex", O("complex", "complex"), { dir: i % 2 ? "done/archive" : "done" });
+  for (let i = 0; i < 3; i++) landed("complex", O("complex", "complex"), { dir: ["done/0000-0099", "done/archive", "done"][i] });
   check(!/OVER\?/.test(run()), "three clean complex sprints are not yet enough to question the tier");
   landed("complex", O("complex", "complex"));
   out = run();
@@ -78,6 +82,7 @@ try {
   check(spawnSync("node", [SCRIPT, "--root", tmp, "--since", "soon"], { encoding: "utf8" }).status === 1, "bad --since exits 1");
 } finally {
   rmSync(tmp, { recursive: true, force: true });
+  rmSync(DIR, { recursive: true, force: true });
 }
 if (failed) { console.error(`test-tiers: ${failed} check(s) failed`); process.exit(1); }
 console.log("test-tiers: all checks passed");

@@ -16,6 +16,7 @@ tier_reason: null
 plan_date: null
 start_date: null
 end_date: null
+summary: null
 touches: []
 ---
 

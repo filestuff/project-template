@@ -8,8 +8,8 @@
 //   decisions.mjs [--class mechanical,taste,reserved] [--decider agent,arbiter,orchestrator,user]
 //                 [--since YYYY-MM-DD] [--limit N] [--root <repo-root>] [--json]
 //
-// Reads every .md under docs/sprints/{backlog,in-progress,done,done/archive,rejected}/
-// and docs/proposals/. A decision line is
+// Reads every .md in each sprint folder (scripts/sprint/paths.mjs: backlog/, in-progress/,
+// done/<bucket>/ and the legacy done/ + done/archive/, rejected/) and docs/proposals/. A decision line is
 //   - YYYY-MM-DD (<mode>[, <class>[, <decider>]]): <decision> [— principle: …] [— rejected: …] [— undo: …]
 // A proposal's register numbers its entries and may wrap them over indented lines:
 //   - D-7 YYYY-MM-DD (<mode>, <class>, <decider>): <decision> — changes: <section> […] [— supersedes: D-4]
@@ -20,6 +20,7 @@
 // Exit 0 (no decisions is not an error) · 1 usage.
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { SPRINTS, sprintDirs } from "./paths.mjs";
 
 const argv = process.argv.slice(2);
 const flag = (n) => { const i = argv.indexOf(n); return i === -1 ? null : (argv[i + 1] ?? ""); };
@@ -37,7 +38,7 @@ if ((classes?.some((c) => !CLASSES.includes(c))) || (deciders?.some((d) => !DECI
 if (since !== null && !/^\d{4}-\d{2}-\d{2}$/.test(since)) usage();
 if (!(limit === Number.POSITIVE_INFINITY || (Number.isInteger(limit) && limit > 0))) usage();
 
-const DIRS = ["docs/sprints/backlog", "docs/sprints/in-progress", "docs/sprints/done", "docs/sprints/done/archive", "docs/sprints/rejected", "docs/proposals"];
+const DIRS = [...sprintDirs(root).map((d) => `${SPRINTS}/${d.dir}`), "docs/proposals"];
 const LINE = /^\s*-\s+(?:D-(\d+)\s+)?(\d{4}-\d{2}-\d{2})\s+\(([^)]+)\):\s*(.+)$/;
 const KEYS = "principle|rejected|undo|changes|supersedes";
 const part = (text, key) => {
@@ -50,7 +51,7 @@ for (const dir of DIRS) {
   const abs = join(root, dir);
   if (!existsSync(abs)) continue;
   for (const name of readdirSync(abs)) {
-    if (!name.endsWith(".md") || /TEMPLATE|README/.test(name)) continue;
+    if (!name.endsWith(".md") || /TEMPLATE|README|LEDGER/.test(name)) continue;
     const lines = readFileSync(join(abs, name), "utf8").split("\n");
     let fence = false;
     let comment = false;

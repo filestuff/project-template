@@ -5,7 +5,9 @@ sprints in {{PROJECT_NAME}}. It covers pre-sprint validation, execution, and pos
 cleanup. The `/sprint` skill defers to this file — it is the source of truth.
 
 Sprint files live in `docs/sprints/` with four directories: `backlog/`, `in-progress/`,
-`done/`, `rejected/`. The commit gate is `scripts/sprint/gate.sh` — the **single source of
+`done/`, `rejected/`. A finished sprint's home is `done/<bucket>/`, one folder per hundred
+ids (S-1384 → `done/1300-1399/`), and it never moves again — `scripts/sprint/paths.mjs`
+(`done-home S-NNN`, `find S-NNN`, `next-id`) is the one place that knows where files live. The commit gate is `scripts/sprint/gate.sh` — the **single source of
 truth** for what must pass before every deliverable commit; no other doc restates the
 commands.
 
@@ -135,8 +137,8 @@ cite code that landed work has since moved — re-verify them before trusting th
 
 ### Step 2: Dependency Check
 
-For each sprint in `depends_on` (dirs checked: `done/` + `done/archive/`, then `in-progress/`,
-then `backlog/` — all on `main`, which shows in-flight sprints):
+For each sprint in `depends_on` (`node scripts/sprint/paths.mjs find S-NNN` on `main`, which
+shows in-flight sprints, says where it is):
 - If `status: done` → pass.
 - If `status: in-progress` → another agent is flying it right now. **Warn via AskUserQuestion**:
   - A: "Wait for / coordinate with the in-flight sprint"
@@ -384,8 +386,10 @@ older sprint's deferred criterion back-annotates that older `done/` file on `mai
 lock at its own close (`— verified by S-MMM on YYYY-MM-DD`, Evidence path).
 
 Then fill the **Completion Log** in the worktree's copy of the sprint file (SPRINT_TEMPLATE):
-`### Outcome` (2–4 sentences — the narrative), `### Review`, `### Deviations from brief`,
-`### Deferred`, `### Learnings` (`— none` is valid for each), and annotate the
+`### Outcome` (2–4 sentences — the narrative) and its one-sentence version in the
+frontmatter `summary:` (≤200 chars, quoted — the sprint's Done-ledger row), `### Review`,
+`### Deviations from brief`, `### Deferred`, `### Learnings` (`— none` is valid for each),
+and annotate the
 `### Close checklist` rows you can answer now; `Docs synced` / `New docs` / `ADR check` /
 `Deployed` are finalized on `main` at Step 5. If the file predates the structured log (no
 `### ` subsections), append them from SPRINT_TEMPLATE first. Commit
@@ -511,21 +515,21 @@ the sprint branch.
    (`docs/DECISION_POLICY.md`) — ask the user. A `GATE-SENSITIVE:` list in the output
    (the commit gate, CI config or deleted tests changed) needs the user's confirmation
    before `finish`. Then it merges `--no-ff` into `main`, moves the sprint file
-   `in-progress/ → done/`, flips `status: done` + `end_date`, **stamps the sprint's `S-NNN:`
-   deliverable commits + merge SHA under `### Commits`**, rotates the archive (keeps the 10
-   most recent in `done/`; archived sprints stay in INDEX.md and dependency checks read
-   `done/archive/` too), and regenerates the generated blocks. It exits 4, pausing for the
-   semantic docs.
+   `in-progress/ → done/<bucket>/` (its permanent home; nothing else moves), flips
+   `status: done` + `end_date`, **stamps the sprint's `S-NNN:` deliverable commits + merge
+   SHA under `### Commits`**, and regenerates the generated blocks — including INDEX's
+   Done block and the bucket's `LEDGER.md`, built from the file's `summary:` (which the
+   close-check lint requires). It exits 4, pausing for the semantic docs.
 2. **Author the semantic docs** — editing by absolute path in the **primary checkout** (the
    lock is yours; do not commit):
    - `docs/DOC_HEALTH.md`: "Last Verified" / "By Sprint" rows for docs this sprint checked,
      status updates, a History entry.
-   - `docs/sprints/INDEX.md`: the Done-table row — Outcome is **one sentence (≤200 chars)**;
-     the narrative lives in the sprint file's `### Outcome` (`finish` warns past 300) — plus
-     the `_Last updated_` header line (one line, overwritten, never appended to).
+   - `docs/sprints/INDEX.md`: the ONE `_Last updated_` header line — overwritten, never
+     stacked (`regen --check` fails on a second one or any `_Previously` line). Done rows are
+     generated; to change one, edit the sprint file's `summary:` (`finish` re-runs regen).
    - `docs/sprints/ROADMAP.md`: narrative (Status paragraph, newly-unblocked sprints from
-     this sprint's `blocks`, `_Last updated_`).
-   - The landed `docs/sprints/done/S-NNN-*.md`: finalize the Close checklist rows that only
+     this sprint's `blocks`, the ONE `_Last updated_` line — overwritten, never stacked).
+   - The landed `docs/sprints/done/<bucket>/S-NNN-*.md`: finalize the Close checklist rows that only
      `main` can answer — `Docs synced`, `New docs registered`, `ADR check` (from Steps 2–3
      or the doc-sync agent's return) — and, when the deploy gate decides, `Deployed`.
      Prepend any `plan`-class `### Learnings` line to `docs/sprints/PLANNING_LEARNINGS.md`.
@@ -611,12 +615,16 @@ you want mechanical drift detection):
 
 - INDEX.md: `totals`, `in-progress` (table incl. each sprint's `touches:`), `backlog`
   (table; the Goal column is the sprint's `short:` frontmatter, the Tasks column its
-  `tasks:`, dep-cell notes its `deps_note:`).
+  `tasks:`, dep-cell notes its `deps_note:`), `recent-done` (the 20 newest finished sprints,
+  each row the file's `summary:`, plus links to the ledgers).
+- `done/<bucket>/LEDGER.md`: whole files, one per hundred ids — every finished sprint in
+  that bucket (`scripts/sprint/ledger.mjs` owns their shape; regen writes them).
 - ROADMAP.md: `graph` (Mermaid — nodes labeled `S-NNN · short (pts)`, edges from
-  `depends_on`, colors from directory), `critical-path` (longest `depends_on` chain by
-  story points).
+  `depends_on`, colors from state) and `critical-path` (longest `depends_on` chain by
+  story points), both over OPEN work — sprints not yet done plus the done sprints they
+  directly depend on. Finished history is the ledger's job.
 
-Everything **outside** the markers (INDEX header narrative + Done-table outcomes; ROADMAP
+Everything **outside** the markers (INDEX's one header line and narrative; ROADMAP
 Status/phasing prose) is LLM-maintained and edited **only on `main` under lock** (Phase 3
 Step 5.2 or a locked `/sprint create`/`plan` commit). `docs/DOC_HEALTH.md` remains fully
 LLM-authored under the same rule. Hand-edits inside a generated block self-heal at the next

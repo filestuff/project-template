@@ -4,7 +4,10 @@ This document defines the sprint lifecycle that Claude Code follows when executi
 {{PROJECT_NAME}}. The `/sprint` skill defers to this file — it is the source of truth.
 
 Sprint files live in `docs/sprints/` with four directories: `backlog/`, `in-progress/`,
-`done/`, `rejected/`. This is the **lite** tier: **one sprint at a time**. If `in-progress/`
+`done/`, `rejected/`. A finished sprint's home is `done/<bucket>/`, one folder per hundred
+ids (S-1384 → `done/1300-1399/`), and it never moves again;
+`node scripts/sprint/paths.mjs done-home S-NNN` prints it, `find S-NNN` locates any sprint,
+`next-id` gives the next free number. This is the **lite** tier: **one sprint at a time**. If `in-progress/`
 is non-empty when starting a new sprint, stop and ask the user before proceeding. (The full
 tier adds parallel sprints with file claims, a main-branch lock, and per-sprint worktrees —
 upgrade via `/bootstrap-project --upgrade`.)
@@ -26,7 +29,7 @@ with the thin plan.
 
 ### Step 2: Dependency Check
 
-For each sprint in `depends_on` (check `done/` + `done/archive/`, then `backlog/`):
+For each sprint in `depends_on` (`node scripts/sprint/paths.mjs find S-NNN` says where it is):
 - `status: done` → pass.
 - In `backlog/` → **warn via AskUserQuestion**:
   - A: "Proceed anyway (dependency not met)"
@@ -194,7 +197,8 @@ back-annotate that older file the same way (`— verified by S-MMM on YYYY-MM-DD
 path).
 
 Then fill the **Completion Log** (SPRINT_TEMPLATE): `### Outcome` (2–4 sentences — the
-narrative), `### Review`, `### Deviations from brief`, `### Deferred`, `### Learnings`
+narrative) and its one-sentence version in the frontmatter `summary:` (≤200 chars, quoted —
+the sprint's Done-ledger row), `### Review`, `### Deviations from brief`, `### Deferred`, `### Learnings`
 (`— none` is valid for each), and annotate every `### Close checklist` row as its step
 completes below. If the file predates the structured log (no `### ` subsections), append
 them from SPRINT_TEMPLATE first. The sprint file is the record; the lint in Step 4 checks it.
@@ -270,13 +274,18 @@ acts on.
    `git log --reverse --oneline <start-sha>..HEAD --grep '^S-NNN:'` (start-sha = the
    `sprint: start S-NNN` commit). Then lint the record:
    `node scripts/sprint/close-check.mjs docs/sprints/in-progress/S-NNN-*.md` — exit 5 lists
-   what is missing (unevidenced criteria, unannotated checklist rows, placeholders); fix the
+   what is missing (unevidenced criteria, unannotated checklist rows, placeholders, an empty
+   `summary:` — the one-sentence frontmatter line that becomes the sprint's Done row); fix the
    file and re-run until exit 0. There is no override in lite: if something genuinely cannot
    be recorded, say so under `### Deviations from brief` and in the close summary.
-1. `git mv` the sprint file `in-progress/ → done/`; set `status: done` and `end_date`.
-2. Update `docs/sprints/INDEX.md` by hand: move the row to Done. The Outcome cell is **one
-   sentence (≤200 chars)** — the narrative lives in the sprint file's `### Outcome`. The
-   `_Last updated_` header is one line, overwritten, never appended to.
+1. Move the file to its permanent home and flip it:
+   `H=$(node scripts/sprint/paths.mjs done-home S-NNN); mkdir -p "$H"; git mv docs/sprints/in-progress/S-NNN-*.md "$H/"`;
+   set `status: done` and `end_date`.
+2. `node scripts/sprint/ledger.mjs` regenerates INDEX.md's Done block and the bucket's
+   `LEDGER.md` from the `summary:` lines — never write Done rows by hand. By hand: remove
+   the sprint's In Progress row, and overwrite the ONE `_Last updated_` header line (never
+   stack a new one above it; `ledger.mjs` fails on a stacked header). `git add` the new
+   `LEDGER.md` if the sprint opened a new hundred.
 3. Commit: `sprint: complete S-NNN — [name]`.
 4. **Deploy gate:** pushing `main` triggers any connected platform's auto-deploy
    (Railway/Vercel/etc.), so never push the completion silently — ask first

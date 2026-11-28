@@ -7,13 +7,15 @@
 //
 //   learnings.mjs [--class review,test] [--limit 20] [--root <repo-root>] [--json]
 //
-// Scans docs/sprints/done/ and docs/sprints/done/archive/. Zero-dep, read-only.
+// Scans every done folder (scripts/sprint/paths.mjs: done/<bucket>/ and the legacy
+// done/ + done/archive/). Zero-dep, read-only.
 // Exit 0 always when the directories are readable (no learnings is not an error) ·
 // 1 = usage. Human output: the matching lines verbatim, then a SUMMARY line; a rule
 // (the text after `rule:`) recorded by 3+ sprints is flagged `RECURRING ×n` — that is the
 // signal to promote it into a project convention (/review "Project-Specific Checks").
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { SPRINTS, sprintDirs } from "./paths.mjs";
 
 const argv = process.argv.slice(2);
 const flag = (name) => {
@@ -32,7 +34,7 @@ if (wanted.some((c) => !CLASSES.includes(c)) || !Number.isInteger(limit) || limi
 
 const LINE = /^-\s+(\d{4}-\d{2}-\d{2})\s+(S-\d+)\s+(plan|test|review|design|exec):\s*(.+)$/;
 const entries = [];
-for (const dir of ["docs/sprints/done", "docs/sprints/done/archive"]) {
+for (const dir of sprintDirs(root).filter((d) => d.state === "done").map((d) => `${SPRINTS}/${d.dir}`)) {
   const abs = join(root, dir);
   if (!existsSync(abs)) continue;
   for (const name of readdirSync(abs)) {

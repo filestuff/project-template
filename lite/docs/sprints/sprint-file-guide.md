@@ -69,6 +69,11 @@ A single `---` rule, after Production notes, divides the file.
 - **`outcome:`** is NOT in the template. The orchestrator writes it when a wave or train
   lands the sprint: assigned and final tier, escalations, fix rounds, findings.
   `scripts/sprint/tiers.mjs` reads it to calibrate the rubric. Never set it by hand.
+- **`summary:`** is the sprint's one-sentence row in the Done ledger (≤200 chars,
+  double-quoted so a `#` survives). It is written at close, after `### Outcome`, and
+  `close-check.mjs` blocks the close without it. `scripts/sprint/ledger.mjs` renders it
+  into INDEX.md's Recently done table and the sprint's `done/<bucket>/LEDGER.md`. Nobody
+  writes Done rows by hand.
 - **`proposal:` / `stage:`** are informational backlinks that scripts ignore. `/plan` sets
   them when the source is a proposal: `proposal: NNN`, `stage: k`, with `stage: 1` for
   un-staged proposals. Sprint close (PROTOCOL Step 3.6) uses them, together with the
@@ -278,8 +283,8 @@ This file is the durable record. The conversation is not, and neither is the wav
 The subsection titles are exact and linted, so never rename them.
 
 - **Outcome:** 2–4 sentences on what actually shipped, what changed for the user, and what
-  surprised you. It is the narrative; INDEX.md's Outcome cell is ONE sentence pointing
-  here.
+  surprised you. It is the narrative; the frontmatter `summary:` is its ONE-sentence
+  version, the row the Done ledger shows.
 - **Commits:**
   - Full tier: `merge-sprint.sh land` replaces `_(stamped at land)_` with the `S-NNN:`
     deliverable commits plus the merge SHA.

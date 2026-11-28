@@ -19,6 +19,7 @@ copy_scripts() { # copy_scripts <dest> — the full-tier scripts/sprint/ as inst
   mkdir -p "$1/workflows"
   cp "$REPO_DIR"/full-overlay/scripts/sprint/*.sh "$REPO_DIR"/full-overlay/scripts/sprint/*.mjs \
     "$REPO_DIR"/full-overlay/scripts/sprint/claims-tokens.json "$1/"
+  cp "$REPO_DIR"/lite/scripts/sprint/{paths,ledger,close-check}.mjs "$1/"
   cp "$REPO_DIR"/full-overlay/scripts/sprint/workflows/*.mjs "$1/workflows/" 2>/dev/null || true
   chmod +x "$1"/*.sh
 }

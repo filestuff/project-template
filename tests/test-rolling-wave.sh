@@ -14,7 +14,7 @@ R="$TMP/repo"
 # --- fixture: a full-tier install with an (initially empty) ledger -------------
 mkdir -p "$R/scripts/sprint" "$R/docs/sprints/"{backlog,in-progress,done/archive,rejected}
 cp "$REPO_DIR"/full-overlay/scripts/sprint/*.sh "$REPO_DIR"/full-overlay/scripts/sprint/*.mjs "$REPO_DIR"/full-overlay/scripts/sprint/claims-tokens.json "$R/scripts/sprint/"
-cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$R/scripts/sprint/"
+cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$REPO_DIR/lite/scripts/sprint/paths.mjs" "$REPO_DIR/lite/scripts/sprint/ledger.mjs" "$R/scripts/sprint/"
 cp "$REPO_DIR/full-overlay/docs/sprints/INDEX.md" "$REPO_DIR/full-overlay/docs/sprints/ROADMAP.md" "$R/docs/sprints/"
 cp "$REPO_DIR/lite/docs/DOC_HEALTH.md" "$R/docs/"
 chmod +x "$R"/scripts/sprint/*.sh

@@ -195,7 +195,9 @@ dest paths in the apply output). Any hit → **refuse to commit**, list the file
 still carrying conflict markers, and stop — the user resolves and re-invokes, or
 commits manually.
 
-Clean → commit everything the upgrade touched (including MANIFEST):
+Clean → commit everything the upgrade touched (including MANIFEST and whatever the
+migrations staged — `git diff --cached --stat`; a migration that moves sprint files
+stages the renames itself so history follows them):
 
 ```
 chore: upgrade project-template v<OLD_VERSION> → v<NEW_VERSION>

@@ -12,13 +12,22 @@
 // Exit 2 also when a sprint's `touches:` carries an unknown claim token (the
 // wave schedule cannot be computed) — nothing is written in that case.
 //
-// Blocks — INDEX.md: totals, in-progress, backlog · ROADMAP.md: graph, critical-path, waves
+// Blocks — INDEX.md: totals, in-progress, backlog, recent-done · ROADMAP.md: graph,
+// critical-path, waves. Also writes every docs/sprints/done/<bucket>/LEDGER.md (the Done
+// ledger — scripts/sprint/ledger.mjs owns its shape) and, with --check, reports what
+// ledger.mjs reports: duplicate ids, done sprints outside done/<bucket>/, a stacked
+// INDEX.md header.
+//
+// ROADMAP shows open work: every sprint not yet done, plus the done sprints those
+// directly depend on. History is the Done ledger's job, not the graph's.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { repoRoot, allSprints, shortLabel } from "./frontmatter.mjs";
+import { allSprints, shortLabel } from "./frontmatter.mjs";
+import { repoRoot } from "./paths.mjs";
 import { computeWaves, planStatus } from "./claims.mjs";
 import { checkLinks, checkTodosIds } from "./check-ledger-links.mjs";
+import { doneSprints, genRecentDone, ledgerProblems, syncBucketLedgers } from "./ledger.mjs";
 
 const root = repoRoot();
 const check = process.argv.includes("--check");
@@ -34,15 +43,22 @@ try {
   console.error(`regen: cannot compute the wave schedule — ${err.message ?? String(err)}`);
   process.exit(2);
 }
-const isDone = (id) => ["done", "done/archive"].includes(byId.get(id)?.dir);
+const isDone = (id) => byId.get(id)?.state === "done";
 
-function bucket(dir) {
-  return sprints.filter((s) => s.dir === dir);
+function bucket(state) {
+  return sprints.filter((s) => s.state === state);
 }
 const backlog = bucket("backlog");
 const inProgress = bucket("in-progress");
-const done = [...bucket("done"), ...bucket("done/archive")];
+const done = bucket("done");
 const rejected = bucket("rejected");
+const ledgerDone = doneSprints(root);
+
+// The roadmap's working set: open sprints + the done sprints they directly depend on.
+const open = sprints.filter((s) => s.state === "backlog" || s.state === "in-progress");
+const frontier = new Set(open.map((s) => s.sprint));
+for (const s of open) for (const d of s.depends_on ?? []) if (isDone(d)) frontier.add(d);
+const graphed = sprints.filter((s) => frontier.has(s.sprint));
 const pts = (list) => list.reduce((sum, s) => sum + (s.story_points ?? 0), 0);
 
 // --- block generators ------------------------------------------------------
@@ -90,7 +106,6 @@ function genBacklog() {
 }
 
 function genGraph() {
-  const graphed = sprints.filter((s) => s.dir !== "rejected");
   const nodeId = (id) => id.replace(/-/g, "");
   const lines = [
     "```mermaid",
@@ -105,11 +120,11 @@ function genGraph() {
   lines.push("");
   for (const s of graphed)
     for (const d of s.depends_on ?? [])
-      if (byId.has(d)) lines.push(`  ${nodeId(d)} --> ${nodeId(s.sprint)}`);
+      if (frontier.has(d)) lines.push(`  ${nodeId(d)} --> ${nodeId(s.sprint)}`);
   const byClass = { done: [], inprogress: [], backlog: [] };
   for (const s of graphed) {
     const cls =
-      s.dir === "in-progress" ? "inprogress" : s.dir === "backlog" ? "backlog" : "done";
+      s.state === "in-progress" ? "inprogress" : s.state === "backlog" ? "backlog" : "done";
     byClass[cls].push(nodeId(s.sprint));
   }
   lines.push("");
@@ -120,7 +135,7 @@ function genGraph() {
 }
 
 function genCriticalPath() {
-  // Longest depends_on chain by story points across non-rejected sprints.
+  // Longest depends_on chain by story points across the roadmap's working set.
   const memo = new Map();
   const visiting = new Set();
   function best(id) {
@@ -130,7 +145,7 @@ function genCriticalPath() {
     const s = byId.get(id);
     let result = { pts: s.story_points ?? 0, chain: [id] };
     for (const d of s.depends_on ?? []) {
-      if (!byId.has(d) || byId.get(d).dir === "rejected") continue;
+      if (!frontier.has(d)) continue;
       const sub = best(d);
       if (sub.pts + (s.story_points ?? 0) > result.pts)
         result = { pts: sub.pts + (s.story_points ?? 0), chain: [...sub.chain, id] };
@@ -140,11 +155,10 @@ function genCriticalPath() {
     return result;
   }
   let top = { pts: 0, chain: [] };
-  for (const s of sprints)
-    if (s.dir !== "rejected") {
-      const r = best(s.sprint);
-      if (r.pts > top.pts) top = r;
-    }
+  for (const s of graphed) {
+    const r = best(s.sprint);
+    if (r.pts > top.pts) top = r;
+  }
   const remaining = top.chain.filter((id) => !isDone(id)).reduce(
     (sum, id) => sum + (byId.get(id).story_points ?? 0), 0,
   );
@@ -160,10 +174,10 @@ function genWaves() {
   const { waves, unscheduled } = schedule;
   if (waves.length === 0) return ["_(no pending sprints)_"];
   const label = (s) => {
-    const plan = s.dir === "backlog" ? planStatus(s, byId) : "fresh";
+    const plan = s.state === "backlog" ? planStatus(s, byId) : "fresh";
     return (
-      `${s.sprint}${s.dir === "in-progress" ? " (in flight)" : ""}` +
-      (s.dir === "backlog" && s.wave ? ` (reserved ${s.wave})` : "") +
+      `${s.sprint}${s.state === "in-progress" ? " (in flight)" : ""}` +
+      (s.state === "backlog" && s.wave ? ` (reserved ${s.wave})` : "") +
       ((s.touches ?? []).length === 0 ? " ⚠️ no claims" : "") +
       (plan === "unplanned" ? " ⚠️ unplanned" : plan === "stale" ? " ⚠️ stale plan" : "")
     );
@@ -182,7 +196,12 @@ function genWaves() {
 // --- marker splicing -------------------------------------------------------
 
 const FILES = {
-  "docs/sprints/INDEX.md": { totals: genTotals, "in-progress": genInProgress, backlog: genBacklog },
+  "docs/sprints/INDEX.md": {
+    totals: genTotals,
+    "in-progress": genInProgress,
+    backlog: genBacklog,
+    "recent-done": () => genRecentDone(root, ledgerDone),
+  },
   "docs/sprints/ROADMAP.md": { graph: genGraph, "critical-path": genCriticalPath, waves: genWaves },
 };
 
@@ -201,27 +220,32 @@ for (const [rel, blocks] of Object.entries(FILES)) {
     const replacement = `${begin}\n${gen().join("\n")}\n${end}`;
     if (!text.includes(replacement)) {
       drift.push(`${rel}#${name}`);
-      text = text.replace(re, replacement);
+      text = text.replace(re, () => replacement);
     }
   }
   if (!check) writeFileSync(path, text);
 }
 
+drift.push(...syncBucketLedgers(root, { check, done: ledgerDone }));
+
 const reasons = [];
 if (drift.length > 0) reasons.push(`DRIFT in generated blocks:\n  ${drift.join("\n  ")}`);
 
+const problems = ledgerProblems(root, ledgerDone);
+if (check && problems.length > 0) reasons.push(`LEDGER problems:\n  ${problems.join("\n  ")}`);
+if (!check) for (const p of problems) console.error(`WARNING ${p}`);
+
 if (check) {
-  const { rewrites, failures } = checkLinks(
-    join(root, "docs/sprints/INDEX.md"),
-    join(root, "docs/sprints"),
-  );
-  if (rewrites.length > 0 || failures.length > 0) {
+  for (const rel of ["docs/sprints/INDEX.md", "docs/TODOS.md"]) {
+    if (!existsSync(join(root, rel))) continue;
+    const { rewrites, failures } = checkLinks(join(root, rel), { root });
+    if (rewrites.length === 0 && failures.length === 0) continue;
     const lines = [
       ...rewrites.map((r) => `  needs rewrite: (${r.from}) -> (${r.to})`),
       ...failures.map((f) => `  unresolved: (${f})`),
     ];
     reasons.push(
-      `LEDGER LINK issues in docs/sprints/INDEX.md (fix: node scripts/sprint/check-ledger-links.mjs):\n${lines.join("\n")}`,
+      `LEDGER LINK issues in ${rel} (fix: node scripts/sprint/check-ledger-links.mjs):\n${lines.join("\n")}`,
     );
   }
   const todosPath = join(root, "docs/TODOS.md");

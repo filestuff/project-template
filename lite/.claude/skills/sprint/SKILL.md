@@ -51,10 +51,11 @@ Parse the first argument as the command, the second as the sprint ID.
 1. Glob `docs/sprints/in-progress/*.md` — list each with sprint ID, goal, start date, days
    elapsed.
 2. Glob `docs/sprints/backlog/*.md` — count total, sum story points, list unblocked sprints
-   (all `depends_on` in `done/` or `done/archive/`). Tag any sprint whose `plan_date` is
+   (all `depends_on` finished — `node scripts/sprint/paths.mjs find S-NNN` prints a
+   `docs/sprints/done/…` path). Tag any sprint whose `plan_date` is
    null as **unplanned** (never certified by `/sprint plan`).
-3. Glob `docs/sprints/done/*.md` (and `done/archive/*.md`) — count total, show last 3
-   completed.
+3. Read INDEX.md's generated Done block (do not glob `done/` — it holds every sprint the
+   project ever finished) — show its count line and the last 3 rows.
 4. Unpushed check: `git rev-list --count @{u}..HEAD 2>/dev/null || true` — if > 0, add a
    board line "⚠ N unpushed commit(s) — a held completion may be awaiting the deploy gate
    (PROTOCOL Phase 3 Step 4)."
@@ -80,14 +81,17 @@ fill the **Completion Log** (Outcome / Review / Deviations / Deferred / Learning
 Close checklist) → doc sync via `git diff` → **`/adr check` (mandatory; `ADR check` row)** →
 risk-tiered review (Step 3.5 — high-risk diffs only; `### Review`) → Step 3.7 learnings →
 paste commits under `### Commits`, **`node scripts/sprint/close-check.mjs <file>` until exit
-0** → move the file to `done/`, flip frontmatter, update INDEX.md with a **one-sentence**
-outcome (the narrative is in the file), commit `sprint: complete S-NNN — [name]` → **deploy
+0** (it requires the one-sentence frontmatter `summary:` — the narrative is in `### Outcome`)
+→ `git mv` the file to its permanent home `$(node scripts/sprint/paths.mjs done-home
+S-NNN)/`, flip frontmatter, `node scripts/sprint/ledger.mjs` (regenerates the Done rows),
+commit `sprint: complete S-NNN — [name]` → **deploy
 gate**: ask before `git push` (PROTOCOL Phase 3 Step 4 — pushing main triggers any
 connected auto-deploy).
 
 ### `/sprint create [title]`
 
-1. Glob all sprint files to find the highest S-NNN; assign the next number.
+1. `node scripts/sprint/paths.mjs next-id` — the next number (never glob for it: ids live
+   in five kinds of folder, and a missed one reuses an id).
 2. **Check `docs/TODOS.md`** for deferred items this sprint could absorb; offer them.
 3. Copy `docs/sprints/SPRINT_TEMPLATE.md` → `docs/sprints/backlog/S-{NNN}-{kebab-title}.md`
    and delete its `<!-- guide: … -->` comments (rules: `docs/sprints/sprint-file-guide.md`).
@@ -175,7 +179,8 @@ Discard a backlog sprint while keeping the record (see PROTOCOL.md "Rejecting a 
 
 ### `/sprint next`
 
-For each backlog sprint check all `depends_on` are in `done/` or `done/archive/`. Among
+For each backlog sprint check all `depends_on` are finished (`node scripts/sprint/paths.mjs
+find S-NNN` prints a `docs/sprints/done/…` path). Among
 unblocked sprints suggest the highest-priority one and show its goal, points, tags, notes.
 
 ## No Arguments

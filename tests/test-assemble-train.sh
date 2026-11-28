@@ -28,6 +28,7 @@ story_points: 1
 plan_date: 2026-09-01
 start_date: 2026-09-01
 end_date: null
+summary: "Shipped $2 (TODOS #7)."
 touches:
   - src/$2.txt
 ---
@@ -92,7 +93,7 @@ build_repo() {
   R="$TMP/repo$FIXN"
   mkdir -p "$R/scripts/sprint" "$R/docs/sprints/"{backlog,in-progress,done,rejected} "$R/src"
   cp "$REPO_DIR"/full-overlay/scripts/sprint/*.sh "$REPO_DIR"/full-overlay/scripts/sprint/*.mjs "$REPO_DIR"/full-overlay/scripts/sprint/claims-tokens.json "$R/scripts/sprint/"
-  cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$R/scripts/sprint/"
+  cp "$REPO_DIR/lite/scripts/sprint/close-check.mjs" "$REPO_DIR/lite/scripts/sprint/paths.mjs" "$REPO_DIR/lite/scripts/sprint/ledger.mjs" "$R/scripts/sprint/"
   cp "$REPO_DIR/full-overlay/docs/sprints/INDEX.md" "$REPO_DIR/full-overlay/docs/sprints/ROADMAP.md" "$R/docs/sprints/"
   cp "$REPO_DIR/lite/docs/DOC_HEALTH.md" "$R/docs/"
   chmod +x "$R"/scripts/sprint/*.sh
@@ -168,7 +169,7 @@ run bash "$MS" land "$BR" --sprints S-001,S-002,S-003
 want_code 4 "land --sprints on the integration branch"
 for pair in "1:alpha" "2:beta" "3:gamma"; do
   n=${pair%%:*} name=${pair##*:}
-  f=docs/sprints/done/S-00$n-$name.md
+  f=docs/sprints/done/0000-0099/S-00$n-$name.md
   [[ -f $f ]] || fail "$f not moved to done/"
   grep -q "^- [0-9a-f]\{7,\} S-00$n: build $name\$" "$f" || { echo "S-00$n lacks its own commit:"; sed -n '/### Commits/,/### Review/p' "$f"; exit 1; }
   for other in 1 2 3; do
@@ -176,7 +177,7 @@ for pair in "1:alpha" "2:beta" "3:gamma"; do
     grep -q "S-00$other:" "$f" && { echo "S-00$n stamped with S-00$other's commits:"; sed -n '/### Commits/,/### Review/p' "$f"; exit 1; }
   done
 done
-grep -q '^- [0-9a-f]\{7,\} S-001: tweak alpha$' docs/sprints/done/S-001-alpha.md || fail "S-001's second commit not stamped"
+grep -q '^- [0-9a-f]\{7,\} S-001: tweak alpha$' docs/sprints/done/0000-0099/S-001-alpha.md || fail "S-001's second commit not stamped"
 run bash "$MS" finish "$BR" --sprints S-001,S-002,S-003 --no-push
 want_code 0 "finish --sprints"
 lock_free "finish"

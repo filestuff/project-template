@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 
 const SRC = new URL("../full-overlay/scripts/sprint/", import.meta.url).pathname;
+const LITE = new URL("../lite/scripts/sprint/", import.meta.url).pathname;
 const tmp = mkdtempSync(join(tmpdir(), "claims-"));
 process.on("exit", () => rmSync(tmp, { recursive: true, force: true }));
 
@@ -30,6 +31,7 @@ function makeRepo(name, tokens) {
   mkdirSync(sprint, { recursive: true });
   for (const d of ["backlog", "in-progress", "done", "rejected"]) mkdirSync(join(repo, "docs/sprints", d), { recursive: true });
   for (const f of ["claims.mjs", "frontmatter.mjs", "lock.sh"]) copyFileSync(join(SRC, f), join(sprint, f));
+  copyFileSync(join(LITE, "paths.mjs"), join(sprint, "paths.mjs"));
   if (tokens) writeFileSync(join(sprint, "claims-tokens.json"), JSON.stringify({ tokens }));
   writeFileSync(join(repo, "Makefile"), "all:\n");
   execFileSync("git", ["init", "-q", "-b", "main", repo]);

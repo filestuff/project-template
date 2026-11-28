@@ -317,9 +317,10 @@ sprints out to subagents.
    re-apply the `{{PROJECT_NAME}}` / `{{PACKAGE_MANAGER}}` placeholders to the overwritten/added
    markdown files (PROTOCOL.md, INDEX.md, ROADMAP.md, ORCHESTRATION.md, sprint SKILL.md) and
    re-run the step-4 grep check.
-3. Migrate INDEX content: the lite INDEX's hand-maintained Done/Backlog rows move into the
-   marker skeleton — Done rows into the LLM-maintained Done table; Backlog/In-Progress rows
-   are regenerated from frontmatter, so just verify, don't transcribe.
+3. Migrate INDEX content: the lite INDEX's hand-maintained Backlog/In-Progress rows are
+   regenerated from frontmatter in the full skeleton, so just verify, don't transcribe. The
+   Done block is generated in both tiers (from each file's `summary:`) — keep the lite
+   INDEX's `recent-done` markers as they are.
 4. Ensure every backlog sprint file has a `touches: []` field (the lite template already
    includes it; add if missing). Do **not** backfill `plan_date` into existing sprint files —
    a missing/null `plan_date` degrades gracefully to `⚠ unplanned` in the waves output, which

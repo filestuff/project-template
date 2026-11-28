@@ -10,7 +10,7 @@ TMP=$(cd "$TMP" && pwd -P)
 R="$TMP/repo"
 
 mkdir -p "$R/scripts/sprint" "$R/docs/sprints/"{backlog,in-progress,done} "$R/docs/proposals" "$R/src"
-cp "$REPO_DIR"/lite/scripts/sprint/{plan-check,proposal-check}.mjs "$R/scripts/sprint/"
+cp "$REPO_DIR"/lite/scripts/sprint/{plan-check,proposal-check,paths}.mjs "$R/scripts/sprint/"
 # render the one placeholder the gate carries, as bootstrap would
 sed 's/{{PREPUSH_GATE_COMMANDS}}/:/' "$REPO_DIR/lite/scripts/sprint/pre-push-gate.sh" >"$R/scripts/sprint/pre-push-gate.sh"
 cp "$REPO_DIR/lite/docs/sprints/SPRINT_TEMPLATE.md" "$R/docs/sprints/"

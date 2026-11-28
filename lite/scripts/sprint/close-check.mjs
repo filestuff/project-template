@@ -24,6 +24,8 @@
 //   record-missing         no `## Completion Log` heading at all
 //   section-missing        a required `### ` subsection is absent
 //   outcome-empty          `### Outcome` has no prose
+//   summary-field          frontmatter `summary:` is missing, null, a placeholder, or over 200
+//                          chars — it is the sprint's one-sentence row in the Done ledger
 //   placeholder-left       a `_(…)_` template placeholder survives (Commits' `_(stamped at land)_` is allowed)
 //   section-empty          Review / Deviations / Deferred / Learnings has no content (`— none` counts)
 //   checklist-unannotated  a Close checklist row is unchecked, lacks ` — <annotation>`,
@@ -64,6 +66,15 @@ const fm = (key) => {
     if (m) return m[1].trim();
   }
   return null;
+};
+// `"…"` is JSON-escaped (what frontmatter.mjs writes); `'…'` doubles its quotes.
+const unquote = (v) => {
+  if (v === null || v === "null" || v === "~") return null;
+  if (/^".*"$/.test(v)) {
+    try { return JSON.parse(v).trim(); } catch { return v.slice(1, -1).trim(); }
+  }
+  if (/^'.*'$/.test(v)) return v.slice(1, -1).replace(/''/g, "'").trim();
+  return v.trim();
 };
 const sprint = fm("sprint") ?? "S-???";
 const status = fm("status");
@@ -204,6 +215,16 @@ if (logStart === -1) {
     if (sections.Outcome) {
       const c = contentOf("Outcome");
       if (c.length === 0) fail("outcome-empty", sections.Outcome.heading, "### Outcome has no prose");
+    }
+    // summary: frontmatter — the one-sentence Done row scripts/sprint/ledger.mjs renders
+    {
+      const at = lines.findIndex((l, i) => i > 0 && i < fmEnd && /^summary:/.test(l));
+      const val = unquote(fm("summary"));
+      if (at === -1 || val === null || val === "")
+        fail("summary-field", at === -1 ? 0 : at, "frontmatter `summary:` is empty — one quoted sentence (≤200 chars) for the Done ledger");
+      else if (/^(tbd|todo|n\/a|—|-|\.\.\.|<.*>|\{.*\}|_\(.*\)_|\[.*\])$/i.test(val))
+        fail("summary-field", at, `summary: ${val} — a placeholder, not a summary`);
+      else if (val.length > 200) fail("summary-field", at, `summary: is ${val.length} chars — one sentence, ≤200 (the narrative lives in ### Outcome)`);
     }
     // placeholders anywhere in the log except Commits' stamp marker
     for (const [title, sec] of Object.entries(sections)) {

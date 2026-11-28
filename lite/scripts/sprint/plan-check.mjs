@@ -1,20 +1,22 @@
 #!/usr/bin/env node
 // Pre-execution lint for sprint BRIEFS (close-check.mjs lints the completion record
 // AFTER a sprint; this lints the brief BEFORE it runs) and, with --record, for the
-// plan record /plan appends to a proposal. Zero-dep and self-contained on purpose: it
-// ships in the lite tier, which has no frontmatter.mjs.
+// plan record /plan appends to a proposal. Zero-dep on purpose: it ships in the lite
+// tier, which has no frontmatter.mjs (it reads sprint locations from paths.mjs beside it).
 //
 //   plan-check.mjs [--root <repo-root>] [--record <file>] [--json] [S-NNN …]
 //
 // With no ids: every sprint file in <root>/docs/sprints/backlog/. With ids: those
-// sprints, found in backlog/ or in-progress/. Dependency lookups consult backlog/,
-// in-progress/, done/, done/archive/ and rejected/ (files named S-NNN-*.md).
+// sprints, found in backlog/ or in-progress/. Dependency lookups consult every sprint
+// folder scripts/sprint/paths.mjs knows (backlog/, in-progress/, done/<bucket>/ and the
+// legacy done/ + done/archive/, rejected/; files named S-NNN-*.md).
 // --root defaults to cwd; --record is resolved against --root (then cwd).
 //
 // Exit 0 = ok · 5 = failures · 1 = usage / unreadable / unknown id.
 //
 // HTML comments are blanked before any rule runs (line numbers are preserved).
 // Per-sprint rules:
+//   duplicate-id            another file holds the same sprint number (any state)
 //   frontmatter-invalid     sprint is S-NNN and matches the filename prefix; story_points is
 //                           one of 1,2,3,5,8,13 (0/missing fails); risk (if present) low|high;
 //                           tier (if present) routine|standard|complex|critical; depends_on/blocks are flow
@@ -29,7 +31,7 @@
 //   criteria-missing        a deliverable has no `- [ ]` criterion before the next deliverable/heading
 //   contract-unproduced     a ### Consumes bullet `… from S-NNN — …` names a sprint not in
 //                           depends_on, or its first backticked identifier is absent from that
-//                           sprint's ### Produces (b is skipped when it lives in done/ or done/archive/)
+//                           sprint's ### Produces (b is skipped when it is done or rejected)
 //   production-notes-missing  risk: high without ## Production notes carrying Rollback:,
 //                           Observability:, Security: bullets with real (non-bare-n/a) content
 //   open-question-vague     an unchecked `- [ ]` under ## Open Questions lacks `options:`
@@ -60,8 +62,9 @@
 // `SUMMARY plan-check: <ok|FAILED> — <k> sprint(s), <n> failure(s), <w> warning(s)`.
 // --json: {ok, sprints:[{sprint, file, risk, tier, failures, warnings}], record, failures}.
 
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { readFileSync, statSync, existsSync } from "node:fs";
 import { resolve, join, basename, dirname, relative, isAbsolute } from "node:path";
+import { SPRINTS, listSprintFiles } from "./paths.mjs";
 
 const USAGE = "usage: plan-check.mjs [--root <repo-root>] [--record <file>] [--json] [S-NNN …]";
 const die = (msg, code = 1) => { console.error(msg); process.exit(code); };
@@ -194,26 +197,17 @@ function flowIds(value) {
 }
 
 // --- locate sprint files -----------------------------------------------------------------
-const DIRS = [
-  ["backlog", "docs/sprints/backlog"],
-  ["in-progress", "docs/sprints/in-progress"],
-  ["done", "docs/sprints/done"],
-  ["archive", "docs/sprints/done/archive"],
-  ["rejected", "docs/sprints/rejected"],
-];
-const index = new Map(); // id → [{dir, file}] in DIRS preference order
-const dirExists = {};
-for (const [dir, rel] of DIRS) {
-  const abs = join(root, rel);
-  let names = [];
-  try { names = readdirSync(abs).sort(); dirExists[dir] = true; } catch { dirExists[dir] = false; }
-  for (const n of names) {
-    const m = /^(S-\d+)-.*\.md$/.exec(n);
-    if (!m) continue;
-    if (!index.has(m[1])) index.set(m[1], []);
-    index.get(m[1]).push({ dir, file: join(abs, n) });
-  }
+// Every folder that can hold a sprint file (scripts/sprint/paths.mjs); `dir` here is the
+// file's state — backlog | in-progress | done | rejected — whatever folder holds it.
+const index = new Map(); // id → [{dir, file}] in lookup-preference order
+const dirExists = { backlog: existsSync(join(root, SPRINTS, "backlog")) };
+for (const s of listSprintFiles(root)) {
+  if (!index.has(s.id)) index.set(s.id, []);
+  index.get(s.id).push({ dir: s.state, file: s.file });
 }
+const order = { backlog: 0, "in-progress": 1, done: 2, rejected: 3 };
+for (const locs of index.values()) locs.sort((a, b) => order[a.dir] - order[b.dir]);
+
 const locate = (id) => index.get(id)?.[0] ?? null;
 
 const cache = new Map(); // file → parsed sprint
@@ -249,7 +243,7 @@ function contractBullets(o, which) {
 // --- choose the sprints to lint --------------------------------------------------------------
 const targets = [];
 if (ids.length === 0) {
-  if (!dirExists.backlog) die(`no backlog directory: ${join(root, DIRS[0][1])}`);
+  if (!dirExists.backlog) die(`no backlog directory: ${join(root, SPRINTS, "backlog")}`);
   for (const [id, locs] of [...index.entries()].sort()) for (const l of locs) if (l.dir === "backlog") targets.push({ id, ...l });
 } else {
   for (const id of ids) {
@@ -263,6 +257,7 @@ const relFile = (f) => relative(root, f) || f;
 
 // --- per-sprint lint -----------------------------------------------------------------------------
 const fullTier = existsSync(join(root, "scripts/sprint/claims.mjs"));
+const listed = listSprintFiles(root);
 const results = [];
 for (const t of targets) {
   const o = load(t.file);
@@ -274,6 +269,10 @@ for (const t of targets) {
   const warn = (rule, i, text) => warnings.push({ rule, line: Math.max(i, 0) + 1, text: String(text ?? lines[i]).trim().slice(0, 120) });
   const start = fm.ok ? fm.end + 1 : 0;
   const prefix = (/^(S-\d+)-/.exec(basename(t.file)) ?? [])[1];
+
+  // duplicate-id — two files claiming one sprint number (ids come from `paths.mjs next-id`)
+  const twins = listed.filter((x) => x.num === Number(t.id.slice(2)));
+  if (twins.length > 1) fail("duplicate-id", 0, `${t.id} is held by ${twins.length} files: ${twins.map((x) => x.rel).join(", ")}`);
 
   // frontmatter-invalid
   let depends = [];
@@ -325,7 +324,7 @@ for (const t of targets) {
   const depLine = fm.ok ? fm.get("depends_on")?.line ?? 0 : 0;
   for (const d of depends) {
     const locs = index.get(d);
-    if (!locs) fail("dependency-unknown", depLine, `${d} has no sprint file in backlog/, in-progress/, done/, done/archive/ or rejected/`);
+    if (!locs) fail("dependency-unknown", depLine, `${d} has no sprint file in backlog/, in-progress/, done/ or rejected/`);
     else if (locs.every((l) => l.dir === "rejected")) fail("dependency-rejected", depLine, `${d} lives in rejected/ — re-wire or drop the edge`);
   }
 
@@ -375,7 +374,7 @@ for (const t of targets) {
       const dep = m[1];
       if (!depends.includes(dep)) { fail("contract-unproduced", b.i, `${b.text}  ← ${dep} is not in depends_on`); continue; }
       const loc = locate(dep);
-      if (!loc || loc.dir === "done" || loc.dir === "archive" || loc.dir === "rejected") continue; // (b) only for live dependencies
+      if (!loc || loc.dir === "done" || loc.dir === "rejected") continue; // (b) only for live dependencies
       const idm = /`([^`]+)`/.exec(b.text);
       if (!idm) { fail("contract-unproduced", b.i, `${b.text}  ← no backticked identifier to check`); continue; }
       const prod = contractBullets(load(loc.file), "Produces");
